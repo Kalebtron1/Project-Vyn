@@ -95,7 +95,8 @@ async function getCleanHistory(userAddress) {
       )
       .map(op => ({
         amount: parseFloat(op.amount),
-        type: op.type === 'account_debited' ? "deposit" : "withdrawal",
+        // account_credited = money came IN (deposit); account_debited = money went OUT (withdrawal)
+        type: op.type === 'account_credited' ? "deposit" : "withdrawal",
         date: new Date(op.created_at)
       }))
       .slice(0, MIN_TX_REQUIRED); // Leemos exactamente las últimas 30 transacciones relevantes
@@ -116,10 +117,21 @@ export default async function handler(req, res) {
   const { address, totalDeposited } = req.body;
   if (!address) return res.status(400).json({ error: "Wallet requerida" });
 
+  // Validate Stellar public key format (G... 56 chars)
+  if (typeof address !== "string" || !/^G[A-Z2-7]{55}$/.test(address)) {
+    return res.status(400).json({ error: "Dirección de wallet inválida" });
+  }
+
+  // totalDeposited is required for an accurate retention score; warn if missing
+  const balance = Number(totalDeposited);
+  if (isNaN(balance) || totalDeposited === undefined || totalDeposited === null) {
+    return res.status(400).json({ error: "totalDeposited es requerido para calcular el score" });
+  }
+
   try {
     const history = await getCleanHistory(address);
     // Usamos el balance actual que viene del contrato (totalDeposited)
-    const result = computeFinancialReputation(history, Number(totalDeposited) || 0);
+    const result = computeFinancialReputation(history, balance);
     
     return res.status(200).json(result);
   } catch (error) {

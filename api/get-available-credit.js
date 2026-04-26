@@ -60,12 +60,14 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Error get-available-credit:", error.message);
+    // Return success: false so callers can distinguish a real Bronce from a failed lookup
     return res.status(200).json({
-      success: true,
+      success: false,
       tier: 0,
       tierName: "Bronce",
       availableCredit: 0,
-      currency: "XLM"
+      currency: "XLM",
+      error: "No se pudo consultar el contrato. Intenta nuevamente."
     });
   }
 }

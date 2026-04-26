@@ -42,6 +42,10 @@ const CreditSection = () => {
     isUnlocked: false
   });
 
+  // Tracks the amount at the time of withdrawal so a tier change mid-loan
+  // doesn't silently alter the displayed debt or repayment amount.
+  const [withdrawnAmount, setWithdrawnAmount] = useState<number>(0);
+
   const toFriendlyWithdrawError = (error: any) => {
     const raw = String(error?.message || "").toLowerCase();
 
@@ -70,8 +74,10 @@ const CreditSection = () => {
     return "No pudimos procesar el retiro ahora. Intenta nuevamente en unos segundos.";
   };
 
-  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
-  const totalToPay = creditData.limit * 1.05;
+  // Use the locked withdrawn amount when a loan is active so a tier change
+  // mid-loan doesn't silently change the displayed debt.
+  const loanPrincipal = creditWithdrawn ? withdrawnAmount : creditData.limit;
+  const totalToPay = loanPrincipal * 1.05;
 
   // 📡 Sincronización con el Backend/Soroban usando wallet de localStorage
   useEffect(() => {
@@ -105,6 +111,10 @@ const CreditSection = () => {
             tier: data.tier,
             isUnlocked: data.tier >= 1 
           });
+        } else if (!data.success && isMounted) {
+          // Contract lookup failed — keep existing creditData but surface the error
+          // so the user knows this is a transient failure, not a real Bronce state.
+          console.warn("get-available-credit returned success:false —", data.error);
         }
         
       } catch (error) {
@@ -186,6 +196,7 @@ const CreditSection = () => {
       // Reiniciamos los estados del timer
       setTimeLeft(60);
       setIsDefaulted(false);
+      setWithdrawnAmount(creditData.limit); // Lock the debt amount at withdrawal time
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
 

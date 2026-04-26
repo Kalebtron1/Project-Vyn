@@ -58,10 +58,10 @@ export default async function handler(req, res) {
     // Ajusta estos números (50, 150, 500) según la economía de tu app.
     let nftLevel = 0; // Bronce por defecto
     
-    if (balanceXLM >= 50) nftLevel = 1;   // Plata
-    if (balanceXLM >= 150) nftLevel = 2;  // Oro
-    if (balanceXLM >= 500) nftLevel = 3;  // Platino
-    if (balanceXLM >= 1000) nftLevel = 4; // Diamante
+    if (balanceXLM >= 50) nftLevel = 1;    // Plata
+    if (balanceXLM >= 150) nftLevel = 2;   // Oro
+    if (balanceXLM >= 500) nftLevel = 3;   // Diamante
+    if (balanceXLM >= 1000) nftLevel = 4;  // Platino
 
     // Simulamos la cantidad de depósitos para la UI 
     // (Si tiene saldo, asumimos al menos 1 depósito para que se vea actividad)
