@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const { processScheduledPayments } = require("./jobs/processScheduledPayments");
 const { 
   Keypair, 
   rpc, 
@@ -265,3 +266,17 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => { 
   console.log(`\n🚀 SERVIDOR VÍNCULO ACTIVO EN PUERTO ${PORT}`);
 });
+
+// ─────────────────────────────────────────────
+// SCHEDULED PAYMENTS JOB
+// Runs every 60 seconds. The job is idempotent and safe to run concurrently
+// because it uses an optimistic 'processing' lock on each row.
+// ─────────────────────────────────────────────
+const PAYMENT_JOB_INTERVAL_MS = 60_000;
+
+(async () => {
+  // Run once immediately on startup, then on the interval.
+  await processScheduledPayments();
+  setInterval(processScheduledPayments, PAYMENT_JOB_INTERVAL_MS);
+  console.log(`[scheduler] Payment job registered — running every ${PAYMENT_JOB_INTERVAL_MS / 1000}s`);
+})();

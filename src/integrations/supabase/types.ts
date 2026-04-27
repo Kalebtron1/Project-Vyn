@@ -44,6 +44,59 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_payments: {
+        Row: {
+          id: string
+          user_id: string
+          wallet_address: string
+          amount: number
+          status: 'pending' | 'processing' | 'completed' | 'failed'
+          tx_hash: string | null
+          retry_count: number
+          last_error: string | null
+          scheduled_at: string
+          processed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          wallet_address: string
+          amount: number
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
+          tx_hash?: string | null
+          retry_count?: number
+          last_error?: string | null
+          scheduled_at?: string
+          processed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          wallet_address?: string
+          amount?: number
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
+          tx_hash?: string | null
+          retry_count?: number
+          last_error?: string | null
+          scheduled_at?: string
+          processed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
