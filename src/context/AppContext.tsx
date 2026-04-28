@@ -1,12 +1,19 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { v4 as uuidv4 } from 'uuid';
 
+// ---------------------------------------------------------------------------
+// Transaction status — every deposit/withdrawal must end in a terminal state.
+// ---------------------------------------------------------------------------
+export type TxStatus = "pending" | "success" | "failed";
+
 export interface Deposit {
   id: string;
   amount: number;
   date: Date;
   label: string;
   daysAgo: number;
+  status: TxStatus;
+  txHash?: string;
 }
 
 export interface Withdrawal {
@@ -14,6 +21,7 @@ export interface Withdrawal {
   amount: number;
   date: Date;
   txHash: string;
+  status: TxStatus;
 }
 
 export interface StakePosition {
@@ -39,8 +47,12 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
-  addDeposit: (amount: number) => void;
-  // -> simulateWeek eliminada
+  /** Optimistically adds a deposit record with status="pending". Returns the new id. */
+  addDeposit: (amount: number) => string;
+  /** Promotes a pending deposit to status="success" once the chain confirms it. */
+  confirmDeposit: (id: string, txHash: string) => void;
+  /** Marks a pending deposit as status="failed" and rolls back the unlock state. */
+  failDeposit: (id: string) => void;
   withdrawCredit: () => void;
   addWithdrawal: (amount: number, txHash: string) => void;
   addStake: (amount: number, months: number) => void;
@@ -80,33 +92,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showSuccess, setShowSuccess] = useState(false);
   const [showUnlockCelebration, setShowUnlockCelebration] = useState(false);
 
-  const addDeposit = useCallback((amount: number) => {
+  /**
+   * Optimistically adds a deposit with status="pending".
+   * The count increments immediately so the progress bar is responsive,
+   * but isUnlocked only flips once confirmDeposit() is called.
+   */
+  const addDeposit = useCallback((amount: number): string => {
+    const id = uuidv4();
     setState((prev) => {
       const newCount = prev.depositsCount + 1;
-      const unlocked = newCount >= prev.requiredDeposits;
-      const wasLocked = !prev.isUnlocked;
-      
-      if (wasLocked && unlocked) {
-        setTimeout(() => setShowUnlockCelebration(true), 400);
-      }
-
       return {
         ...prev,
         depositsCount: newCount,
-        isUnlocked: unlocked,
         deposits: [
           {
-            id: uuidv4(),
+            id,
             amount,
             date: new Date(),
             label: `Depósito on-chain`,
             daysAgo: 0,
+            status: "pending",
           },
           ...prev.deposits,
         ],
       };
     });
+    return id;
+  }, []);
+
+  /**
+   * Called once the RPC confirms the transaction landed on-chain.
+   * At this point we flip isUnlocked if the threshold was crossed.
+   */
+  const confirmDeposit = useCallback((id: string, txHash: string) => {
+    setState((prev) => {
+      const updatedDeposits = prev.deposits.map((d) =>
+        d.id === id ? { ...d, status: "success" as TxStatus, txHash } : d
+      );
+      // Re-derive the real confirmed count from "success" records only.
+      const confirmedCount = updatedDeposits.filter((d) => d.status === "success").length;
+      const willUnlock = confirmedCount >= prev.requiredDeposits;
+      const wasLocked = !prev.isUnlocked;
+
+      if (wasLocked && willUnlock) {
+        setTimeout(() => setShowUnlockCelebration(true), 400);
+      }
+
+      return {
+        ...prev,
+        deposits: updatedDeposits,
+        depositsCount: confirmedCount,
+        isUnlocked: willUnlock,
+      };
+    });
     setShowSuccess(true);
+  }, []);
+
+  /**
+   * Called when a deposit transaction fails or times out.
+   * Rolls back the optimistic count increment.
+   */
+  const failDeposit = useCallback((id: string) => {
+    setState((prev) => {
+      const updatedDeposits = prev.deposits.map((d) =>
+        d.id === id ? { ...d, status: "failed" as TxStatus } : d
+      );
+      // Recalculate count from confirmed successes only.
+      const confirmedCount = updatedDeposits.filter((d) => d.status === "success").length;
+      return {
+        ...prev,
+        deposits: updatedDeposits,
+        depositsCount: confirmedCount,
+        isUnlocked: confirmedCount >= prev.requiredDeposits,
+      };
+    });
   }, []);
 
   const withdrawCredit = useCallback(() => {
@@ -123,6 +182,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           amount,
           date: new Date(),
           txHash,
+          status: "success" as TxStatus,
         },
         ...prev.withdrawals,
       ],
@@ -157,7 +217,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         ...state,
         addDeposit,
-        // -> simulateWeek eliminada del Provider
+        confirmDeposit,
+        failDeposit,
         withdrawCredit,
         addWithdrawal,
         addStake,
