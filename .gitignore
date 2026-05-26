@@ -29,3 +29,8 @@ dist-ssr
 .env
 .env.*
 backend/.env
+
+# Rust / Soroban
+**/target/
+target/
+Cargo.lock

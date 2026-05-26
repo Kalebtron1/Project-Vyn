@@ -61,10 +61,15 @@ impl VinculoSBT {
             panic!("Solo el administrador puede mintear NFTs"); 
         }
 
-        // 🚀 NUEVA REGLA: Validar que el usuario no tenga ya este mismo nivel
+        // SECURITY-FIX [RISK-02]: enforce monotonic tier increases; mint() cannot downgrade a wallet.
+        // Downgrades must be performed explicitly via revoke(). This prevents accidental or malicious
+        // tier reductions that would reduce a user's credit limit without their knowledge.
         let current_tier = env.storage().persistent().get(&DataKey::Tier(user.clone())).unwrap_or(0u32);
-        if current_tier == tier {
-            panic!("El usuario ya posee un NFT de este nivel exacto");
+        if tier == 0 {
+            panic!("Usa revoke() para retirar el tier de un usuario");
+        }
+        if tier <= current_tier {
+            panic!("El nuevo tier debe ser mayor al tier actual (usa revoke() para bajar)");
         }
 
         // Actualizamos o asignamos el nuevo nivel

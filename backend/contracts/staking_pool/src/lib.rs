@@ -24,6 +24,10 @@ pub struct StakingContract;
 #[contractimpl]
 impl StakingContract {
     pub fn init(env: Env, token: Address) {
+        // SECURITY-FIX [RISK-04]: guard against re-initialization; once set, token address is immutable
+        if env.storage().instance().has(&DataKey::Token) {
+            panic!("already initialized");
+        }
         env.storage().instance().set(&DataKey::Token, &token);
     }
 

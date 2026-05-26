@@ -39,6 +39,11 @@ pub struct VinculoLending;
 impl VinculoLending {
     /// Guarda dirección del token (SAC / Soroban token) y del contrato `VinculoSBT`.
     pub fn init_lending(env: Env, token: Address, sbt: Address) {
+        // SECURITY-FIX [RISK-04]: guard against re-initialization; prevents an attacker from
+        // redirecting the token or SBT addresses after deployment to drain the pool or bypass tiers
+        if env.storage().instance().has(&DataKey::Token) {
+            panic!("already initialized");
+        }
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
     }
@@ -94,8 +99,13 @@ impl VinculoLending {
         let max = max_principal_for_tier(tier);
         assert!(amount <= max, "amount exceeds tier limit");
 
-        let apy_bps = 500;
-        let interest = (amount * 5) / 100;
+        // SECURITY-FIX [RISK-03]: interest was hardcoded to a flat 5% for all tiers and all durations.
+        // Now uses per-tier APY (from apy_bps_for_tier) prorated by months, consistent with staking_pool.
+        // Formula: (principal * apy_bps * months) / 120_000
+        //   apy_bps is annual rate in basis points (e.g. 1200 = 12% p.a.)
+        //   dividing by 120_000 = 12 months * 10_000 bps converts to the fractional period charge.
+        let apy_bps = apy_bps_for_tier(tier);
+        let interest = (amount * apy_bps as i128 * months as i128) / 120_000;
         let total_owed = amount + interest;
 
         let token_client = token::Client::new(&env, &token_addr);
