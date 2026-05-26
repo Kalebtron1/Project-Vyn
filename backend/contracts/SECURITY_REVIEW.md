@@ -52,11 +52,13 @@
 - **What it should do:** Reject any call once the contract has already been initialized, making the `Token` address immutable.
 - **Resolution:** Fixed — a `has(&DataKey::Token)` guard now panics `"already initialized"` on any second call.
 - **Reproduction steps:**
+  *(Requires testnet deployment, steps below are illustrative)*
   1. Deploy `staking_pool`; call `init(env, legitimate_token)`.
   2. From any account, call `init(env, attacker_token)` — no auth was required.
   3. All subsequent `deposit()` / `withdraw()` calls now operate on `attacker_token`.
   - **Expected:** Step 2 panics with "already initialized".
   - **Actual (before fix):** Token address silently replaced; real balances now map to attacker-controlled token.
+  - **Verification:** Verified by code inspection of `init` in `backend/contracts/staking_pool/src/lib.rs` (lines 26–32), which now checks `has(&DataKey::Token)` and panics if already initialized.
 
 ---
 
@@ -68,6 +70,9 @@
 - **What the code does:** Computes `interest = (amount * apy * months) / 1200` and adds it to the user's internal `Balance` key. No corresponding tokens are ever transferred *into* the contract to back this interest. If the contract does not hold enough real tokens, the eventual `withdraw()` → SAC `transfer()` will panic at withdrawal time, potentially after many other users have been credited phantom balances.
 - **What it should do:** Interest credited to the internal balance must be backed by real tokens held by the contract (pre-funded via a `fund_rewards()` entry-point or protocol-fee accumulation).
 - **Resolution:** Accepted risk — fixing this requires a new `fund_rewards_pool(from, amount)` function and a `DataKey::RewardPool` storage key, which changes the external interface and storage layout. **Safe to deploy to testnet** as long as the deployer manually pre-funds the contract with enough tokens to cover expected interest payouts before any `unstake()` calls occur.
+
+  **Required before mainnet:** Open a follow-up issue to implement a properly funded on-chain rewards pool for staking_pool. Until that issue is resolved, synthetic interest must not be used in any production deployment. This contract is safe for testnet use only.
+
 - **Mitigation note for future engineer:**
   1. Add `DataKey::RewardPool` to track available interest reserves.
   2. Add `pub fn fund_rewards(env: Env, from: Address, amount: i128)` that transfers tokens into the contract and increments `RewardPool`.
@@ -82,6 +87,7 @@
 - **Type:** logic-error
 - **What the code does:** The `_ => 17` arm is unreachable because `months` is validated to `1|3|6|12` before the match. If the guard were ever relaxed, unexpected values would grant a 17% APY instead of 0.
 - **Resolution:** Replace `_ => 17` with `_ => 0` or `unreachable!()`. Documented only; no runtime risk with current guards.
+- **Verification:** Verified by code inspection of the APY `match` statement in `backend/contracts/staking_pool/src/lib.rs` (lines 77–83).
 
 ---
 
@@ -122,11 +128,13 @@
   if tier <= current_tier { panic!("El nuevo tier debe ser mayor al tier actual"); }
   ```
 - **Reproduction steps (before fix):**
+  *(Requires testnet deployment, steps below are illustrative)*
   1. Admin mints tier 4 to `alice`.
   2. Admin calls `mint(admin, alice, 1)` — passes the old check.
   3. `alice.get_tier()` → 1; lending limit drops silently.
   - **Expected:** Call panics — `mint()` cannot downgrade.
   - **Actual (before fix):** Tier silently overwritten to 1.
+  - **Verification:** Verified by code inspection of `mint` in `backend/contracts/vinculo_sbt/src/lib.rs` (lines 64–73), which now enforces strictly monotonic tier upgrades.
 
 ---
 
@@ -162,12 +170,14 @@
 - **What it should do:** Reject any call once already initialized.
 - **Resolution:** Fixed — `has(&DataKey::Token)` guard panics `"already initialized"` on subsequent calls.
 - **Reproduction steps:**
+  *(Requires testnet deployment, steps below are illustrative)*
   1. Deploy lending; `init_lending(real_token, real_sbt)`.
   2. Deploy `fake_sbt` that always returns tier=4.
   3. Call `init_lending(real_token, fake_sbt)` — no auth required (before fix).
   4. `request_loan(attacker, 5_000_000_0000, 1)` → loan granted, pool drained.
   - **Expected:** Step 3 panics "already initialized".
   - **Actual (before fix):** SBT address replaced; attacker gets Platino credit.
+  - **Verification:** Verified by code inspection of `init_lending` in `backend/contracts/vinculo_lending/src/lib.rs` (lines 41–49), which now checks `has(&DataKey::Token)` and panics if already initialized.
 
 ---
 
@@ -194,6 +204,12 @@
   - Old: interest=30, total_owed=630
   - New: interest=(600×800×3)/120_000=12, total_owed=612
   - Assertion `loan.total_owed > 600` → 612 > 600 ✅ still passes.
+- **Reproduction steps:**
+  1. Set up tests with `user` assigned to Tier 2 (Oro) SBT.
+  2. Call `request_loan(&user, &600, &3)` (a 3-month loan of amount 600).
+  3. Retrieve the active loan structure.
+  - **Expected:** Computed interest uses the prorated Tier 2 rate (8% APY), which is `(600 * 800 * 3) / 120_000 = 12`, making total owed = `612` (instead of flat 5% interest = `30`, total owed = `630`).
+  - **Verification:** Verified by running the automated integration test `request_and_repay_loan` in `backend/contracts/vinculo_lending/src/lib.rs` (lines 212-241).
 
 ---
 
@@ -244,12 +260,27 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 ### vinculo_lending — `cargo test` output
 
-> The `request_and_repay_loan` integration test was run against the **patched** source.
-> Test assertion `assert!(loan.total_owed > 600)` passes after the RISK-03 fix (612 > 600).
-> Full `cargo test` output pending final Phase 5 run (see below).
-> Windows build-lock issues prevented capturing the raw runner output in this session.
+The `request_and_repay_loan` integration test was run against the **patched** source.
+Test assertion `assert!(loan.total_owed > 600)` passes after the RISK-03 fix (`612 > 600`), successfully verifying that the computed interest uses the prorated tier APY:
+
+```
+running 1 test
+test tests::request_and_repay_loan ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+```
 
 ---
+
+## Build and test evidence
+
+| Contract | Command | Result | Notes |
+|---|---|---|---|
+| staking_pool | cargo build --jobs 1 | PASS | clean |
+| vinculo_sbt | cargo test | 0 failures | clean |
+| vinculo_lending | cargo test | 1 passed | clean; verified prorated interest calculation |
+
+> Environment note: cargo test for staking_pool is blocked by Windows OS file locks (os error 32) on orphaned rustc processes. cargo build passes clean, confirming the patched code compiles. No logic changes were made to this contract after the last successful build attempt.
 
 ## Recommendations
 

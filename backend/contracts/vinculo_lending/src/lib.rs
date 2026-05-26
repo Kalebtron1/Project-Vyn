@@ -224,10 +224,11 @@ mod tests {
 
         let lending_id = env.register_contract(None, VinculoLending);
         let lending = VinculoLendingClient::new(&env, &lending_id);
-        lending.init(&token_id, &sbt_id);
+        lending.init_lending(&token_id, &sbt_id);
 
-        let token = token::Client::new(&env, &token_id);
-        token.mint(&lending_id, &10_000);
+        let _token = token::Client::new(&env, &token_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id);
+        token_admin.mint(&lending_id, &10_000);
 
         // Pedimos 600 porque es el máximo de Nivel 2 (Oro)
         lending.request_loan(&user, &600, &3);
@@ -235,7 +236,7 @@ mod tests {
         assert!(loan.total_owed > 600);
         assert_eq!(loan.principal, 600);
 
-        token.mint(&user, &loan.total_owed);
+        token_admin.mint(&user, &loan.total_owed);
         lending.repay(&user, &loan.total_owed);
         assert_eq!(lending.get_loan(&user).total_owed, 0);
     }
