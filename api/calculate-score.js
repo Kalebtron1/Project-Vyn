@@ -1,10 +1,40 @@
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
-// Para entornos de testnet reducimos el requisito para facilitar pruebas
 const MIN_TX_REQUIRED = 3;
-// Límite máximo de registros históricos a analizar (mejora estabilidad del score)
 const HISTORY_LIMIT = 30;
 
-// --- MOTOR DE REPUTACIÓN CALIBRADO (3000 XLM = 50 PTS) ---
+/**
+ * Scoring inputs that matter most (for contributors):
+ *
+ *  weightedVolume  — sum of deposit amounts discounted by age.
+ *                    Uses a 30-day half-life decay: weight = 1 / (1 + daysAgo / 30).
+ *                    This makes old and recent deposits contribute more evenly;
+ *                    a single large recent deposit no longer dominates.
+ *
+ *  normalizedVolume — weightedVolume divided by totalDeposited so the score
+ *                    reflects *consistency* rather than raw size.
+ *                    Range: (0, 1].
+ *
+ *  retentionRate   — min(totalBalance / totalDeposited, 1).
+ *                    Capped at 1 so a balance that grew beyond deposits
+ *                    does not inflate the score.
+ *
+ *  activityFactor  — log10(txCount + 1). Rewards breadth of activity
+ *                    without letting a flood of tiny transactions explode the score.
+ *
+ *  Final formula   — (normalizedVolume * retentionRate * activityFactor) * SCALE
+ *                    SCALE = 100 so that a well-distributed history with full
+ *                    retention and ~10 transactions lands near 100 pts (Plata/Oro).
+ *
+ *  Drain penalty   — if balance < 10 % of totalDeposited the score is cut by 80 %.
+ *                    Unchanged from previous version.
+ *
+ * Tier thresholds (unchanged):
+ *   >= 1000 → Platino (4)
+ *   >= 500  → Diamante (3)
+ *   >= 150  → Oro (2)
+ *   >= 50   → Plata (1)
+ *   < 50    → Bronce (0)
+ */
 function computeFinancialReputation(history, totalBalance) {
   if (history.length < MIN_TX_REQUIRED) {
     return {
@@ -26,9 +56,9 @@ function computeFinancialReputation(history, totalBalance) {
   const now = new Date();
 
   history.forEach((tx) => {
-    // Factor de tiempo: transacciones de hace 1 mes valen menos que las de hoy
-    const daysAgo = Math.floor((now - tx.date) / (1000 * 60 * 60 * 24));
-    const timeWeight = 1 / (daysAgo + 1);
+    const daysAgo = Math.max(0, (now - tx.date) / (1000 * 60 * 60 * 24));
+    // Soft 30-day half-life decay — recent and older deposits both contribute meaningfully
+    const timeWeight = 1 / (1 + daysAgo / 30);
 
     if (tx.type === "deposit") {
       totalDeposited += tx.amount;
@@ -38,35 +68,37 @@ function computeFinancialReputation(history, totalBalance) {
     }
   });
 
-  // 1. Tasa de Retención (Mide qué tanto dinero se queda en el protocolo)
-  const retentionRate = totalDeposited > 0 ? (totalBalance / totalDeposited) : 0;
+  // Normalize by total deposited so score reflects consistency, not raw size
+  const normalizedVolume = totalDeposited > 0 ? weightedVolume / totalDeposited : 0;
 
-  // 2. Factor de Actividad (Logarítmico para premiar número de operaciones sin explotar)
+  // Cap retention at 1 — a balance that grew beyond deposits should not inflate score
+  const retentionRate = totalDeposited > 0 ? Math.min(totalBalance / totalDeposited, 1) : 0;
+
+  // Logarithmic activity factor
   const activityFactor = Math.log10(history.length + 1);
 
-  // 3. CÁLCULO FINAL CALIBRADO
-  // Dividimos entre 60 para que 3000 XLM ≈ 50 Puntos (Nivel Plata)
-  // Esto hace que el préstamo de 300 XLM sea el 10% del balance necesario.
-  const SENSITIVITY_FACTOR = 60; 
-  let score = (weightedVolume * retentionRate * activityFactor) / SENSITIVITY_FACTOR;
+  // SCALE chosen so a consistent user with ~10 txs and full retention scores ~100 pts
+  const SCALE = 100;
+  let score = normalizedVolume * retentionRate * activityFactor * SCALE;
 
-  // 4. Penalización por vaciado de cuenta (Seguridad extra)
-  if (totalBalance < (totalDeposited * 0.1)) {
-    score = score * 0.2; // Si tiene menos del 10% de lo que ingresó, el score cae 80%
+  // Drain penalty: balance below 10 % of total deposited → 80 % score reduction
+  if (totalDeposited > 0 && totalBalance < totalDeposited * 0.1) {
+    score *= 0.2;
   }
 
-  // --- MAPEO DE TIERS (Mantenemos tus rangos) ---
+  // Hard cap at Platino ceiling to prevent runaway scores
+  score = Math.min(score, 1000);
+
   let tier = 0;
   let tierName = "Bronce";
-
   if (score >= 1000) { tier = 4; tierName = "Platino"; }
   else if (score >= 500) { tier = 3; tierName = "Diamante"; }
   else if (score >= 150) { tier = 2; tierName = "Oro"; }
-  else if (score >= 50) { tier = 1; tierName = "Plata"; }
+  else if (score >= 50)  { tier = 1; tierName = "Plata"; }
 
-  return { 
-    score: parseFloat(score.toFixed(2)), 
-    tier, 
+  return {
+    score: parseFloat(score.toFixed(2)),
+    tier,
     tierName,
     eligibility: {
       minHistoryRequired: MIN_TX_REQUIRED,
@@ -78,26 +110,36 @@ function computeFinancialReputation(history, totalBalance) {
       retention: parseFloat(retentionRate.toFixed(2)),
       activity: parseFloat(activityFactor.toFixed(2)),
       volumeIn: totalDeposited,
-      volumeOut: totalWithdrawn
-    }
+      volumeOut: totalWithdrawn,
+    },
   };
 }
 
-// --- LECTOR DE 30 REGISTROS REALES ---
+export { computeFinancialReputation };
+
 async function getCleanHistory(userAddress) {
   try {
-    // Leemos efectos y mapeamos account_credited/account_debited a deposit/withdrawal.
-    const response = await fetch(`${HORIZON_URL}/accounts/${userAddress}/effects?limit=${HISTORY_LIMIT}&order=desc`);
+    const response = await fetch(
+      `${HORIZON_URL}/accounts/${userAddress}/effects?limit=${HISTORY_LIMIT}&order=desc`
+    );
     if (!response.ok) return [];
 
     const data = await response.json();
 
     return (data._embedded.records || [])
-      .filter((op) => (op.type === 'account_debited' || op.type === 'account_credited' || op.type === 'contract_credited') && Number(op.amount) > 0)
+      .filter(
+        (op) =>
+          (op.type === "account_debited" ||
+            op.type === "account_credited" ||
+            op.type === "contract_credited") &&
+          Number(op.amount) > 0
+      )
       .map((op) => ({
         amount: parseFloat(op.amount),
-        // account_credited or contract_credited => deposit; account_debited => withdrawal
-        type: (op.type === 'account_credited' || op.type === 'contract_credited') ? 'deposit' : 'withdrawal',
+        type:
+          op.type === "account_credited" || op.type === "contract_credited"
+            ? "deposit"
+            : "withdrawal",
         date: new Date(op.created_at),
       }))
       .slice(0, HISTORY_LIMIT);
@@ -107,13 +149,14 @@ async function getCleanHistory(userAddress) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader("Access-Control-Allow-Credentials", true);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
   const { address, totalDeposited: clientTotalDeposited } = req.body;
   if (!address) return res.status(400).json({ error: "Wallet requerida" });
@@ -121,24 +164,27 @@ export default async function handler(req, res) {
   try {
     const history = await getCleanHistory(address);
 
-    // Preferimos usar el total enviado por cliente; si no, intentamos leer on-chain.
     let effectiveTotal = Number(clientTotalDeposited) || 0;
     if (!effectiveTotal || effectiveTotal <= 0) {
       try {
         const resp = await fetch(`${HORIZON_URL}/accounts/${address}`);
         if (resp.ok) {
           const acct = await resp.json();
-          const native = (acct.balances || []).find((b) => b.asset_type === 'native');
+          const native = (acct.balances || []).find(
+            (b) => b.asset_type === "native"
+          );
           effectiveTotal = Number(native?.balance) || effectiveTotal;
         }
       } catch (e) {
-        // fallback a 0
+        // fallback to 0
       }
     }
 
-    // Clamp a 0 para evitar valores negativos que corrompan retentionRate
-    const result = computeFinancialReputation(history, Math.max(0, Number(effectiveTotal) || 0));
-    
+    const result = computeFinancialReputation(
+      history,
+      Math.max(0, Number(effectiveTotal) || 0)
+    );
+
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ error: error.message });
