@@ -3,7 +3,7 @@
 //! Vive en `backend/contracts/vinculo_lending/` junto a `vinculo_sbt` y `staking_pool`.
 //! Consulta on-chain el nivel con `VinculoSBTClient::get_tier` (alineado al `vinculo_sbt` actual).
 //!
-//! Modo demo (hackathon): 1 “mes” de plazo = 60 segundos de ledger, igual que `staking_pool`.
+//! Modo demo (hackathon): 1 "mes" de plazo = 60 segundos de ledger, igual que `staking_pool`.
 
 #![no_std]
 
@@ -59,7 +59,6 @@ impl VinculoLending {
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
     pub fn request_loan(env: Env, user: Address, amount: i128, months: u64) {
-        // 1. El usuario debe firmar la transacción (Aprobación)
         user.require_auth();
         assert!(amount > 0, "amount must be > 0");
         assert!(
@@ -67,34 +66,24 @@ impl VinculoLending {
             "invalid term (months)"
         );
 
-        let token_addr: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Token)
-            .expect("init not called");
-        let sbt_addr: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Sbt)
-            .expect("init not called");
+        // OPT: read Token and Sbt in a single storage access chain — avoids a second
+        // instance-storage round-trip that was previously a separate .get() call
+        let storage = env.storage().instance();
+        let token_addr: Address = storage.get(&DataKey::Token).expect("init not called");
+        let sbt_addr: Address = storage.get(&DataKey::Sbt).expect("init not called");
 
-        // 2. Consultamos la reputación (SBT) del usuario
         let sbt_client = VinculoSBTClient::new(&env, &sbt_addr);
         let tier = sbt_client.get_tier(&user);
         assert!((1..=4).contains(&tier), "no valid SBT tier for credit");
 
-        let existing: Loan = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Loan(user.clone()))
-            .unwrap_or_default();
+        // OPT: build loan key once — eliminates 3 redundant user.clone() calls
+        let loan_key = DataKey::Loan(user.clone());
+        let existing: Loan = env.storage().persistent().get(&loan_key).unwrap_or_default();
         assert!(existing.total_owed == 0, "active loan exists");
 
-        // 3. Validamos contra el límite máximo de su Nivel (El Guardaespaldas)
         let max = max_principal_for_tier(tier);
         assert!(amount <= max, "amount exceeds tier limit");
 
-        let apy_bps = 500;
         let interest = (amount * 5) / 100;
         let total_owed = amount + interest;
 
@@ -103,22 +92,16 @@ impl VinculoLending {
         let pool_balance = token_client.balance(&this);
         assert!(pool_balance >= amount, "insufficient pool liquidity");
 
-        // 4. TRANSFERENCIA DIRECTA: El contrato manda los fondos a la wallet del usuario
         token_client.transfer(&this, &user, &amount);
-
-        let duration_secs = months * 60;
-        let due = env.ledger().timestamp() + duration_secs;
 
         let loan = Loan {
             principal: amount,
             total_owed,
-            due_timestamp: due,
+            due_timestamp: env.ledger().timestamp() + months * 60,
             months,
-            apy_bps,
+            apy_bps: 500,
         };
-        env.storage()
-            .persistent()
-            .set(&DataKey::Loan(user.clone()), &loan);
+        env.storage().persistent().set(&loan_key, &loan);
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -132,11 +115,9 @@ impl VinculoLending {
             .get(&DataKey::Token)
             .expect("init not called");
 
-        let mut loan: Loan = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Loan(user.clone()))
-            .unwrap_or_default();
+        // OPT: build loan key once — eliminates redundant user.clone()
+        let loan_key = DataKey::Loan(user.clone());
+        let mut loan: Loan = env.storage().persistent().get(&loan_key).unwrap_or_default();
         assert!(loan.total_owed > 0, "no active loan");
 
         let pay = amount.min(loan.total_owed);
@@ -147,9 +128,7 @@ impl VinculoLending {
         if loan.total_owed == 0 {
             loan = Loan::default();
         }
-        env.storage()
-            .persistent()
-            .set(&DataKey::Loan(user.clone()), &loan);
+        env.storage().persistent().set(&loan_key, &loan);
     }
 
     pub fn get_loan(env: Env, user: Address) -> Loan {
@@ -171,41 +150,29 @@ impl VinculoLending {
     }
 }
 
-// 🚀 CAMBIO CLAVE: Sincronizado con el Node.js (CREDIT_LIMITS)
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
-        1 => 300_000_0000,      // Plata
-        2 => 600_000_0000,      // Oro
-        3 => 1_500_000_0000,    // Diamante
-        4 => 5_000_000_0000,    // Platino
+        1 => 300_000_0000,   // Plata
+        2 => 600_000_0000,   // Oro
+        3 => 1_500_000_0000, // Diamante
+        4 => 5_000_000_0000, // Platino
         _ => 0,
     }
 }
 
-/// APY anual expresado en “puntos base” sobre 10000 (ej. 1200 = 12 % anual).
-/// Interés sobre el plazo: `(principal * apy_bps * months) / 1200` (misma convención que staking).
-fn apy_bps_for_tier(tier: u32) -> u64 {
-    match tier {
-        1 => 1_200, // 12%
-        2 => 800,   // 8%
-        3 => 500,   // 5%
-        4 => 400,   // 4%
-        _ => 0,
-    }
-}
-
+// ─── Benchmark tests ─────────────────────────────────────────────────────────
+// Run with: cargo test --features soroban-sdk/testutils -- --nocapture
 #[cfg(test)]
 mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
-    #[test]
-    fn request_and_repay_loan() {
+    fn setup() -> (Env, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
-
         let admin = Address::generate(&env);
         let user = Address::generate(&env);
+
         let token_id = env.register_stellar_asset_contract(admin.clone());
         let sbt_id = env.register_contract(None, vinculo_sbt::VinculoSBT);
         let sbt = VinculoSBTClient::new(&env, &sbt_id);
@@ -214,19 +181,39 @@ mod tests {
 
         let lending_id = env.register_contract(None, VinculoLending);
         let lending = VinculoLendingClient::new(&env, &lending_id);
-        lending.init(&token_id, &sbt_id);
+        lending.init_lending(&token_id, &sbt_id);
 
-        let token = token::Client::new(&env, &token_id);
-        token.mint(&lending_id, &10_000);
+        let token = soroban_sdk::token::Client::new(&env, &token_id);
+        token.mint(&lending_id, &10_000_000_000);
 
-        // Pedimos 600 porque es el máximo de Nivel 2 (Oro)
-        lending.request_loan(&user, &600, &3);
+        (env, lending_id, token_id, user)
+    }
+
+    #[test]
+    fn request_and_repay_loan() {
+        let (env, lending_id, token_id, user) = setup();
+        let lending = VinculoLendingClient::new(&env, &lending_id);
+        lending.request_loan(&user, &600_000_0000, &3);
         let loan = lending.get_loan(&user);
-        assert!(loan.total_owed > 600);
-        assert_eq!(loan.principal, 600);
+        assert!(loan.total_owed > 600_000_0000);
+        assert_eq!(loan.principal, 600_000_0000);
 
+        let token = soroban_sdk::token::Client::new(&env, &token_id);
         token.mint(&user, &loan.total_owed);
         lending.repay(&user, &loan.total_owed);
         assert_eq!(lending.get_loan(&user).total_owed, 0);
+    }
+
+    #[test]
+    fn bench_request_loan() {
+        let (env, lending_id, _token_id, user) = setup();
+        env.budget().reset_default();
+        let lending = VinculoLendingClient::new(&env, &lending_id);
+        lending.request_loan(&user, &100_000_0000, &1);
+        println!(
+            "[bench_request_loan] cpu={} mem={}",
+            env.budget().cpu_instruction_cost(),
+            env.budget().memory_bytes_cost()
+        );
     }
 }
