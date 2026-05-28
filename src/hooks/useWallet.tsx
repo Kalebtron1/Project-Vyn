@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { isFreighterAvailable, isMobileBrowser } from "@/lib/mobileWalletConnectors";
+import { walletAdapter } from "@/wallet";
 
 export type WalletStatus = "loading" | "connected" | "disconnected" | "missing";
 
@@ -46,10 +47,7 @@ export const useWallet = () => {
     : "";
 
   const disconnect = () => {
-    localStorage.removeItem("vinculo_wallet");
-    localStorage.removeItem("vinculo_onboarded");
-    localStorage.removeItem("vinculo_wallet_provider");
-    window.location.href = "/login";
+    walletAdapter.disconnect();
   };
 
   return { wallet, loading, walletStatus, shortWallet, disconnect, setWalletAddress };
