@@ -118,6 +118,7 @@ export default async function handler(req, res) {
   const { address, totalDeposited: clientTotalDeposited } = req.body;
   if (!address) return res.status(400).json({ error: "Wallet requerida" });
 
+  const t0 = Date.now();
   try {
     const history = await getCleanHistory(address);
 
@@ -138,9 +139,16 @@ export default async function handler(req, res) {
 
     // Clamp a 0 para evitar valores negativos que corrompan retentionRate
     const result = computeFinancialReputation(history, Math.max(0, Number(effectiveTotal) || 0));
-    
+
+    const latencyMs = Date.now() - t0;
+    // METRIC: calculate-score latency and conversion (tier >= 1 = eligible user)
+    console.log(`[metric] calculate-score latency=${latencyMs}ms tier=${result.tier} eligible=${result.tier >= 1}`);
+
     return res.status(200).json(result);
   } catch (error) {
+    const latencyMs = Date.now() - t0;
+    // METRIC: calculate-score failure
+    console.log(`[metric] calculate-score latency=${latencyMs}ms error="${error.message}"`);
     return res.status(500).json({ error: error.message });
   }
 }

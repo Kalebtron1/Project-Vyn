@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   const { userAddress } = req.body;
   if (!userAddress) return res.status(400).json({ error: "Falta wallet" });
 
+  const t0 = Date.now();
   try {
     const server = new rpc.Server(RPC_URL);
     const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
@@ -49,7 +50,10 @@ export default async function handler(req, res) {
     }
 
     const config = CREDIT_LIMITS[finalTier] || CREDIT_LIMITS[0];
-    
+    const latencyMs = Date.now() - t0;
+    // METRIC: get-available-credit latency and resolved tier
+    console.log(`[metric] get-available-credit latency=${latencyMs}ms tier=${finalTier} credit=${config.amount}XLM`);
+
     return res.status(200).json({
       success: true,
       tier: finalTier,
@@ -59,7 +63,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+    const latencyMs = Date.now() - t0;
+    // METRIC: get-available-credit contract simulation failure
     console.error("Error get-available-credit:", error.message);
+    console.log(`[metric] get-available-credit latency=${latencyMs}ms error="${error.message}"`);
     return res.status(200).json({
       success: true,
       tier: 0,
