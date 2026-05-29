@@ -1,3 +1,5 @@
+import { validateBody, calculateScoreBodySchema, reportValidationError } from "./validation.js";
+
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
 // Para entornos de testnet reducimos el requisito para facilitar pruebas
 const MIN_TX_REQUIRED = 3;
@@ -115,8 +117,16 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { address, totalDeposited: clientTotalDeposited } = req.body;
-  if (!address) return res.status(400).json({ error: "Wallet requerida" });
+  let address;
+  let clientTotalDeposited;
+
+  try {
+    const validated = validateBody(calculateScoreBodySchema, req.body || {});
+    address = validated.address;
+    clientTotalDeposited = validated.totalDeposited;
+  } catch (error) {
+    return reportValidationError(res, error);
+  }
 
   try {
     const history = await getCleanHistory(address);

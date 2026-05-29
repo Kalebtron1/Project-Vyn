@@ -9,6 +9,7 @@ import {
   Transaction
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
+import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.js";
 
 dotenv.config();
 
@@ -101,10 +102,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { userAddress, deposits, totalVolume } = req.body || {};
+  let userAddress;
+  let deposits;
+  let totalVolume;
 
-  if (!userAddress) {
-    return res.status(400).json({ error: 'userAddress es requerido', status: 'error' });
+  try {
+    const validated = validateBody(evaluateAndMintBodySchema, req.body || {});
+    userAddress = validated.userAddress;
+    deposits = validated.deposits;
+    totalVolume = validated.totalVolume;
+  } catch (error) {
+    return reportValidationError(res, error);
   }
 
   const fallbackVolumeFromDeposits = Array.isArray(deposits)

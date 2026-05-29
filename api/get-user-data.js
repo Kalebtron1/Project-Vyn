@@ -1,4 +1,5 @@
 import { rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
+import { validateQuery, getUserDataQuerySchema, reportValidationError } from "./validation.js";
 
 const CONTRACT_ID = "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2";
 const RPC_URL = "https://soroban-testnet.stellar.org";
@@ -9,10 +10,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  const { address } = req.query;
-
-  if (!address) {
-    return res.status(400).json({ error: 'Falta la dirección de la wallet' });
+  let address;
+  try {
+    const validated = validateQuery(getUserDataQuerySchema, req.query || {});
+    address = validated.address;
+  } catch (error) {
+    return reportValidationError(res, error);
   }
 
   try {
