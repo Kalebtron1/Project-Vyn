@@ -1,3 +1,5 @@
+import { createLogger } from "./_logger.js";
+
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
 // Para entornos de testnet reducimos el requisito para facilitar pruebas
 const MIN_TX_REQUIRED = 3;
@@ -5,7 +7,7 @@ const MIN_TX_REQUIRED = 3;
 const HISTORY_LIMIT = 30;
 
 // --- MOTOR DE REPUTACIÓN CALIBRADO (3000 XLM = 50 PTS) ---
-function computeFinancialReputation(history, totalBalance) {
+export function computeFinancialReputation(history, totalBalance) {
   if (history.length < MIN_TX_REQUIRED) {
     return {
       score: 0,
@@ -107,6 +109,8 @@ async function getCleanHistory(userAddress) {
 }
 
 export default async function handler(req, res) {
+  const log = createLogger(req);
+
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
@@ -118,8 +122,11 @@ export default async function handler(req, res) {
   const { address, totalDeposited: clientTotalDeposited } = req.body;
   if (!address) return res.status(400).json({ error: "Wallet requerida" });
 
+  log.info("calculate_score.start", { address });
+
   try {
     const history = await getCleanHistory(address);
+    log.info("calculate_score.history_fetched", { address, count: history.length });
 
     // Preferimos usar el total enviado por cliente; si no, intentamos leer on-chain.
     let effectiveTotal = Number(clientTotalDeposited) || 0;
@@ -132,15 +139,23 @@ export default async function handler(req, res) {
           effectiveTotal = Number(native?.balance) || effectiveTotal;
         }
       } catch (e) {
-        // fallback a 0
+        log.warn("calculate_score.balance_fetch_failed", { address, err: e.message });
       }
     }
 
     // Clamp a 0 para evitar valores negativos que corrompan retentionRate
     const result = computeFinancialReputation(history, Math.max(0, Number(effectiveTotal) || 0));
-    
+
+    log.info("calculate_score.done", {
+      address,
+      score: result.score,
+      tier: result.tier,
+      tierName: result.tierName,
+    });
+
     return res.status(200).json(result);
   } catch (error) {
+    log.error("calculate_score.error", { address, err: error.message });
     return res.status(500).json({ error: error.message });
   }
 }

@@ -1,10 +1,12 @@
 import { rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
+import { createLogger } from "./_logger.js";
 
 const CONTRACT_ID = "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2";
 const RPC_URL = "https://soroban-testnet.stellar.org";
 
 export default async function handler(req, res) {
-  // Solo aceptamos GET
+  const log = createLogger(req);
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método no permitido' });
   }
@@ -15,19 +17,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Falta la dirección de la wallet' });
   }
 
+  log.info("get_user_data.start", { address });
+
   try {
     const server = new rpc.Server(RPC_URL);
     
-    // 1. Obtenemos la cuenta para poder armar la transacción de lectura
     let account;
     try {
       account = await server.getAccount(address);
     } catch (e) {
-      // Si la cuenta no existe en la red (wallet nueva sin fondear), el balance es 0
+      log.warn("get_user_data.account_not_found", { address });
       return res.status(200).json({ totalXlmDeposited: 0, depositCount: 0, nftLevel: 0 });
     }
 
-    // 2. Armamos la transacción simulada apuntando a get_balance
     const transaction = new TransactionBuilder(account, {
       fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
@@ -36,15 +38,12 @@ export default async function handler(req, res) {
         Operation.invokeContractFunction({
           contract: CONTRACT_ID,
           function: "get_balance",
-          args: [
-            nativeToScVal(address, { type: "address" })
-          ],
+          args: [nativeToScVal(address, { type: "address" })],
         })
       )
       .setTimeout(30)
       .build();
 
-    // 3. Ejecutamos la simulación
     const response = await server.simulateTransaction(transaction);
 
     let balanceXLM = 0;
@@ -53,31 +52,26 @@ export default async function handler(req, res) {
       balanceXLM = Number(balanceInStroops) / 10000000;
     }
 
-    // --- LÓGICA DEL MOTOR DE NIVELES (El truco del hackathon) ---
-    // Determinamos el Nivel del NFT basados en el XLM depositado.
-    // Ajusta estos números (50, 150, 500) según la economía de tu app.
-    let nftLevel = 0; // Bronce por defecto
-    
-    if (balanceXLM >= 50) nftLevel = 1;   // Plata
-    if (balanceXLM >= 150) nftLevel = 2;  // Oro
-    if (balanceXLM >= 500) nftLevel = 3;  // Platino
-    if (balanceXLM >= 1000) nftLevel = 4; // Diamante
+    let nftLevel = 0;
+    if (balanceXLM >= 50) nftLevel = 1;
+    if (balanceXLM >= 150) nftLevel = 2;
+    if (balanceXLM >= 500) nftLevel = 3;
+    if (balanceXLM >= 1000) nftLevel = 4;
 
-    // Simulamos la cantidad de depósitos para la UI 
-    // (Si tiene saldo, asumimos al menos 1 depósito para que se vea actividad)
     let depositCount = balanceXLM > 0 ? 1 : 0;
     if (balanceXLM >= 150) depositCount = 3; 
     if (balanceXLM >= 500) depositCount = 10;
 
-    // 4. Devolvemos los datos listos para que Perfil.tsx los pinte
+    log.info("get_user_data.done", { address, balanceXLM, nftLevel, depositCount });
+
     return res.status(200).json({
       totalXlmDeposited: balanceXLM,
-      depositCount: depositCount,
-      nftLevel: nftLevel
+      depositCount,
+      nftLevel,
     });
 
   } catch (error) {
-    console.error("Error consultando la blockchain:", error);
+    log.error("get_user_data.error", { address, err: error.message });
     return res.status(500).json({ error: 'Error al comunicarse con Soroban' });
   }
 }
