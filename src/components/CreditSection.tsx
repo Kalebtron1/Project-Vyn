@@ -32,7 +32,7 @@ const getLendingContractId = () => {
 };
 
 const CreditSection = () => {
-  const { creditWithdrawn, withdrawCredit, deposits } = useApp();
+  const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false); 
   const [loadingCredit, setLoadingCredit] = useState(true);
@@ -117,6 +117,7 @@ const CreditSection = () => {
             tier: data.tier,
             isUnlocked: data.tier >= 1 
           });
+          if (data.anomaly) setScoreAnomaly(true);
         }
         
       } catch (error) {
@@ -298,6 +299,13 @@ const CreditSection = () => {
           ON-CHAIN
         </div>
       </div>
+
+      {scoreAnomaly && (
+        <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-600 text-xs animate-fade-in">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>Score anómalo detectado. Los datos serán revisados antes de habilitar operaciones.</p>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col justify-center">
         {creditWithdrawn ? (

@@ -138,7 +138,24 @@ export default async function handler(req, res) {
 
     // Clamp a 0 para evitar valores negativos que corrompan retentionRate
     const result = computeFinancialReputation(history, Math.max(0, Number(effectiveTotal) || 0));
-    
+
+    // --- ANOMALY DETECTION ---
+    // Normal range: score 0–2000. Scores above 2000 indicate abnormal volume/retention
+    // and should be reviewed. Trigger: score > 2000 or retention > 5 (balance > 5x deposited).
+    // To simulate: send a wallet with totalDeposited=1 and a very high on-chain balance.
+    const SCORE_ANOMALY_THRESHOLD = 2000;
+    const RETENTION_ANOMALY_THRESHOLD = 5;
+    if (
+      result.score > SCORE_ANOMALY_THRESHOLD ||
+      (result.metrics && result.metrics.retention > RETENTION_ANOMALY_THRESHOLD)
+    ) {
+      console.warn(
+        `[ANOMALY] Unusual score detected for ${address}: score=${result.score}, retention=${result.metrics?.retention}. ` +
+        `Review thresholds in api/calculate-score.js (SCORE_ANOMALY_THRESHOLD, RETENTION_ANOMALY_THRESHOLD).`
+      );
+      result.anomaly = true;
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ error: error.message });

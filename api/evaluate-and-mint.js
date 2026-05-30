@@ -49,8 +49,13 @@ async function resolveTierFromCanonicalScore(req, userAddress, totalVolume) {
   const scoreData = await scoreResponse.json();
   const tier = Number(scoreData?.tier) || 0;
   const tierName = scoreData?.tierName || tierNameFromValue(tier);
+  const anomaly = scoreData?.anomaly === true;
 
-  return { tier, tierName };
+  if (anomaly) {
+    console.warn(`[ANOMALY] Flagged score during evaluate-and-mint for ${userAddress}. Minting blocked.`);
+  }
+
+  return { tier, tierName, anomaly };
 }
 
 async function mintNftOnChain(userAddress, tier) {
@@ -129,14 +134,25 @@ export default async function handler(req, res) {
 
   let tier;
   let tierName;
+  let anomaly = false;
   try {
     const tierResult = await resolveTierFromCanonicalScore(req, userAddress, effectiveTotalVolume);
     tier = tierResult.tier;
     tierName = tierResult.tierName;
+    anomaly = tierResult.anomaly || false;
   } catch (scoreError) {
     return res.status(500).json({
       status: "error",
       message: scoreError?.message || "No se pudo validar el nivel para mintear",
+    });
+  }
+
+  if (anomaly) {
+    return res.status(422).json({
+      status: "anomaly",
+      tier,
+      tierName,
+      message: "Score anómalo detectado. Minting bloqueado para revisión.",
     });
   }
   
