@@ -7,6 +7,7 @@ import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, 
 import BottomNav from "@/components/BottomNav";
 import WalletSetupModal from "@/components/WalletSetupModal";
 import NFTModal from "@/components/NFTModal";
+import LanguageSelector from "@/components/LanguageSelector";
 import logoVin from "@/assets/logo-vin.png";
 import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
@@ -445,6 +446,11 @@ const Perfil = () => {
               <p className="text-sm font-mono font-medium text-foreground break-all">{walletAddress}</p>
             </div>
           )}
+        </div>
+
+        {/* Language */}
+        <div className="card-elevated p-5 animate-fade-up" style={{ animationDelay: "380ms" }}>
+          <LanguageSelector />
         </div>
 
         {/* Menú */}
