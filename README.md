@@ -79,6 +79,8 @@ Vyn has four layers: a React frontend, Vercel serverless API functions, Supabase
 
 - [Architecture overview](docs/architecture.md) — layers, components, contracts, and where to make common changes.
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.
+- [Deployment guide](docs/deployment.md) — local setup, Vercel deploy, rollback steps, and contract redeployment.
+- [API reference](docs/api.md) — all endpoint contracts with request/response shapes and error codes.
 
 ## Notes For Collaborators
 
