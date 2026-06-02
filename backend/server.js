@@ -21,14 +21,16 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
   return res.status(200).json({
     status: 'ok',
-    endpoint: '/api/health'
+    endpoint: '/api/health',
+    timestamp: new Date().toISOString()
   });
 });
 
 app.get('/api/readiness', (req, res) => {
   return res.status(200).json({
     status: 'ready',
-    endpoint: '/api/readiness'
+    endpoint: '/api/readiness',
+    timestamp: new Date().toISOString()
   });
 });
 

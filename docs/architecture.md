@@ -88,6 +88,13 @@ Deployed as Vercel serverless functions. Routes are defined in `vercel.json`.
 | `GET /api/health` | GET | Returns a lightweight service health signal for deploy checks |
 | `GET /api/readiness` | GET | Returns a readiness signal for smoke tests and deployment validation |
 
+## Health and readiness checks
+
+- `GET /api/health` returns `200` and a JSON payload with `status: "ok"`, `endpoint: "/api/health"`, and `timestamp`.
+- `GET /api/readiness` returns `200` and a JSON payload with `status: "ready"`, `endpoint: "/api/readiness"`, and `timestamp`.
+- Non-`GET` requests receive `405 Method Not Allowed` and an `Allow: [GET]` response header.
+- A missing or unreachable endpoint indicates a deployment or server failure; a `5xx` response indicates a function runtime error.
+
 All functions set permissive CORS headers and handle `OPTIONS` preflight.
 
 ---

@@ -19,6 +19,7 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 4. Run `npm install` in the repo root.
 5. Start the frontend with `npm run dev`.
 6. If you need to verify backend behavior locally, run `node backend/server.js` from the `backend/` folder in a separate terminal.
+7. Run `npm run check:health` to verify `/api/health` and `/api/readiness` return the expected service signals.
 
 ### What you need to replicate
 
