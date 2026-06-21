@@ -135,12 +135,19 @@ const Login = () => {
 
         {/* ── Error notification ─────────────────────────────────────────── */}
         {error && (
-          <div
-            key={error}
-            className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-[11px] font-bold uppercase text-center animate-shake mt-4"
-          >
-            <AlertCircle className="w-4 h-4 inline mr-2 mb-0.5" />
-            {error}
+          <div className="space-y-3 mt-4">
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-[11px] font-bold uppercase text-center animate-shake">
+              <AlertCircle className="w-4 h-4 inline mr-2 mb-0.5" />
+              {error}
+            </div>
+            <button
+              onClick={connectWallet}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-3 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+              {t("common.retry")}
+            </button>
           </div>
         )}
       </div>

@@ -54,7 +54,7 @@ const Index = () => {
             </p>
           </div>
           <button
-            onClick={disconnect}
+            onClick={() => window.location.reload()}
             className="text-[11px] font-bold text-amber-700 hover:underline flex-shrink-0"
           >
             {t("home.reconnect")}

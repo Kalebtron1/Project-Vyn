@@ -9,6 +9,21 @@ interface WalletSetupModalProps {
   onComplete: () => void;
 }
 
+function friendlyError(
+  raw: string,
+  cancelled: boolean,
+  t: (key: string) => string
+): string {
+  if (cancelled) return t("wallet_setup.error_cancelled");
+  const lower = raw.toLowerCase();
+  if (lower.includes("popup")) return t("wallet_setup.error_popup_blocked");
+  if (lower.includes("locked") || lower.includes("bloqueada"))
+    return t("wallet_setup.error_wallet_locked");
+  if (lower.includes("network") || lower.includes("fetch"))
+    return t("wallet_setup.error_no_network");
+  return t("wallet_setup.error_generic");
+}
+
 const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
   const { user } = useAuth();
   const { isMobile, isFreighterReady, connect } = useMobileWallet();
@@ -28,11 +43,7 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
     const result = await connect();
 
     if (!result.ok) {
-      setError(
-        result.cancelled
-          ? t("wallet_setup.error_cancelled")
-          : result.error
-      );
+      setError(friendlyError(result.error, result.cancelled, t));
       setConnecting(false);
       return;
     }
@@ -137,7 +148,7 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
                   className="flex items-center justify-center gap-1 text-xs text-primary hover:underline py-1"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  Instalar Freighter en su lugar
+                  {t("wallet_setup.install_freighter_alt")}
                 </a>
               </div>
             ) : (
@@ -163,7 +174,7 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
             )}
 
             {error && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-start gap-2 bg-destructive/10 rounded-lg px-3 py-2.5">
                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-destructive">{error}</p>
@@ -171,8 +182,9 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
                 <button
                   onClick={() => { setError(null); handleConnect(); }}
                   disabled={connecting}
-                  className="w-full text-xs font-semibold text-primary hover:underline py-1 disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-primary/90 transition-all disabled:opacity-60"
                 >
+                  {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
                   {t("common.retry")}
                 </button>
               </div>
@@ -204,7 +216,7 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
                 className="flex items-center justify-center gap-1 text-xs text-primary hover:underline"
               >
                 <ExternalLink className="w-3 h-3" />
-                ¿No tienes Freighter? Descárgala aquí
+                {t("wallet_setup.install_freighter_link")}
               </a>
             )}
           </>
