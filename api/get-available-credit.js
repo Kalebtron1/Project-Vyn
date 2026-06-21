@@ -34,6 +34,7 @@ export default async function handler(req, res) {
 
   log.info("get_available_credit.start", { userAddress });
 
+  const t0 = Date.now();
   try {
     const server = new rpc.Server(RPC_URL);
     const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
@@ -68,6 +69,9 @@ export default async function handler(req, res) {
       tierName: config.name,
       availableCredit: config.amount,
     });
+    const latencyMs = Date.now() - t0;
+    // METRIC: get-available-credit latency and resolved tier
+    console.log(`[metric] get-available-credit latency=${latencyMs}ms tier=${finalTier} credit=${config.amount}XLM`);
 
     return res.status(200).json({
       success: true,
@@ -79,6 +83,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     log.error("get_available_credit.error", { userAddress, err: error.message });
+    const latencyMs = Date.now() - t0;
+    // METRIC: get-available-credit contract simulation failure
+    console.log(`[metric] get-available-credit latency=${latencyMs}ms error="${error.message}"`);
     return res.status(200).json({
       success: true,
       tier: 0,

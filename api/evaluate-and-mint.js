@@ -141,6 +141,7 @@ export default async function handler(req, res) {
     }
   }
 
+  const t0 = Date.now();
   let tier;
   let tierName;
   try {
@@ -149,18 +150,25 @@ export default async function handler(req, res) {
     tierName = tierResult.tierName;
   } catch (scoreError) {
     log.error("evaluate_and_mint.score_error", { userAddress, err: scoreError?.message });
+    const latencyMs = Date.now() - t0;
+    // METRIC: evaluate-and-mint score resolution failure
+    console.log(`[metric] evaluate-and-mint latency=${latencyMs}ms score_error="${scoreError?.message}"`);
     return res.status(500).json({
       status: "error",
       message: scoreError?.message || "No se pudo validar el nivel para mintear",
     });
   }
-  
+
   if (tier >= 1) {
     const mintResult = await mintNftOnChain(log, userAddress, tier);
+    const latencyMs = Date.now() - t0;
     if (mintResult.success) {
+      // METRIC: successful mint conversion
+      console.log(`[metric] evaluate-and-mint latency=${latencyMs}ms tier=${tier} status=minted`);
       return res.json({ txHash: mintResult.hash, tier, tierName, status: "minted" });
     }
-
+    // METRIC: mint transaction failure
+    console.log(`[metric] evaluate-and-mint latency=${latencyMs}ms tier=${tier} status=tx_failed error="${mintResult.error}"`);
     return res.status(500).json({
       status: "error",
       tier,
@@ -170,6 +178,9 @@ export default async function handler(req, res) {
   }
 
   log.info("evaluate_and_mint.insufficient_tier", { userAddress, tier, tierName });
+  const latencyMs = Date.now() - t0;
+  // METRIC: user below minimum tier (no conversion)
+  console.log(`[metric] evaluate-and-mint latency=${latencyMs}ms tier=${tier} status=pending`);
   return res.json({
     message: "Nivel insuficiente",
     tier,

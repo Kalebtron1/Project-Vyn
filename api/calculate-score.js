@@ -176,6 +176,7 @@ export default async function handler(req, res) {
 
   log.info("calculate_score.start", { address });
 
+  const t0 = Date.now();
   try {
     const history = await getCleanHistory(address);
     log.info("calculate_score.history_fetched", { address, count: history.length });
@@ -208,9 +209,16 @@ export default async function handler(req, res) {
       tierName: result.tierName,
     });
 
+    const latencyMs = Date.now() - t0;
+    // METRIC: calculate-score latency and conversion (tier >= 1 = eligible user)
+    console.log(`[metric] calculate-score latency=${latencyMs}ms tier=${result.tier} eligible=${result.tier >= 1}`);
+
     return res.status(200).json(result);
   } catch (error) {
     log.error("calculate_score.error", { address, err: error.message });
+    const latencyMs = Date.now() - t0;
+    // METRIC: calculate-score failure
+    console.log(`[metric] calculate-score latency=${latencyMs}ms error="${error.message}"`);
     return res.status(500).json({ error: error.message });
   }
 }
