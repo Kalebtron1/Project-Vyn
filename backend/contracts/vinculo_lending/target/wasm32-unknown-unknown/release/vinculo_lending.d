@@ -1,1 +1,0 @@
-C:\Users\Usuario\Desktop\stellar\Stellar-Hack-vinculo-credito\Backend\contracts\vinculo_lending\target\wasm32-unknown-unknown\release\vinculo_lending.wasm: C:\Users\Usuario\Desktop\stellar\Stellar-Hack-vinculo-credito\Backend\contracts\vinculo_lending\src\lib.rs C:\Users\Usuario\Desktop\stellar\Stellar-Hack-vinculo-credito\Backend\contracts\vinculo_sbt\src\lib.rs

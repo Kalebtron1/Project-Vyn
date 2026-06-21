@@ -1,1 +1,0 @@
-C:\Users\Usuario\Desktop\stellar\Stellar-Hack-vinculo-credito\Backend\contracts\staking_pool\target\wasm32-unknown-unknown\release\libstaking_pool.rlib: C:\Users\Usuario\Desktop\stellar\Stellar-Hack-vinculo-credito\Backend\contracts\staking_pool\src\lib.rs
