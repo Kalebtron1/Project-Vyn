@@ -82,7 +82,7 @@ const Perfil = () => {
   });
   const [historyGate, setHistoryGate] = useState({
     historyCount: 0,
-    minHistoryRequired: 30,
+    minHistoryRequired: 3,
     isHistoryEligible: false,
   });
 
@@ -153,7 +153,7 @@ const Perfil = () => {
           const eligibility = data?.eligibility || {};
           setHistoryGate({
             historyCount: Number(eligibility?.historyCount) || 0,
-            minHistoryRequired: Number(eligibility?.minHistoryRequired) || 30,
+            minHistoryRequired: Number(eligibility?.minHistoryRequired) || 3,
             isHistoryEligible: Boolean(eligibility?.isHistoryEligible),
           });
 

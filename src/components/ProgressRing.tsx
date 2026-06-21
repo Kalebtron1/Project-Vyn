@@ -48,7 +48,7 @@ const ProgressRing = () => {
   const [needsMinting, setNeedsMinting] = useState(false);
   const [levelToMint, setLevelToMint] = useState<Level | null>(null);
   const [historyCount, setHistoryCount] = useState(0);
-  const [minHistoryRequired, setMinHistoryRequired] = useState(30);
+  const [minHistoryRequired, setMinHistoryRequired] = useState(3);
   const [isHistoryEligible, setIsHistoryEligible] = useState(false);
 
   // 1. Función de carga envuelta en useCallback para evitar bucles infinitos
@@ -90,7 +90,7 @@ const ProgressRing = () => {
 
       const eligibility = scoreData?.eligibility || {};
       const txCount = Number(eligibility?.historyCount) || 0;
-      const minRequired = Number(eligibility?.minHistoryRequired) || 30;
+      const minRequired = Number(eligibility?.minHistoryRequired) || 3;
       const eligibleByHistory = Boolean(eligibility?.isHistoryEligible);
 
       setHistoryCount(txCount);
