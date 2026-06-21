@@ -156,8 +156,9 @@ const CreditSection = () => {
     setLoadingTx(true);
     setErrorMsg(null); // Limpiamos errores previos
     try {
-      const userAddress = await walletAdapter.connect();
-      if (!userAddress) throw new Error("Debes conectar tu billetera Freighter");
+      // Use persisted address if available; connect (and prompt) only when needed.
+      const userAddress = walletAdapter.getAddress() ?? await walletAdapter.connect();
+      if (!userAddress) throw new Error("Debes conectar tu billetera primero");
 
       // 🛡️ CANDADO: Validamos que use la cuenta correcta
       if (registeredWallet && userAddress !== registeredWallet) {
@@ -211,8 +212,9 @@ const CreditSection = () => {
     setLoadingTx(true);
     setErrorMsg(null); // Limpiamos errores previos
     try {
-      const userAddress = await walletAdapter.connect();
-      if (!userAddress) throw new Error("Debes conectar tu billetera Freighter");
+      // Use persisted address if available; connect (and prompt) only when needed.
+      const userAddress = walletAdapter.getAddress() ?? await walletAdapter.connect();
+      if (!userAddress) throw new Error("Debes conectar tu billetera primero");
 
       // 🛡️ CANDADO: Validamos que use la cuenta correcta para pagar
       if (registeredWallet && userAddress !== registeredWallet) {
