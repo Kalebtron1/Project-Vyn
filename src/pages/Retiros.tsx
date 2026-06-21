@@ -3,6 +3,7 @@ import {
   ArrowDownToLine, Fingerprint, CheckCircle2,
   X, Lock, TrendingUp, Clock, Sparkles, Unlock, Smartphone
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import confetti from "canvas-confetti";
 import BottomNav from "@/components/BottomNav";
@@ -23,6 +24,7 @@ const STAKING_OPTIONS = [
 const Retiros = () => {
   const { addWithdrawal } = useApp();
   const { isMobile, provider, connect, sign } = useMobileWallet();
+  const { t } = useTranslation();
 
   const [realBalance, setRealBalance] = useState<number>(0);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -185,7 +187,7 @@ const Retiros = () => {
 
   const handleWithdraw = async () => {
     const val = parseFloat(amount);
-    if (!val || val <= 0 || val > realBalance) { setErrorMsg("Saldo insuficiente"); setStep("error"); return; }
+    if (!val || val <= 0 || val > realBalance) { setErrorMsg(t("withdrawals.error_insufficient")); setStep("error"); return; }
     setStep("signing");
     const valStroops = BigInt(Math.floor(val * 10000000));
     await processContractCall("withdraw", [
@@ -219,8 +221,8 @@ const Retiros = () => {
       <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex items-center gap-3">
         <img src={logoVin} alt="Vyn" className="w-7 h-7 object-contain" />
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-tight">Retiros</h1>
-          <p className="text-xs text-muted-foreground">Envía fondos a tu wallet</p>
+          <h1 className="text-xl font-bold text-foreground tracking-tight">{t("withdrawals.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("withdrawals.subtitle")}</p>
         </div>
       </header>
 
@@ -228,11 +230,11 @@ const Retiros = () => {
         {/* Balance Card */}
         <div className="card-elevated p-5 flex items-center justify-between animate-fade-up">
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-0.5">Saldo disponible</p>
+            <p className="text-xs font-medium text-muted-foreground mb-0.5">{t("withdrawals.available_balance")}</p>
             <p className="text-2xl font-extrabold text-foreground tabular-nums">{realBalance.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">XLM</span></p>
           </div>
           <button onClick={() => setModalOpen(true)} disabled={realBalance <= 0} className="btn-emerald flex items-center gap-2 px-5 py-3 text-sm disabled:opacity-40">
-            <ArrowDownToLine className="w-4 h-4" /> Retirar
+            <ArrowDownToLine className="w-4 h-4" /> {t("withdrawals.withdraw_button")}
           </button>
         </div>
 
@@ -240,7 +242,7 @@ const Retiros = () => {
         <div className="animate-fade-up" style={{ animationDelay: "80ms" }}>
           <div className="flex items-center gap-2 mb-3 px-1">
             <Lock className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-bold text-foreground">Staking</h2>
+            <h2 className="text-sm font-bold text-foreground">{t("withdrawals.staking_section_title")}</h2>
           </div>
 
           <button 
@@ -253,8 +255,8 @@ const Retiros = () => {
                 <TrendingUp className="w-5 h-5 text-accent" />
               </div>
               <div className="text-left">
-                <p className="text-sm font-bold text-foreground">Generar rendimientos</p>
-                <p className="text-xs text-muted-foreground">Bloquea tus fondos y gana intereses</p>
+                <p className="text-sm font-bold text-foreground">{t("withdrawals.staking_card_title")}</p>
+                <p className="text-xs text-muted-foreground">{t("withdrawals.staking_card_description")}</p>
               </div>
             </div>
             <Sparkles className="w-5 h-5 text-accent opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -263,7 +265,7 @@ const Retiros = () => {
           {onChainStake.amount > 0 ? (
             <div className="card-elevated divide-y divide-border border border-accent/20 shadow-lg shadow-accent/5">
               <div className="px-4 py-3 flex items-center justify-between bg-accent/5 rounded-t-xl">
-                <span className="text-xs font-semibold text-accent uppercase tracking-wide">Posición Activa</span>
+                <span className="text-xs font-semibold text-accent uppercase tracking-wide">{t("withdrawals.staking_active_label")}</span>
                 <span className="text-xs font-bold text-accent">{onChainStake.amount.toFixed(2)} XLM</span>
               </div>
               <div className="px-4 py-4">
@@ -273,13 +275,13 @@ const Retiros = () => {
                       {canUnstake ? <Unlock className="w-4 h-4 text-emerald-500" /> : <Lock className="w-4 h-4 text-accent" />}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-foreground">Bloqueado a {onChainStake.months} mes(es)</p>
-                      <p className="text-xs text-muted-foreground">{onChainStake.apy}% APY Generado</p>
+                      <p className="text-sm font-bold text-foreground">{t("withdrawals.staking_locked_label", { months: onChainStake.months })}</p>
+                      <p className="text-xs text-muted-foreground">{t("withdrawals.staking_apy_label", { apy: onChainStake.apy })}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-emerald-500">+{earnedInterest.toFixed(2)} XLM</p>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Ganancia</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{t("withdrawals.staking_earnings_label")}</p>
                   </div>
                 </div>
                 
@@ -292,7 +294,7 @@ const Retiros = () => {
                       : "bg-secondary text-muted-foreground cursor-not-allowed"
                   }`}
                 >
-                  {canUnstake ? <><Unlock className="w-4 h-4"/> Retirar Inversión</> : <><Clock className="w-4 h-4"/> {timeLeftStr}</>}
+                  {canUnstake ? <><Unlock className="w-4 h-4"/> {t("withdrawals.unstake_button")}</> : <><Clock className="w-4 h-4"/> {timeLeftStr}</>}
                 </button>
               </div>
             </div>
@@ -301,8 +303,8 @@ const Retiros = () => {
               <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mb-3">
                 <Lock className="w-5 h-5 text-accent" />
               </div>
-              <p className="text-sm font-bold text-foreground mb-1">Sin posiciones de staking</p>
-              <p className="text-xs text-muted-foreground">Elige un plazo arriba para empezar a generar rendimientos</p>
+              <p className="text-sm font-bold text-foreground mb-1">{t("withdrawals.staking_empty_title")}</p>
+              <p className="text-xs text-muted-foreground">{t("withdrawals.staking_empty_description")}</p>
             </div>
           )}
         </div>
@@ -319,8 +321,8 @@ const Retiros = () => {
             
             {step === "input" && (
               <>
-                <h2 className="text-xl font-bold text-foreground mb-1">Retirar fondos</h2>
-                <p className="text-xs text-muted-foreground mb-6">Indica la cantidad que deseas enviar a tu wallet</p>
+                <h2 className="text-xl font-bold text-foreground mb-1">{t("withdrawals.modal_withdraw_title")}</h2>
+                <p className="text-xs text-muted-foreground mb-6">{t("withdrawals.modal_withdraw_subtitle")}</p>
                 
                 <div className="mb-4">
                   <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 outline-none tabular-nums" />
@@ -341,7 +343,7 @@ const Retiros = () => {
                     onClick={() => setAmount(realBalance.toString())} 
                     className="flex-1 py-2 rounded-lg bg-primary/10 text-primary text-sm font-bold border border-primary/20 hover:bg-primary/20 transition-colors"
                   >
-                    TODO
+                    {t("withdrawals.modal_all_button")}
                   </button>
                 </div>
 
@@ -352,7 +354,7 @@ const Retiros = () => {
                   disabled={!parseFloat(amount) || parseFloat(amount) > realBalance} 
                   className="btn-emerald w-full py-4 font-bold disabled:opacity-50 active:scale-95 transition-transform"
                 >
-                  Confirmar Retiro
+                  {t("withdrawals.modal_confirm_button")}
                 </button>
               </>
             )}
@@ -362,7 +364,7 @@ const Retiros = () => {
                 {isMobile
                   ? <Smartphone className="w-12 h-12 text-primary animate-pulse mb-4" />
                   : <Fingerprint className="w-12 h-12 text-primary animate-pulse mb-4" />}
-                <p className="font-bold">Procesando...</p>
+                <p className="font-bold">{t("withdrawals.modal_signing")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Confirma en Freighter"}
                 </p>
@@ -370,7 +372,7 @@ const Retiros = () => {
             )}
             
             {step === "success" && (
-              <div className="flex flex-col items-center py-8"><CheckCircle2 className="w-16 h-16 text-emerald-500 mb-4" /><p className="font-bold text-xl">Retiro Exitoso</p><button onClick={handleClose} className="mt-6 w-full btn-emerald py-3 rounded-xl font-bold">Listo</button></div>
+              <div className="flex flex-col items-center py-8"><CheckCircle2 className="w-16 h-16 text-emerald-500 mb-4" /><p className="font-bold text-xl">{t("withdrawals.modal_success_title")}</p><button onClick={handleClose} className="mt-6 w-full btn-emerald py-3 rounded-xl font-bold">{t("common.done")}</button></div>
             )}
           </div>
         </div>
@@ -385,7 +387,7 @@ const Retiros = () => {
 
             {stakeStep === "input" && onChainStake.amount === 0 && (
               <>
-                <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2"><Lock className="w-5 h-5 text-accent"/> Staking</h2>
+                <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2"><Lock className="w-5 h-5 text-accent"/> {t("withdrawals.modal_staking_title")}</h2>
                 <div className="flex gap-2 mb-5">
                   {STAKING_OPTIONS.map((opt) => (
                     <button key={opt.months} onClick={() => setSelectedMonths(opt.months)} className={`flex-1 py-2.5 rounded-xl text-center transition-all ${selectedMonths === opt.months ? "bg-accent text-white" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>
@@ -395,7 +397,7 @@ const Retiros = () => {
                   ))}
                 </div>
                 <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 mb-4" />
-                <button onClick={handleStakeConfirm} disabled={parseFloat(stakeAmount) > realBalance || parseFloat(stakeAmount) <= 0} className="w-full rounded-xl bg-accent text-white py-4 font-bold active:scale-95 transition-transform disabled:opacity-50">Bloquear Fondos</button>
+                <button onClick={handleStakeConfirm} disabled={parseFloat(stakeAmount) > realBalance || parseFloat(stakeAmount) <= 0} className="w-full rounded-xl bg-accent text-white py-4 font-bold active:scale-95 transition-transform disabled:opacity-50">{t("withdrawals.modal_staking_confirm")}</button>
               </>
             )}
 
@@ -404,9 +406,9 @@ const Retiros = () => {
                 {isMobile
                   ? <Smartphone className="w-12 h-12 text-accent animate-pulse mb-4" />
                   : <Lock className="w-12 h-12 text-accent animate-pulse mb-4" />}
-                <p className="font-bold">Procesando en Soroban...</p>
+                <p className="font-bold">{t("withdrawals.modal_staking_signing")}</p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Confirma en Freighter"}
+                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : t("withdrawals.modal_staking_signing_sub")}
                 </p>
               </div>
             )}
@@ -414,8 +416,8 @@ const Retiros = () => {
             {stakeStep === "success" && (
               <div className="flex flex-col items-center py-8">
                 <Sparkles className="w-16 h-16 text-accent mb-4" />
-                <p className="font-bold text-xl">¡Transacción Exitosa!</p>
-                <button onClick={handleStakeClose} className="mt-6 w-full bg-accent text-white py-3 rounded-xl font-bold">Listo</button>
+                <p className="font-bold text-xl">{t("withdrawals.modal_staking_success")}</p>
+                <button onClick={handleStakeClose} className="mt-6 w-full bg-accent text-white py-3 rounded-xl font-bold">{t("common.done")}</button>
               </div>
             )}
           </div>

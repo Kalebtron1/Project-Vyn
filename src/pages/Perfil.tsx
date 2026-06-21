@@ -4,7 +4,9 @@ import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "../stellar/queries"; 
 import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import BottomNav from "@/components/BottomNav";
+import LanguageToggle from "@/components/LanguageToggle";
 import WalletSetupModal from "@/components/WalletSetupModal";
 import NFTModal from "@/components/NFTModal";
 import logoVin from "@/assets/logo-vin.png";
@@ -13,6 +15,7 @@ import { requestAccess } from "@stellar/freighter-api";
 
 const Perfil = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const tierToNumber = (tierName: string) => {
     if (tierName === "Plata") return 1;
@@ -35,8 +38,8 @@ const Perfil = () => {
 
     if (message.includes("nivel insuficiente")) {
       return {
-        title: "Aun no alcanzas el siguiente nivel",
-        description: "Sigue ahorrando y vuelve a intentar.",
+        title: t("profile.mint_feedback.insufficient_level_title"),
+        description: t("profile.mint_feedback.insufficient_level_description"),
         variant: "warning" as const,
       };
     }
@@ -47,15 +50,15 @@ const Perfil = () => {
       message.includes("invalidaction")
     ) {
       return {
-        title: "Nivel ya minteado",
-        description: `Ya tienes el NFT ${currentLevel}. Sube tu reputacion para mintear el siguiente nivel.`,
+        title: t("profile.mint_feedback.already_minted_title"),
+        description: t("profile.mint_feedback.already_minted_description", { level: currentLevel }),
         variant: "warning" as const,
       };
     }
 
     return {
-      title: "No se pudo mintear",
-      description: "No pudimos mintear tu NFT en este momento. Intentalo nuevamente en unos segundos.",
+      title: t("profile.mint_feedback.generic_title"),
+      description: t("profile.mint_feedback.generic_description"),
       variant: "destructive" as const,
     };
   };
@@ -242,12 +245,12 @@ const Perfil = () => {
   const claimableTierName = tierNumberToName(eligibleTier);
 
   const mintButtonText = (() => {
-    if (isMinting) return "Firmando en Soroban...";
-    if (!walletAddress) return "Conecta tu wallet para mintear";
-    if (Number(onChainXLM) === 0) return "Deposita XLM para evaluar";
-    if (!canMintUpgrade && currentTier >= 4) return "Nivel maximo alcanzado";
-    if (!canMintUpgrade) return `Ya tienes ${nftTier}. Espera al siguiente nivel`;
-    return "Evaluar y Subir de Nivel (NFT)";
+    if (isMinting) return t("profile.mint_button_signing");
+    if (!walletAddress) return t("profile.mint_button_no_wallet");
+    if (Number(onChainXLM) === 0) return t("profile.mint_button_no_balance");
+    if (!canMintUpgrade && currentTier >= 4) return t("profile.mint_button_max_tier");
+    if (!canMintUpgrade) return t("profile.mint_button_already_has", { tier: nftTier });
+    return t("profile.mint_button_default");
   })();
 
   const handleClaimNFT = async () => {
@@ -292,8 +295,8 @@ const Perfil = () => {
         setNftTxHash(data.txHash);
         setShowNFTModal(true);
         toast({
-          title: "NFT minteado con exito",
-          description: `Subiste a nivel ${mintedLevel}.`,
+          title: t("profile.toast_minted_title"),
+          description: t("profile.toast_minted_description", { level: mintedLevel }),
         });
       } else {
         const effectiveLevel = data?.tierName || nftTier;
@@ -307,8 +310,8 @@ const Perfil = () => {
     } catch (error) {
       console.error("Error minteando:", error);
       toast({
-        title: "Conexion inestable",
-        description: "No pudimos conectar con la red de Stellar. Intenta nuevamente en unos segundos.",
+        title: t("profile.toast_error_connection_title"),
+        description: t("profile.toast_error_connection_description"),
         variant: "destructive",
       });
     } finally {
@@ -319,16 +322,17 @@ const Perfil = () => {
   const handleLogout = () => disconnect();
 
   const menuItems = [
-    { icon: Bell, label: "Notificaciones", detail: "Activadas", action: () => navigate("/notificaciones") },
-    { icon: HelpCircle, label: "Centro de ayuda", detail: "", action: () => navigate("/ayuda") },
-    { icon: LogOut, label: "Cerrar sesión", detail: "", destructive: true, action: handleLogout },
+    { icon: Bell, label: t("profile.menu_notifications"), detail: t("profile.menu_notifications_detail"), action: () => navigate("/notificaciones") },
+    { icon: HelpCircle, label: t("profile.menu_help"), detail: "", action: () => navigate("/ayuda") },
+    { icon: LogOut, label: t("profile.menu_logout"), detail: "", destructive: true, action: handleLogout },
   ];
 
   return (
     <div className="min-h-screen bg-background pb-24 font-nunito">
       <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-2 flex items-center gap-3">
         <img src={logoVin} alt="Vin" className="w-7 h-7 object-contain" />
-        <h1 className="text-xl font-bold text-foreground tracking-tight">Perfil</h1>
+        <h1 className="text-xl font-bold text-foreground tracking-tight">{t("profile.title")}</h1>
+        <div className="ml-auto"><LanguageToggle /></div>
       </header>
 
       <main className="px-5 max-w-md mx-auto space-y-4">
@@ -341,7 +345,7 @@ const Perfil = () => {
             <p className="text-lg font-bold text-foreground truncate font-mono">{displayName}</p>
             <p className="text-sm text-muted-foreground truncate flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              Wallet conectada
+              {t("common.wallet_connected")}
             </p>
           </div>
         </div>
@@ -353,7 +357,7 @@ const Perfil = () => {
             <p className="text-lg font-bold text-foreground tabular-nums">
               {loadingProfile ? "..." : onChainXLM}
             </p>
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">XLM Ahorro</p>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{t("profile.stat_savings")}</p>
           </div>
           
           <div className="card-elevated p-4 text-center border-emerald-500/20 bg-emerald-500/5">
@@ -361,9 +365,9 @@ const Perfil = () => {
             <p className="text-lg font-bold text-emerald-700 tabular-nums">
               {loadingProfile ? "..." : availableCredit}
             </p>
-            <p className="text-[10px] text-emerald-600/80 font-bold uppercase tracking-wider">Crédito XLM</p>
+            <p className="text-[10px] text-emerald-600/80 font-bold uppercase tracking-wider">{t("profile.stat_credit")}</p>
             {canMintUpgrade && (
-              <div className="mt-2 text-xs font-semibold text-emerald-800">Reclamar NFT {claimableTierName} disponible</div>
+              <div className="mt-2 text-xs font-semibold text-emerald-800">{t("profile.mint_button_default")}</div>
             )}
           </div>
 
@@ -371,9 +375,9 @@ const Perfil = () => {
             <Shield className="w-4 h-4 text-primary mx-auto mb-1.5" />
             <p className="text-lg font-bold text-primary">{loadingProfile ? "..." : nftTier}</p>
             {canMintUpgrade && (
-              <p className="text-[11px] text-primary/80 font-medium mt-1">Eligible: {claimableTierName}</p>
+              <p className="text-[11px] text-primary/80 font-medium mt-1">{claimableTierName}</p>
             )}
-            <p className="text-[10px] text-primary/80 font-semibold uppercase tracking-wider">Nivel NFT</p>
+            <p className="text-[10px] text-primary/80 font-semibold uppercase tracking-wider">{t("profile.stat_nft_level")}</p>
           </div>
         </div>
 
@@ -382,7 +386,7 @@ const Perfil = () => {
           <div className="flex justify-between items-center mb-3">
             <div className="flex items-center gap-2">
               <Shield className={`w-4 h-4 ${isUnlocked ? "text-primary" : "text-muted-foreground"}`} />
-              <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Reputación Vínculo</span>
+              <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">{t("profile.reputation_label")}</span>
             </div>
             <div className="flex items-center gap-1 text-xs text-primary font-medium bg-primary/10 px-2 py-1 rounded-full">
               <Activity className="w-3 h-3" />
@@ -399,20 +403,20 @@ const Perfil = () => {
           
           <div className="flex justify-between items-center text-xs text-muted-foreground mb-4">
             {isUnlocked ? (
-              <span className="text-primary font-bold tracking-wide">✓ LÍMITE AUMENTADO</span>
+              <span className="text-primary font-bold tracking-wide">{t("profile.reputation_unlocked")}</span>
             ) : (
               <span className="flex items-center gap-1 font-medium">
-                <Lock className="w-3 h-3" /> Requiere Nivel Plata
+                <Lock className="w-3 h-3" /> {t("profile.reputation_locked")}
               </span>
             )}
             {isMaxTier ? (
-              <span className="font-bold text-primary">Nivel máximo alcanzado</span>
+              <span className="font-bold text-primary">{t("profile.reputation_max")}</span>
             ) : !historyGate.isHistoryEligible ? (
               <span className="font-bold text-amber-600">
-                Mantén tu actividad para desbloquear reputación ({historyGate.historyCount}/{historyGate.minHistoryRequired})
+                {t("profile.reputation_activity_gate", { current: historyGate.historyCount, required: historyGate.minHistoryRequired })}
               </span>
             ) : (
-              <span className="font-bold">{visualPercentage}% al sig. nivel</span>
+              <span className="font-bold">{t("profile.reputation_progress", { percent: visualPercentage })}</span>
             )}
           </div>
 
@@ -427,7 +431,7 @@ const Perfil = () => {
             </button>
           ) : (
               <div className="w-full mt-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 py-3 px-3 text-xs font-bold text-blue-700 text-center uppercase tracking-wider">
-                Nivel Máximo Alcanzado 💎
+                {t("profile.max_tier_badge")}
               </div>
           )}
         </div>
@@ -436,7 +440,7 @@ const Perfil = () => {
         <div className="card-elevated p-5 animate-fade-up" style={{ animationDelay: "300ms" }}>
           <div className="flex items-center gap-2 mb-3">
             <Wallet className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Dirección Stellar</span>
+            <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">{t("profile.wallet_address_label")}</span>
           </div>
           {loadingProfile ? (
             <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -459,7 +463,7 @@ const Perfil = () => {
           ))}
         </div>
 
-        <p className="text-center text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest pt-2 pb-6">Vyn v1.0 · Stellar Network</p>
+        <p className="text-center text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest pt-2 pb-6">{t("common.footer_version")}</p>
       </main>
 
       <NFTModal

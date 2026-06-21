@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { ArrowUpRight, ArrowDownLeft, PiggyBank, Calendar, Loader2, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import BottomNav from "@/components/BottomNav";
 import logoVin from "@/assets/logo-vin.png";
 
@@ -14,6 +15,7 @@ interface Transaction {
 
 const Historial = () => {
   const { wallet: walletAddress } = useWallet();
+  const { t } = useTranslation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +43,7 @@ const Historial = () => {
             return {
               id: effect.id,
               type: isDeposit ? "deposit" : "withdrawal",
-              label: isDeposit ? "Depósito a Vínculo" : "Retiro de Crédito",
+              label: isDeposit ? t("history.tx_deposit") : t("history.tx_withdrawal"),
               amount: parseFloat(effect.amount),
               date: new Date(effect.created_at),
             };
@@ -86,8 +88,8 @@ const Historial = () => {
       <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex items-center gap-3">
         <img src={logoVin} alt="Vyn" className="w-7 h-7 object-contain" />
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-tight">Historial</h1>
-          <p className="text-xs text-muted-foreground">Últimas 40 transacciones en Stellar</p>
+          <h1 className="text-xl font-bold text-foreground tracking-tight">{t("history.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("history.subtitle")}</p>
         </div>
       </header>
 
@@ -95,7 +97,7 @@ const Historial = () => {
         {loading ? (
           <div className="card-elevated p-10 flex flex-col items-center justify-center min-h-[250px] opacity-0 animate-fade-up" style={{ animationFillMode: "forwards" }}>
             <Loader2 className="w-8 h-8 animate-spin text-primary/50 mb-4" />
-            <p className="text-sm font-semibold text-foreground">Sincronizando blockchain...</p>
+            <p className="text-sm font-semibold text-foreground">{t("history.syncing")}</p>
           </div>
         ) : transactions.length === 0 ? (
           <div className="card-elevated p-10 flex flex-col items-center text-center opacity-0 animate-fade-up" style={{ animationFillMode: "forwards" }}>
@@ -103,10 +105,10 @@ const Historial = () => {
               <PiggyBank className="w-7 h-7 text-muted-foreground" />
             </div>
             <p className="text-sm font-semibold text-foreground mb-0.5">
-              {walletAddress ? "Sin transacciones" : "Wallet no conectada"}
+              {walletAddress ? t("history.empty_title_no_txs") : t("history.empty_title_no_wallet")}
             </p>
             <p className="text-xs text-muted-foreground">
-              {walletAddress ? "Tus depósitos y retiros aparecerán aquí" : "Conecta Freighter para ver tu historial"}
+              {walletAddress ? t("history.empty_description_no_txs") : t("history.empty_description_no_wallet")}
             </p>
           </div>
         ) : (
@@ -161,7 +163,7 @@ const Historial = () => {
                           rel="noreferrer"
                           className="inline-flex items-center justify-end gap-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground mt-1 hover:text-foreground transition-colors"
                         >
-                          RECIBO <ExternalLink className="w-2.5 h-2.5" />
+                          {t("common.receipt")} <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       </div>
                     </div>
@@ -175,20 +177,20 @@ const Historial = () => {
         {/* --- 🚀 RESUMEN ACTUALIZADO (DEPÓSITOS Y RETIROS) --- */}
         {transactions.length > 0 && (
           <div className="card-navy p-6 mt-6 mb-4 opacity-0 animate-fade-up" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
-            <p className="text-[10px] font-bold tracking-widest uppercase opacity-60 mb-5 text-center">Resumen del Periodo</p>
+            <p className="text-[10px] font-bold tracking-widest uppercase opacity-60 mb-5 text-center">{t("history.summary_title")}</p>
             
             <div className="space-y-6">
               {/* Fila 1: Depósitos */}
               <div className="grid grid-cols-2 gap-4 divide-x divide-white/10">
                 <div className="text-center">
                   <p className="text-2xl font-extrabold tabular-nums text-white mb-1">{totalDepositsCount}</p>
-                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">Depósitos</p>
+                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_deposits")}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-extrabold tabular-nums text-white mb-1">
                     {totalSavedVolume.toFixed(0)} <span className="text-sm font-medium opacity-60 ml-0.5">XLM</span>
                   </p>
-                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">Volumen Ingresado</p>
+                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_volume_in")}</p>
                 </div>
               </div>
 
@@ -199,13 +201,13 @@ const Historial = () => {
               <div className="grid grid-cols-2 gap-4 divide-x divide-white/10">
                 <div className="text-center">
                   <p className="text-2xl font-extrabold tabular-nums text-emerald-400 mb-1">{totalWithdrawalsCount}</p>
-                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">Retiros</p>
+                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_withdrawals")}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-extrabold tabular-nums text-emerald-400 mb-1">
                     {totalWithdrawnVolume.toFixed(0)} <span className="text-sm font-medium opacity-60 ml-0.5 text-white">XLM</span>
                   </p>
-                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">Volumen Retirado</p>
+                  <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_volume_out")}</p>
                 </div>
               </div>
             </div>
