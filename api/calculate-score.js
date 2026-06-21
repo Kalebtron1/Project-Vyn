@@ -202,11 +202,31 @@ export default async function handler(req, res) {
       Math.max(0, Number(effectiveTotal) || 0)
     );
 
+    // --- ANOMALY DETECTION ---
+    // Normal range: score 0–2000. Scores above 2000 indicate abnormal volume/retention
+    // and should be reviewed. Trigger: score > 2000 or retention > 5 (balance > 5x deposited).
+    // NOTE: under the current bounded scoring (score capped at 1000, retention capped at 1)
+    // these thresholds are dormant; revisit them with the planned scoring recalibration.
+    const SCORE_ANOMALY_THRESHOLD = 2000;
+    const RETENTION_ANOMALY_THRESHOLD = 5;
+    if (
+      result.score > SCORE_ANOMALY_THRESHOLD ||
+      (result.metrics && result.metrics.retention > RETENTION_ANOMALY_THRESHOLD)
+    ) {
+      log.warn("calculate_score.anomaly", {
+        address,
+        score: result.score,
+        retention: result.metrics?.retention,
+      });
+      result.anomaly = true;
+    }
+
     log.info("calculate_score.done", {
       address,
       score: result.score,
       tier: result.tier,
       tierName: result.tierName,
+      anomaly: result.anomaly === true,
     });
 
     const latencyMs = Date.now() - t0;

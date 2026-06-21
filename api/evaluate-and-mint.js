@@ -55,10 +55,15 @@ async function resolveTierFromCanonicalScore(req, log, userAddress, totalVolume)
   const scoreData = await scoreResponse.json();
   const tier = Number(scoreData?.tier) || 0;
   const tierName = scoreData?.tierName || tierNameFromValue(tier);
+  const anomaly = scoreData?.anomaly === true;
 
-  log.info("evaluate_and_mint.score_resolved", { userAddress, tier, tierName, score: scoreData?.score });
+  log.info("evaluate_and_mint.score_resolved", { userAddress, tier, tierName, score: scoreData?.score, anomaly });
 
-  return { tier, tierName };
+  if (anomaly) {
+    log.warn("evaluate_and_mint.anomaly_flagged", { userAddress, tier, score: scoreData?.score });
+  }
+
+  return { tier, tierName, anomaly };
 }
 
 async function mintNftOnChain(log, userAddress, tier) {
@@ -144,10 +149,12 @@ export default async function handler(req, res) {
   const t0 = Date.now();
   let tier;
   let tierName;
+  let anomaly = false;
   try {
     const tierResult = await resolveTierFromCanonicalScore(req, log, userAddress, effectiveTotalVolume);
     tier = tierResult.tier;
     tierName = tierResult.tierName;
+    anomaly = tierResult.anomaly || false;
   } catch (scoreError) {
     log.error("evaluate_and_mint.score_error", { userAddress, err: scoreError?.message });
     const latencyMs = Date.now() - t0;
@@ -156,6 +163,15 @@ export default async function handler(req, res) {
     return res.status(500).json({
       status: "error",
       message: scoreError?.message || "No se pudo validar el nivel para mintear",
+    });
+  }
+
+  if (anomaly) {
+    return res.status(422).json({
+      status: "anomaly",
+      tier,
+      tierName,
+      message: "Score anómalo detectado. Minting bloqueado para revisión.",
     });
   }
 

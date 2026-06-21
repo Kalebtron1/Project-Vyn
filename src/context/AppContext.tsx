@@ -48,6 +48,8 @@ interface AppContextType extends AppState {
   setShowSuccess: (v: boolean) => void;
   showUnlockCelebration: boolean;
   setShowUnlockCelebration: (v: boolean) => void;
+  scoreAnomaly: boolean;
+  setScoreAnomaly: (v: boolean) => void;
 }
 
 const STAKING_APY: Record<number, number> = {
@@ -79,6 +81,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [showSuccess, setShowSuccess] = useState(false);
   const [showUnlockCelebration, setShowUnlockCelebration] = useState(false);
+  const [scoreAnomaly, setScoreAnomaly] = useState(false);
 
   const addDeposit = useCallback((amount: number) => {
     setState((prev) => {
@@ -165,6 +168,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setShowSuccess,
         showUnlockCelebration,
         setShowUnlockCelebration,
+        scoreAnomaly,
+        setScoreAnomaly,
       }}
     >
       {children}
