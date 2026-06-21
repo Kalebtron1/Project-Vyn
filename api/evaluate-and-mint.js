@@ -9,6 +9,7 @@ import {
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
 import { createLogger } from "./_logger.js";
+import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.js";
 
 dotenv.config();
 
@@ -106,10 +107,17 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { userAddress, deposits, totalVolume } = req.body || {};
+  let userAddress;
+  let deposits;
+  let totalVolume;
 
-  if (!userAddress) {
-    return res.status(400).json({ error: 'userAddress es requerido', status: 'error' });
+  try {
+    const validated = validateBody(evaluateAndMintBodySchema, req.body || {});
+    userAddress = validated.userAddress;
+    deposits = validated.deposits;
+    totalVolume = validated.totalVolume;
+  } catch (error) {
+    return reportValidationError(res, error);
   }
 
   log.info("evaluate_and_mint.start", { userAddress });
