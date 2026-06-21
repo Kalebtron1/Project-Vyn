@@ -1,3 +1,5 @@
+import { createLogger } from "./_logger.js";
+
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
 const MIN_TX_REQUIRED = 3;
 const HISTORY_LIMIT = 30;
@@ -149,6 +151,8 @@ async function getCleanHistory(userAddress) {
 }
 
 export default async function handler(req, res) {
+  const log = createLogger(req);
+
   res.setHeader("Access-Control-Allow-Credentials", true);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -161,8 +165,11 @@ export default async function handler(req, res) {
   const { address, totalDeposited: clientTotalDeposited } = req.body;
   if (!address) return res.status(400).json({ error: "Wallet requerida" });
 
+  log.info("calculate_score.start", { address });
+
   try {
     const history = await getCleanHistory(address);
+    log.info("calculate_score.history_fetched", { address, count: history.length });
 
     let effectiveTotal = Number(clientTotalDeposited) || 0;
     if (!effectiveTotal || effectiveTotal <= 0) {
@@ -176,7 +183,7 @@ export default async function handler(req, res) {
           effectiveTotal = Number(native?.balance) || effectiveTotal;
         }
       } catch (e) {
-        // fallback to 0
+        log.warn("calculate_score.balance_fetch_failed", { address, err: e.message });
       }
     }
 
@@ -185,8 +192,16 @@ export default async function handler(req, res) {
       Math.max(0, Number(effectiveTotal) || 0)
     );
 
+    log.info("calculate_score.done", {
+      address,
+      score: result.score,
+      tier: result.tier,
+      tierName: result.tierName,
+    });
+
     return res.status(200).json(result);
   } catch (error) {
+    log.error("calculate_score.error", { address, err: error.message });
     return res.status(500).json({ error: error.message });
   }
 }

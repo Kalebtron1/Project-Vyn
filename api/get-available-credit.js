@@ -1,4 +1,5 @@
 import { Keypair, rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
+import { createLogger } from "./_logger.js";
 
 const CREDIT_LIMITS = {
   0: { name: "Bronce", amount: 0 },
@@ -11,6 +12,8 @@ const CREDIT_LIMITS = {
 const RPC_URL = "https://soroban-testnet.stellar.org";
 
 export default async function handler(req, res) {
+  const log = createLogger(req);
+
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -21,6 +24,8 @@ export default async function handler(req, res) {
   
   const { userAddress } = req.body;
   if (!userAddress) return res.status(400).json({ error: "Falta wallet" });
+
+  log.info("get_available_credit.start", { userAddress });
 
   try {
     const server = new rpc.Server(RPC_URL);
@@ -49,7 +54,14 @@ export default async function handler(req, res) {
     }
 
     const config = CREDIT_LIMITS[finalTier] || CREDIT_LIMITS[0];
-    
+
+    log.info("get_available_credit.done", {
+      userAddress,
+      tier: finalTier,
+      tierName: config.name,
+      availableCredit: config.amount,
+    });
+
     return res.status(200).json({
       success: true,
       tier: finalTier,
@@ -59,7 +71,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Error get-available-credit:", error.message);
+    log.error("get_available_credit.error", { userAddress, err: error.message });
     return res.status(200).json({
       success: true,
       tier: 0,

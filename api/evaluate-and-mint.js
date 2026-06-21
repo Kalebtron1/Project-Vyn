@@ -6,14 +6,13 @@ import {
   Operation, 
   BASE_FEE, 
   nativeToScVal,
-  Transaction
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
+import { createLogger } from "./_logger.js";
 
 dotenv.config();
 
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
-
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const server = new rpc.Server(RPC_URL);
 
@@ -25,7 +24,7 @@ function tierNameFromValue(tier) {
   return "Bronce";
 }
 
-async function resolveTierFromCanonicalScore(req, userAddress, totalVolume) {
+async function resolveTierFromCanonicalScore(req, log, userAddress, totalVolume) {
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   const proto = req.headers["x-forwarded-proto"] || "https";
 
@@ -33,9 +32,15 @@ async function resolveTierFromCanonicalScore(req, userAddress, totalVolume) {
     throw new Error("No se pudo resolver host para validar score");
   }
 
+  log.info("evaluate_and_mint.score_request", { userAddress, totalVolume, host });
+
   const scoreResponse = await fetch(`${proto}://${host}/api/calculate-score`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      // Propagate request-id so the inner call shares the same trace.
+      "x-request-id": log.reqId,
+    },
     body: JSON.stringify({
       address: userAddress,
       totalDeposited: Number(totalVolume) || 0,
@@ -50,10 +55,12 @@ async function resolveTierFromCanonicalScore(req, userAddress, totalVolume) {
   const tier = Number(scoreData?.tier) || 0;
   const tierName = scoreData?.tierName || tierNameFromValue(tier);
 
+  log.info("evaluate_and_mint.score_resolved", { userAddress, tier, tierName, score: scoreData?.score });
+
   return { tier, tierName };
 }
 
-async function mintNftOnChain(userAddress, tier) {
+async function mintNftOnChain(log, userAddress, tier) {
   try {
     const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
     const account = await server.getAccount(adminKeypair.publicKey());
@@ -63,7 +70,7 @@ async function mintNftOnChain(userAddress, tier) {
         networkPassphrase: Networks.TESTNET 
     })
       .addOperation(
-        Operation.invokeContractFunction({ // ✅ Nombre estándar
+        Operation.invokeContractFunction({
           contract: process.env.NFT_CONTRACT_ID,
           function: "mint", 
           args: [
@@ -79,27 +86,25 @@ async function mintNftOnChain(userAddress, tier) {
     transaction.sign(adminKeypair);
 
     const submitRes = await server.sendTransaction(transaction);
+    log.info("evaluate_and_mint.minted", { userAddress, tier, txHash: submitRes.hash });
     return { success: true, hash: submitRes.hash };
 
   } catch (error) {
-    console.error(`[DEBUG] 💥 Error Mint:`, error.message);
+    log.error("evaluate_and_mint.mint_failed", { userAddress, tier, err: error.message });
     return { success: false, error: error.message };
   }
 }
 
 export default async function handler(req, res) {
+  const log = createLogger(req);
+
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { userAddress, deposits, totalVolume } = req.body || {};
 
@@ -107,13 +112,14 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'userAddress es requerido', status: 'error' });
   }
 
+  log.info("evaluate_and_mint.start", { userAddress });
+
   const fallbackVolumeFromDeposits = Array.isArray(deposits)
     ? deposits.reduce((acc, d) => acc + (Number(d?.amount) || 0), 0)
     : 0;
 
   let effectiveTotalVolume = Number(totalVolume) || fallbackVolumeFromDeposits;
 
-  // Si el cliente no provee un volumen válido, intentamos leer el saldo on-chain como fuente de verdad
   if (!effectiveTotalVolume || effectiveTotalVolume <= 0) {
     try {
       const resp = await fetch(`${HORIZON_URL}/accounts/${userAddress}`);
@@ -123,17 +129,18 @@ export default async function handler(req, res) {
         effectiveTotalVolume = Number(native?.balance) || effectiveTotalVolume;
       }
     } catch (e) {
-      // Si falla la consulta on-chain, usamos el fallback calculado desde 'deposits'
+      log.warn("evaluate_and_mint.balance_fetch_failed", { userAddress, err: e.message });
     }
   }
 
   let tier;
   let tierName;
   try {
-    const tierResult = await resolveTierFromCanonicalScore(req, userAddress, effectiveTotalVolume);
+    const tierResult = await resolveTierFromCanonicalScore(req, log, userAddress, effectiveTotalVolume);
     tier = tierResult.tier;
     tierName = tierResult.tierName;
   } catch (scoreError) {
+    log.error("evaluate_and_mint.score_error", { userAddress, err: scoreError?.message });
     return res.status(500).json({
       status: "error",
       message: scoreError?.message || "No se pudo validar el nivel para mintear",
@@ -141,7 +148,7 @@ export default async function handler(req, res) {
   }
   
   if (tier >= 1) {
-    const mintResult = await mintNftOnChain(userAddress, tier);
+    const mintResult = await mintNftOnChain(log, userAddress, tier);
     if (mintResult.success) {
       return res.json({ txHash: mintResult.hash, tier, tierName, status: "minted" });
     }
@@ -154,6 +161,7 @@ export default async function handler(req, res) {
     });
   }
 
+  log.info("evaluate_and_mint.insufficient_tier", { userAddress, tier, tierName });
   return res.json({
     message: "Nivel insuficiente",
     tier,
