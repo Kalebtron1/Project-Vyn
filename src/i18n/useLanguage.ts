@@ -12,7 +12,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "./config";
+import { SUPPORTED_LANGUAGES, LANGUAGE_STORAGE_KEY, type SupportedLanguage } from "./config";
 
 export function useLanguage() {
   const { i18n } = useTranslation();
@@ -22,7 +22,10 @@ export function useLanguage() {
     language: i18n.language as SupportedLanguage,
     /** All supported language codes */
     supportedLanguages: SUPPORTED_LANGUAGES,
-    /** Switch the active language. Resolves when resources are loaded. */
-    changeLanguage: (lang: SupportedLanguage) => i18n.changeLanguage(lang),
+    /** Switch the active language (persisted to localStorage). Resolves when resources are loaded. */
+    changeLanguage: (lang: SupportedLanguage) => {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+      return i18n.changeLanguage(lang);
+    },
   };
 }

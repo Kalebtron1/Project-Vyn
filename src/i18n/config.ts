@@ -21,12 +21,21 @@ export const DEFAULT_LANGUAGE = "es";
 export const SUPPORTED_LANGUAGES = ["es", "en"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+// Persist the user's language choice across reloads (written by useLanguage).
+export const LANGUAGE_STORAGE_KEY = "vinculo_language";
+
+const savedLang = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+const initialLang =
+  savedLang && (SUPPORTED_LANGUAGES as readonly string[]).includes(savedLang)
+    ? (savedLang as SupportedLanguage)
+    : DEFAULT_LANGUAGE;
+
 i18n.use(initReactI18next).init({
   resources: {
     es: { translation: es },
     en: { translation: en },
   },
-  lng: DEFAULT_LANGUAGE,
+  lng: initialLang,
   fallbackLng: DEFAULT_LANGUAGE,
   supportedLngs: SUPPORTED_LANGUAGES,
 
