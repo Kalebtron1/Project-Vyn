@@ -85,6 +85,15 @@ Deployed as Vercel serverless functions. Routes are defined in `vercel.json`.
 | `POST /api/get-available-credit` | POST | Reads NFT tier from `vinculo_sbt` contract, returns credit limit |
 | `POST /api/evaluate-and-mint` | POST | Calls `calculate-score`, then mints NFT via `vinculo_sbt.mint()` |
 | `GET /api/get-user-data` | GET | Reads staking balance from `staking_pool`, derives a legacy tier |
+| `GET /api/health` | GET | Returns a lightweight service health signal for deploy checks |
+| `GET /api/readiness` | GET | Returns a readiness signal for smoke tests and deployment validation |
+
+## Health and readiness checks
+
+- `GET /api/health` returns `200` and a JSON payload with `status: "ok"`, `endpoint: "/api/health"`, and `timestamp`.
+- `GET /api/readiness` returns `200` and a JSON payload with `status: "ready"`, `endpoint: "/api/readiness"`, and `timestamp`.
+- Non-`GET` requests receive `405 Method Not Allowed` and an `Allow: [GET]` response header.
+- A missing or unreachable endpoint indicates a deployment or server failure; a `5xx` response indicates a function runtime error.
 
 All functions set permissive CORS headers and handle `OPTIONS` preflight.
 

@@ -18,6 +18,22 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+app.get('/api/health', (req, res) => {
+  return res.status(200).json({
+    status: 'ok',
+    endpoint: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/readiness', (req, res) => {
+  return res.status(200).json({
+    status: 'ready',
+    endpoint: '/api/readiness',
+    timestamp: new Date().toISOString()
+  });
+});
+
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const HORIZON_URL = "https://horizon-testnet.stellar.org"; // <-- Añadido Horizon
 const server = new rpc.Server(RPC_URL);

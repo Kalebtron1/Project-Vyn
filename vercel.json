@@ -15,6 +15,8 @@
     { "src": "^/api/get-available-credit$", "dest": "/api/get-available-credit.js" },
     { "src": "^/api/calculate-score$", "dest": "/api/calculate-score.js" },
     { "src": "^/api/evaluate-and-mint$", "dest": "/api/evaluate-and-mint.js" },
+    { "src": "^/api/health$", "dest": "/api/health.js" },
+    { "src": "^/api/readiness$", "dest": "/api/readiness.js" },
     { "src": "^/api/(.*)$", "dest": "/api/$1.js" },
     { "handle": "filesystem" },
     { "src": "^/(.*)$", "dest": "/index.html" }
