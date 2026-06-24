@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   try {
     const server = new rpc.Server(RPC_URL);
-    
+
     let account;
     try {
       account = await server.getAccount(address);
@@ -33,42 +33,52 @@ export default async function handler(req, res) {
       return res.status(200).json({ totalXlmDeposited: 0, depositCount: 0, nftLevel: 0 });
     }
 
-    const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
-    })
-      .addOperation(
-        Operation.invokeContractFunction({
-          contract: CONTRACT_ID,
-          function: "get_balance",
-          args: [nativeToScVal(address, { type: "address" })],
-        })
-      )
-      .setTimeout(30)
-      .build();
+    // Lee un getter del contrato vía simulación y devuelve el valor nativo.
+    const readContract = async (fnName) => {
+      const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.invokeContractFunction({
+            contract: CONTRACT_ID,
+            function: fnName,
+            args: [nativeToScVal(address, { type: "address" })],
+          })
+        )
+        .setTimeout(30)
+        .build();
 
-    const response = await server.simulateTransaction(transaction);
+      const response = await server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationSuccess(response) && response.result) {
+        return scValToNative(response.result.retval);
+      }
+      return 0;
+    };
 
-    let balanceXLM = 0;
-    if (rpc.Api.isSimulationSuccess(response) && response.result) {
-      const balanceInStroops = scValToNative(response.result.retval);
-      balanceXLM = Number(balanceInStroops) / 10000000;
-    }
+    // Posición real (depósito + rendimiento del vault), ingreso acumulado y nº de operaciones.
+    const [positionRaw, depositedRaw, txCountRaw] = await Promise.all([
+      readContract("get_position"),
+      readContract("get_total_deposited"),
+      readContract("get_tx_count"),
+    ]);
 
+    const positionXLM = Number(positionRaw) / 10000000;
+    const totalDeposited = Number(depositedRaw) / 10000000;
+    const depositCount = Number(txCountRaw) || 0;
+
+    // El nivel del NFT se aproxima por la posición real (el score canónico lo refina).
     let nftLevel = 0;
-    if (balanceXLM >= 50) nftLevel = 1;
-    if (balanceXLM >= 150) nftLevel = 2;
-    if (balanceXLM >= 500) nftLevel = 3;
-    if (balanceXLM >= 1000) nftLevel = 4;
+    if (positionXLM >= 50) nftLevel = 1;
+    if (positionXLM >= 150) nftLevel = 2;
+    if (positionXLM >= 500) nftLevel = 3;
+    if (positionXLM >= 1000) nftLevel = 4;
 
-    let depositCount = balanceXLM > 0 ? 1 : 0;
-    if (balanceXLM >= 150) depositCount = 3; 
-    if (balanceXLM >= 500) depositCount = 10;
-
-    log.info("get_user_data.done", { address, balanceXLM, nftLevel, depositCount });
+    log.info("get_user_data.done", { address, positionXLM, totalDeposited, nftLevel, depositCount });
 
     return res.status(200).json({
-      totalXlmDeposited: balanceXLM,
+      totalXlmDeposited: totalDeposited,
+      currentPosition: positionXLM,
       depositCount,
       nftLevel,
     });

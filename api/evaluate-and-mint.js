@@ -1,11 +1,12 @@
-import { 
-  Keypair, 
-  rpc, 
-  TransactionBuilder, 
-  Networks, 
-  Operation, 
-  BASE_FEE, 
+import {
+  Keypair,
+  rpc,
+  TransactionBuilder,
+  Networks,
+  Operation,
+  BASE_FEE,
   nativeToScVal,
+  scValToNative,
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
 import { createLogger } from "./_logger.js";
@@ -13,9 +14,11 @@ import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "
 
 dotenv.config();
 
-const HORIZON_URL = "https://horizon-testnet.stellar.org";
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const server = new rpc.Server(RPC_URL);
+// staking_pool respaldado por DeFindex. Actualizar tras el redeploy de testnet.
+const STAKING_CONTRACT_ID =
+  process.env.STAKING_CONTRACT_ID || "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2";
 
 function tierNameFromValue(tier) {
   if (tier === 4) return "Platino";
@@ -133,16 +136,31 @@ export default async function handler(req, res) {
 
   let effectiveTotalVolume = Number(totalVolume) || fallbackVolumeFromDeposits;
 
+  // Fallback: lee la posición real on-chain (depósito + rendimiento del vault DeFindex)
+  // en lugar del balance nativo XLM, para que el score refleje el apartado del usuario.
   if (!effectiveTotalVolume || effectiveTotalVolume <= 0) {
     try {
-      const resp = await fetch(`${HORIZON_URL}/accounts/${userAddress}`);
-      if (resp.ok) {
-        const acct = await resp.json();
-        const native = (acct.balances || []).find(b => b.asset_type === 'native');
-        effectiveTotalVolume = Number(native?.balance) || effectiveTotalVolume;
+      const account = await server.getAccount(userAddress);
+      const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.invokeContractFunction({
+            contract: STAKING_CONTRACT_ID,
+            function: "get_position",
+            args: [nativeToScVal(userAddress, { type: "address" })],
+          })
+        )
+        .setTimeout(30)
+        .build();
+      const sim = await server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
+        const positionXLM = Number(scValToNative(sim.result.retval)) / 10000000;
+        effectiveTotalVolume = positionXLM || effectiveTotalVolume;
       }
     } catch (e) {
-      log.warn("evaluate_and_mint.balance_fetch_failed", { userAddress, err: e.message });
+      log.warn("evaluate_and_mint.position_fetch_failed", { userAddress, err: e.message });
     }
   }
 
