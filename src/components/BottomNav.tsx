@@ -1,17 +1,24 @@
-import { Home, Clock, ArrowDownToLine, User } from "lucide-react";
+import { Home, Clock, ArrowDownToLine, User, Landmark } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { TREASURY_ADDRESS } from "@/stellar/contracts";
 
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  // La pestaña de Tesorería solo se muestra a la wallet dueña (gating cosmético;
+  // el contrato impone la seguridad real con `treasury.require_auth()`).
+  const savedWallet = (localStorage.getItem("vinculo_wallet") || "").trim();
+  const isTreasury = !!TREASURY_ADDRESS && savedWallet === TREASURY_ADDRESS.trim();
+
   const tabs = [
     { icon: Home, label: t("nav.home"), id: "/" },
     { icon: ArrowDownToLine, label: t("nav.withdrawals"), id: "/retiros" },
     { icon: Clock, label: t("nav.history"), id: "/historial" },
     { icon: User, label: t("nav.profile"), id: "/perfil" },
+    ...(isTreasury ? [{ icon: Landmark, label: "Tesorería", id: "/tesoreria" }] : []),
   ];
 
   return (

@@ -12,6 +12,7 @@ import Index from "./pages/Index.tsx";
 import Historial from "./pages/Historial.tsx";
 import Perfil from "./pages/Perfil.tsx";
 import Retiros from "./pages/Retiros.tsx";
+import Tesoreria from "./pages/Tesoreria.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Login from "./pages/Login.tsx";
 import Notificaciones from "./pages/Notificaciones.tsx";
@@ -124,6 +125,7 @@ const App = () => (
               <Route path="/historial" element={<RequireWallet><RequireOnboarding><Historial /></RequireOnboarding></RequireWallet>} />
               <Route path="/perfil" element={<RequireWallet><RequireOnboarding><Perfil /></RequireOnboarding></RequireWallet>} />
               <Route path="/retiros" element={<RequireWallet><RequireOnboarding><Retiros /></RequireOnboarding></RequireWallet>} />
+              <Route path="/tesoreria" element={<RequireWallet><RequireOnboarding><Tesoreria /></RequireOnboarding></RequireWallet>} />
               <Route path="/notificaciones" element={<RequireWallet><RequireOnboarding><Notificaciones /></RequireOnboarding></RequireWallet>} />
               <Route path="/ayuda" element={<RequireWallet><RequireOnboarding><Ayuda /></RequireOnboarding></RequireWallet>} />
               
