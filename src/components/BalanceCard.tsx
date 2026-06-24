@@ -84,7 +84,7 @@ const BalanceCard = () => {
         <span className="text-5xl font-extrabold tracking-tight tabular-nums transition-all duration-500">
           {realBalance}
         </span>
-        <span className="text-xl font-medium opacity-80">XLM</span>
+        <span className="text-xl font-medium opacity-80">USDC</span>
       </div>
 
       <p className="text-primary-foreground/70 text-sm mt-2 relative z-10">
