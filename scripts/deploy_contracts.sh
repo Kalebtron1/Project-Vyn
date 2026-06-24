@@ -5,7 +5,9 @@
 # Required env vars:
 #   ADMIN_SECRET   — deployer secret key (S...)
 #   ADMIN_PUBLIC   — matching public key  (G...)
-#   TOKEN_ADDRESS  — SAC address of the token used by staking_pool and vinculo_lending
+#   TOKEN_ADDRESS  — SAC address of the underlying token (USDC en testnet) usado por
+#                    staking_pool y vinculo_lending. Debe ser el MISMO activo del vault.
+#   VAULT_ADDRESS  — dirección del vault DeFindex (USDC) que respalda el staking_pool
 #
 # Optional:
 #   NETWORK        — defaults to "testnet"
@@ -13,7 +15,8 @@
 # Usage:
 #   export ADMIN_SECRET="S..."
 #   export ADMIN_PUBLIC="G..."
-#   export TOKEN_ADDRESS="C..."
+#   export TOKEN_ADDRESS="C..."   # SAC del USDC del vault
+#   export VAULT_ADDRESS="CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN"
 #   bash scripts/deploy_contracts.sh
 
 set -euo pipefail
@@ -25,6 +28,7 @@ CONTRACTS_DIR="backend/contracts"
 : "${ADMIN_SECRET:?Set ADMIN_SECRET before running this script}"
 : "${ADMIN_PUBLIC:?Set ADMIN_PUBLIC before running this script}"
 : "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS before running this script}"
+: "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
 
 echo "==> Network: $NETWORK"
 echo "==> Admin:   $ADMIN_PUBLIC"
@@ -79,8 +83,9 @@ stellar contract invoke \
   --source "$ADMIN_SECRET" \
   --network "$NETWORK" \
   -- init \
-  --token "$TOKEN_ADDRESS"
-echo "==> staking_pool initialized"
+  --token "$TOKEN_ADDRESS" \
+  --vault "$VAULT_ADDRESS"
+echo "==> staking_pool initialized (token + DeFindex vault)"
 
 # ── 3. vinculo_lending ────────────────────────────────────────────────────────
 LENDING_CONTRACT_ID=$(deploy_contract "vinculo_lending")
