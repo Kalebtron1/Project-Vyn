@@ -2,7 +2,7 @@
   "name": "Vyn Reputation NFT",
   "symbol": "VYNREP",
   "description": "NFT de reputación otorgado por la plataforma Vyn al alcanzar el nivel requerido de depósitos en la red Stellar.",
-  "contract_id": "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2",
+  "contract_id": "CBGATJCZN236KJFEF3MP3H26KQIVVOBCJSOPF6SBK72D5QGIMLHPI4G2",
   "network": "stellar-testnet",
   "rpc_url": "https://soroban-testnet.stellar.org",
   "mint_params": {
