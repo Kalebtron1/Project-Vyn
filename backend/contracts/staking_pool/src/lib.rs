@@ -117,6 +117,13 @@ impl StakingContract {
         let amounts_desired = vec![&env, amount];
         let amounts_min = vec![&env, amount];
 
+        // Medimos las shares ANTES de autorizar: `balance` es una llamada de contrato y
+        // `authorize_as_current_contract` solo aplica a la PRÓXIMA llamada de contrato.
+        // No puede haber ninguna otra llamada de contrato entre la autorización y
+        // `vault.deposit`, o la auth se consumiría y la transferencia anidada fallaría
+        // con Error(Auth, InvalidAction).
+        let shares_before = vault.balance(&this);
+
         let transfer_args: Vec<Val> = (this.clone(), vault_addr.clone(), amount).into_val(&env);
         env.authorize_as_current_contract(vec![
             &env,
@@ -130,7 +137,6 @@ impl StakingContract {
             }),
         ]);
 
-        let shares_before = vault.balance(&this);
         vault.deposit(&amounts_desired, &amounts_min, &this, &true);
         let shares_after = vault.balance(&this);
         let minted = shares_after - shares_before;
