@@ -16,9 +16,9 @@ dotenv.config();
 
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const server = new rpc.Server(RPC_URL);
-// staking_pool respaldado por DeFindex. Actualizar tras el redeploy de testnet.
-const STAKING_CONTRACT_ID =
-  process.env.STAKING_CONTRACT_ID || "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2";
+// staking_pool respaldado por DeFindex. Se configura vía STAKING_CONTRACT_ID
+// (sin fallback hardcodeado; debe definirse en el entorno tras cada redeploy).
+const STAKING_CONTRACT_ID = process.env.STAKING_CONTRACT_ID;
 
 function tierNameFromValue(tier) {
   if (tier === 4) return "Platino";
@@ -114,6 +114,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!STAKING_CONTRACT_ID) {
+    log.error("evaluate_and_mint.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
+    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
+  }
 
   let userAddress;
   let deposits;

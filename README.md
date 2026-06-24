@@ -25,7 +25,7 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 
 - A Supabase project or access to the shared test project.
 - A Stellar testnet admin account for `SECRET_KEY_ADMIN` and `PUBLIC_KEY_ADMIN`.
-- The deployed Soroban contract IDs for `NFT_CONTRACT_ID` and `VITE_LENDING_CONTRACT_ID`.
+- The deployed Soroban contract IDs for `NFT_CONTRACT_ID`, `VITE_LENDING_CONTRACT_ID`, and the staking_pool (`VITE_STAKING_CONTRACT_ID` / `STAKING_CONTRACT_ID`).
 
 If you do not have those values yet, you can still read the code and work on UI or docs changes, but wallet, scoring, and minting flows will not work end to end.
 
@@ -40,6 +40,9 @@ The project uses the following variables:
 - `SECRET_KEY_ADMIN`
 - `NFT_CONTRACT_ID`
 - `VITE_LENDING_CONTRACT_ID`
+- `VITE_STAKING_CONTRACT_ID` — staking_pool (DeFindex-backed) contract ID, read by the frontend (`src/stellar/contracts.ts`).
+- `STAKING_CONTRACT_ID` — same staking_pool contract ID, read by the serverless API functions (`api/get-user-data.js`, `api/evaluate-and-mint.js`). These two must hold the **same** contract ID; there is no hardcoded fallback, so the API returns a clear error if it is missing.
+- `VITE_TREASURY_ADDRESS` — treasury wallet (`G…` address). The only wallet that can see and operate the treasury panel (loan-interest profit). UI gating is cosmetic; the real authorization is enforced on-chain by `vinculo_lending.withdraw_interest`.
 - `PORT`
 
 `VERCEL_OIDC_TOKEN` is created by Vercel for deployment workflows and is not required for normal local development.
@@ -67,7 +70,9 @@ The project uses the following variables:
 2. Copy the contract ID from the deployment output into `NFT_CONTRACT_ID`.
 3. Deploy the lending contract to Soroban testnet.
 4. Copy that contract ID into `VITE_LENDING_CONTRACT_ID`.
-5. If you redeploy either contract, update the value in `.env.local`.
+5. Deploy the staking_pool contract (DeFindex-backed) and initialize it with its USDC token and vault.
+6. Copy that contract ID into **both** `VITE_STAKING_CONTRACT_ID` (frontend) and `STAKING_CONTRACT_ID` (API). They must match.
+7. If you redeploy any contract, update the value in `.env.local`.
 
 ### Local port
 
