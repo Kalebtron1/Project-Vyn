@@ -2,16 +2,19 @@
  * useMobileWallet
  *
  * Thin React hook that wraps the connector abstraction and exposes:
- *  - connect()        → get public key (auto-picks provider)
- *  - sign(xdr)        → sign a transaction XDR
- *  - isMobile         → boolean
- *  - provider         → "freighter" | "albedo"
- *  - isFreighterReady → boolean (extension detected)
+ *  - connect()                    → get public key (auto-picks provider)
+ *  - connectToProvider(provider)  → connect to specific provider (Freighter, Albedo, WalletConnect)
+ *  - sign(xdr)                    → sign a transaction XDR
+ *  - isMobile                     → boolean
+ *  - provider                      → current provider ("freighter" | "albedo" | "walletconnect")
+ *  - isFreighterReady             → boolean (extension detected)
+ *  - availableProviders           → list of available providers for this environment
  */
 
 import { useState, useEffect } from "react";
 import {
   connectWallet,
+  connectWithProvider,
   signTransactionXdr,
   isMobileBrowser,
   isFreighterAvailable,
@@ -24,7 +27,7 @@ import {
 export function useMobileWallet() {
   const [isMobile] = useState<boolean>(() => isMobileBrowser());
   const [freighterReady, setFreighterReady] = useState<boolean>(false);
-  const [provider, setProvider] = useState<"freighter" | "albedo">(
+  const [provider, setProvider] = useState<"freighter" | "albedo" | "walletconnect">(
     getSavedProvider
   );
 
@@ -46,8 +49,26 @@ export function useMobileWallet() {
     return () => clearInterval(id);
   }, [isMobile]);
 
+  // Compute available providers based on environment
+  const availableProviders: ("freighter" | "albedo" | "walletconnect")[] = isMobile
+    ? ["albedo", "walletconnect"]
+    : freighterReady
+      ? ["freighter", "albedo", "walletconnect"]
+      : ["albedo", "walletconnect"];
+
   const connect = async (): Promise<ConnectResult> => {
     const result = await connectWallet();
+    if (result.ok) {
+      saveProvider(result.provider);
+      setProvider(result.provider);
+    }
+    return result;
+  };
+
+  const connectToProvider = async (
+    targetProvider: "freighter" | "albedo" | "walletconnect"
+  ): Promise<ConnectResult> => {
+    const result = await connectWithProvider(targetProvider);
     if (result.ok) {
       saveProvider(result.provider);
       setProvider(result.provider);
@@ -63,7 +84,9 @@ export function useMobileWallet() {
     isMobile,
     provider,
     isFreighterReady: freighterReady,
+    availableProviders,
     connect,
+    connectToProvider,
     sign,
   };
 }

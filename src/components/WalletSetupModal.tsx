@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Wallet, Loader2, CheckCircle2, AlertCircle, Smartphone, ExternalLink } from "lucide-react";
+import { Wallet, Loader2, CheckCircle2, AlertCircle, Smartphone, ExternalLink, Link2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 
@@ -26,15 +26,16 @@ function friendlyError(
 
 const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
   const { user } = useAuth();
-  const { isMobile, isFreighterReady, connect } = useMobileWallet();
+  const { isMobile, isFreighterReady, connect, connectToProvider, availableProviders } = useMobileWallet();
   const { t } = useTranslation();
 
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<"freighter" | "albedo" | "walletconnect" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
-  const [walletProvider, setWalletProvider] = useState<"freighter" | "albedo" | null>(null);
+  const [walletProvider, setWalletProvider] = useState<"freighter" | "albedo" | "walletconnect" | null>(null);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -51,6 +52,26 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
     setAddress(result.address);
     setWalletProvider(result.provider);
     setConnecting(false);
+  };
+
+  const handleConnectToProvider = async (provider: "freighter" | "albedo" | "walletconnect") => {
+    setConnecting(true);
+    setError(null);
+    setSelectedProvider(provider);
+
+    const result = await connectToProvider(provider);
+
+    if (!result.ok) {
+      setError(friendlyError(result.error, result.cancelled, t));
+      setConnecting(false);
+      setSelectedProvider(null);
+      return;
+    }
+
+    setAddress(result.address);
+    setWalletProvider(result.provider);
+    setConnecting(false);
+    setSelectedProvider(null);
   };
 
   const handleSave = async () => {
@@ -81,7 +102,20 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
   const truncate = (addr: string) =>
     addr.length > 16 ? `${addr.slice(0, 8)}...${addr.slice(-6)}` : addr;
 
-  const providerLabel = isMobile ? "Albedo" : isFreighterReady ? "Freighter" : "Albedo";
+  const getProviderIcon = (provider: "freighter" | "albedo" | "walletconnect") => {
+    if (provider === "walletconnect") return <Link2 className="w-5 h-5" />;
+    if (provider === "freighter") return <Wallet className="w-5 h-5" />;
+    return <Smartphone className="w-5 h-5" />;
+  };
+
+  const getProviderLabel = (provider: "freighter" | "albedo" | "walletconnect") => {
+    if (provider === "walletconnect") return "WalletConnect";
+    if (provider === "freighter") return "Freighter";
+    return "Albedo";
+  };
+
+  const shouldShowMultipleProviders = isMobile || !isFreighterReady;
+  const showMultipleOptions = shouldShowMultipleProviders && availableProviders.length > 1;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm px-6">
@@ -103,7 +137,7 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
               <div>
                 <h2 className="text-lg font-bold text-foreground leading-tight">{t("wallet_setup.title")}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {isMobile ? t("wallet_setup.subtitle_albedo") : t("wallet_setup.subtitle_freighter")}
+                  {walletProvider ? `via ${getProviderLabel(walletProvider)}` : t("wallet_setup.select_provider")}
                 </p>
               </div>
             </div>
@@ -114,11 +148,11 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
                 <p className="text-sm font-mono font-medium text-foreground">{truncate(address)}</p>
                 {walletProvider && (
                   <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wide">
-                    via {walletProvider}
+                    via {getProviderLabel(walletProvider)}
                   </p>
                 )}
               </div>
-            ) : !isMobile && !isFreighterReady ? (
+            ) : !isMobile && !isFreighterReady && !showMultipleOptions ? (
               <div className="space-y-3">
                 <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-center">
                   <p className="text-xs font-bold text-amber-700 mb-0.5">{t("wallet_setup.freighter_not_detected")}</p>
@@ -150,6 +184,36 @@ const WalletSetupModal = ({ onComplete }: WalletSetupModalProps) => {
                   <ExternalLink className="w-3 h-3" />
                   {t("wallet_setup.install_freighter_alt")}
                 </a>
+              </div>
+            ) : showMultipleOptions ? (
+              <div className="space-y-3">
+                {availableProviders.map((provider) => (
+                  <button
+                    key={provider}
+                    onClick={() => handleConnectToProvider(provider)}
+                    disabled={connecting && selectedProvider !== provider}
+                    className="w-full rounded-xl border-2 border-border bg-secondary/50 px-4 py-4 flex items-center gap-3 hover:bg-secondary transition-colors active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <div className="text-primary flex-shrink-0">
+                      {connecting && selectedProvider === provider ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        getProviderIcon(provider)
+                      )}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-semibold text-foreground">{getProviderLabel(provider)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {provider === "freighter" && "Extensión Freighter"}
+                        {provider === "albedo" && "Billetera web"}
+                        {provider === "walletconnect" && "Billetera móvil"}
+                      </p>
+                    </div>
+                    {connecting && selectedProvider === provider && (
+                      <span className="text-xs text-primary font-medium">{t("common.loading")}</span>
+                    )}
+                  </button>
+                ))}
               </div>
             ) : (
               <button

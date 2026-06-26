@@ -18,6 +18,8 @@
     "@albedo-link/intent": "^0.13.0",
     "@hookform/resolvers": "^3.10.0",
     "@lovable.dev/cloud-auth-js": "^0.0.3",
+    "@walletconnect/core": "^2.17.0",
+    "@walletconnect/universal-provider": "^2.17.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
