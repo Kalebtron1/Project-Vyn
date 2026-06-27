@@ -1,6 +1,7 @@
 import { Home, ArrowDownToLine, Clock, User, Landmark } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TREASURY_ADDRESS } from "@/stellar/contracts";
+import * as sessionStore from "@/lib/sessionStore";
 
 export interface NavItem {
   icon: LucideIcon;
@@ -15,7 +16,7 @@ export interface NavItem {
  * contrato impone la seguridad real con `treasury.require_auth()`).
  */
 export function getNavItems(): NavItem[] {
-  const savedWallet = (localStorage.getItem("vinculo_wallet") || "").trim();
+  const savedWallet = (sessionStore.getItem("vinculo_wallet") || "").trim();
   const isTreasury = !!TREASURY_ADDRESS && savedWallet === TREASURY_ADDRESS.trim();
 
   return [

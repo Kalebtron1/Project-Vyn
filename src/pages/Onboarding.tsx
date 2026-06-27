@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useWalletSession } from "@/context/WalletSessionContext";
 import onboardingSave from "@/assets/onboarding-save.png";
 import onboardingReputation from "@/assets/onboarding-reputation.png";
 import onboardingCredit from "@/assets/onboarding-credit.png";
@@ -10,6 +11,7 @@ const Onboarding = () => {
   const [current, setCurrent] = useState(0);
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { completeOnboarding } = useWalletSession();
 
   const steps = [
     {
@@ -37,7 +39,7 @@ const Onboarding = () => {
 
   const next = () => {
     if (isLast) {
-      localStorage.setItem("vinculo_onboarded", "1");
+      completeOnboarding();
       navigate("/login", { replace: true });
     } else {
       setCurrent((p) => p + 1);
@@ -45,7 +47,7 @@ const Onboarding = () => {
   };
 
   const skip = () => {
-    localStorage.setItem("vinculo_onboarded", "1");
+    completeOnboarding();
     navigate("/login", { replace: true });
   };
 

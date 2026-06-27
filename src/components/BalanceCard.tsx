@@ -10,22 +10,16 @@ const BalanceCard = () => {
   // NUEVO: Guardamos la dirección de la wallet para no pedirla a cada rato
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
-  // 1. PASO UNO: Pedir acceso a Freighter SOLO UNA VEZ al montar el componente
+  // 1. PASO UNO: Usar la dirección ya guardada de la sesión.
+  // IMPORTANTE: no llamar a connect() aquí. En móvil connect() re-abre el popup
+  // de Albedo y vuelve a pedir aprobación cada vez que se entra a Inicio.
   useEffect(() => {
-    const initWallet = async () => {
-      try {
-        if (await walletAdapter.isConnected()) {
-          const address = await walletAdapter.connect();
-          setWalletAddress(address);
-        } else {
-          setRealBalance(0);
-        }
-      } catch (error) {
-        console.error("Error conectando Freighter al inicio:", error);
-        setRealBalance(0);
-      }
-    };
-    initWallet();
+    const address = walletAdapter.getAddress();
+    if (address) {
+      setWalletAddress(address);
+    } else {
+      setRealBalance(0);
+    }
   }, []); // <-- El array vacío garantiza que esto pase SOLO UNA VEZ
 
   // 2. PASO DOS: Consultar el saldo usando la dirección ya guardada

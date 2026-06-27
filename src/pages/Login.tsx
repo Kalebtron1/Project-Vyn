@@ -4,6 +4,7 @@ import { Loader2, Wallet, AlertCircle, ExternalLink, Smartphone } from "lucide-r
 import { useTranslation } from "react-i18next";
 import logoVin from "@/assets/logo-vin.png";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { useWalletSession } from "@/context/WalletSessionContext";
 
 // Human-readable error messages resolved through i18n
 function friendlyError(
@@ -25,17 +26,16 @@ const Login = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { isMobile, isFreighterReady, connect } = useMobileWallet();
+  const { address, onboarded, ready, setSession } = useWalletSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // If already connected, skip straight to the app
   useEffect(() => {
-    const wallet = localStorage.getItem("vinculo_wallet");
-    const onboarded = localStorage.getItem("vinculo_onboarded");
-    if (wallet && onboarded === "1") {
+    if (ready && address && onboarded) {
       navigate("/", { replace: true });
     }
-  }, [navigate]);
+  }, [ready, address, onboarded, navigate]);
 
   const connectWallet = async () => {
     setLoading(true);
@@ -49,9 +49,8 @@ const Login = () => {
       return;
     }
 
-    localStorage.setItem("vinculo_wallet", result.address);
-    localStorage.setItem("vinculo_onboarded", "1");
-    localStorage.setItem("vinculo_wallet_provider", result.provider);
+    // Persiste (localStorage + cookie) y actualiza el estado en memoria.
+    setSession(result.address, result.provider);
 
     navigate("/", { replace: true });
   };

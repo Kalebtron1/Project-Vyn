@@ -45,6 +45,9 @@ const en = {
     promo_title: "Increase your limits",
     promo_description: "Deposit USDC to level up and increase your limits.",
     promo_cta: "Deposit now",
+    wallet_mismatch_title: "You switched accounts in Freighter",
+    wallet_mismatch_description:
+      "Your session is with {{expected}} but Freighter is on {{active}}. Switch back to {{expected}} in the extension to continue your session.",
   },
 
   login: {

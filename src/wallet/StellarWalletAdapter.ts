@@ -5,8 +5,14 @@ import {
   getSavedProvider,
   saveProvider,
 } from "@/lib/mobileWalletConnectors";
+import * as sessionStore from "@/lib/sessionStore";
+import {
+  WALLET_KEY,
+  ONBOARDED_KEY,
+  PROVIDER_KEY,
+} from "@/context/WalletSessionContext";
 
-const STORAGE_KEY = "vinculo_wallet";
+const STORAGE_KEY = WALLET_KEY;
 
 /**
  * StellarWalletAdapter — provider-agnostic WalletAdapter implementation.
@@ -17,7 +23,7 @@ const STORAGE_KEY = "vinculo_wallet";
  */
 export class StellarWalletAdapter implements WalletAdapter {
   async isConnected(): Promise<boolean> {
-    return !!localStorage.getItem(STORAGE_KEY);
+    return !!sessionStore.getItem(STORAGE_KEY);
   }
 
   async connect(): Promise<string> {
@@ -26,7 +32,7 @@ export class StellarWalletAdapter implements WalletAdapter {
       throw new Error(result.error);
     }
     saveProvider(result.provider);
-    localStorage.setItem(STORAGE_KEY, result.address);
+    sessionStore.setItem(STORAGE_KEY, result.address);
     return result.address;
   }
 
@@ -40,13 +46,14 @@ export class StellarWalletAdapter implements WalletAdapter {
   }
 
   disconnect(): void {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem("vinculo_onboarded");
-    localStorage.removeItem("vinculo_wallet_provider");
-    window.location.href = "/login";
+    // Limpia la sesión durable. La redirección a /login la hace el guard al
+    // quedar la dirección en null (preferir el flujo de router del contexto).
+    sessionStore.removeItem(STORAGE_KEY);
+    sessionStore.removeItem(ONBOARDED_KEY);
+    sessionStore.removeItem(PROVIDER_KEY);
   }
 
   getAddress(): string | null {
-    return localStorage.getItem(STORAGE_KEY);
+    return sessionStore.getItem(STORAGE_KEY);
   }
 }

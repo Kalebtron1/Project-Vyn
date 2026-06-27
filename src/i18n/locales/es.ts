@@ -54,6 +54,9 @@ const es = {
     promo_title: "Aumenta tus límites",
     promo_description: "Deposita USDC para subir de nivel y aumentar tus límites.",
     promo_cta: "Depositar ahora",
+    wallet_mismatch_title: "Cambiaste de cuenta en Freighter",
+    wallet_mismatch_description:
+      "Tu sesión es con {{expected}} pero Freighter está en {{active}}. Vuelve a {{expected}} en la extensión para continuar tu sesión.",
   },
 
   // ─── Login / Auth ────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, HelpCircle, LogOut, Wallet, Sparkles } from "lucide-react";
+import { Bell, HelpCircle, LogOut, Wallet, Sparkles, AlertTriangle } from "lucide-react";
 import logoVin from "@/assets/logo-vin.png";
 import BottomNav from "@/components/BottomNav";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,11 +24,19 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { shortWallet, walletStatus, disconnect } = useWallet();
+  const { wallet, shortWallet, walletStatus, disconnect, walletMismatch, activeAddress } =
+    useWallet();
 
   const navItems = getNavItems();
   const initials = shortWallet ? shortWallet.slice(0, 2).toUpperCase() : "WL";
   const isConnected = walletStatus === "connected";
+
+  const shortExpected = wallet
+    ? `${wallet.substring(0, 5)}...${wallet.substring(wallet.length - 4)}`
+    : "";
+  const shortActive = activeAddress
+    ? `${activeAddress.substring(0, 5)}...${activeAddress.substring(activeAddress.length - 4)}`
+    : "";
 
   return (
     <div className="min-h-screen flex bg-background text-foreground">
@@ -152,7 +160,27 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
           </div>
         </header>
 
-        <main className="flex-1 px-4 md:px-8 pb-24 lg:pb-10 pt-2">{children}</main>
+        <main className="flex-1 px-4 md:px-8 pb-24 lg:pb-10 pt-2">
+          {/* Aviso: se cambió de cuenta en Freighter (escritorio). No se pierde
+              la sesión; se pide volver a la wallet original para continuar. */}
+          {walletMismatch && (
+            <div className="max-w-[1400px] mx-auto mb-4 flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-amber-700">
+                  {t("shell.wallet_mismatch_title")}
+                </p>
+                <p className="text-[11px] text-amber-800/70">
+                  {t("shell.wallet_mismatch_description", {
+                    expected: shortExpected,
+                    active: shortActive,
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
 
       {/* Bottom nav (móvil) */}

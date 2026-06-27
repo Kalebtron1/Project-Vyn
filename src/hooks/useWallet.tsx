@@ -1,54 +1,75 @@
 import { useState, useEffect } from "react";
 import { isFreighterAvailable, isMobileBrowser } from "@/lib/mobileWalletConnectors";
-import { walletAdapter } from "@/wallet";
+import { useWalletSession } from "@/context/WalletSessionContext";
 
 export type WalletStatus = "loading" | "connected" | "disconnected" | "missing";
 
+/**
+ * useWallet — vista de la sesión para la UI.
+ *
+ * La fuente de verdad es WalletSessionContext (cargado una vez por encima del
+ * router). Este hook solo deriva el estado de presentación y, en escritorio con
+ * Freighter, marca "disconnected" si la extensión deja de estar disponible.
+ * Mantiene su API pública previa para no romper a los consumidores.
+ */
 export const useWallet = () => {
-  const [wallet, setWallet] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [walletStatus, setWalletStatus] = useState<WalletStatus>("loading");
+  const {
+    address,
+    provider,
+    ready,
+    walletMismatch,
+    activeAddress,
+    disconnect: ctxDisconnect,
+    setSession,
+  } = useWalletSession();
 
+  const [freighterGone, setFreighterGone] = useState(false);
+
+  // Escritorio + Freighter: detectar que la extensión se quitó/bloqueó.
   useEffect(() => {
-    const savedWallet = localStorage.getItem("vinculo_wallet");
-    setWallet(savedWallet);
-
-    const checkStatus = async () => {
-      if (!savedWallet) {
-        setWalletStatus("missing");
-      } else {
-        // On desktop, check if the extension that was used is still available
-        const savedProvider = localStorage.getItem("vinculo_wallet_provider");
-        const onDesktop = !isMobileBrowser();
-        const freighterAvailable = await isFreighterAvailable();
-        if (onDesktop && savedProvider === "freighter" && !freighterAvailable) {
-          // Wallet address is saved but Freighter is gone (removed/locked)
-          setWalletStatus("disconnected");
-        } else {
-          setWalletStatus("connected");
-        }
-      }
-
-      setLoading(false);
+    if (!address || provider !== "freighter" || isMobileBrowser()) {
+      setFreighterGone(false);
+      return;
+    }
+    let cancelled = false;
+    const check = async () => {
+      const available = await isFreighterAvailable();
+      if (!cancelled) setFreighterGone(!available);
     };
+    void check();
+    const id = setInterval(check, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [address, provider]);
 
-    void checkStatus();
-  }, []);
-
-  const setWalletAddress = (address: string) => {
-    localStorage.setItem("vinculo_wallet", address);
-    setWallet(address);
-    setWalletStatus("connected");
-  };
+  const walletStatus: WalletStatus = !ready
+    ? "loading"
+    : !address
+    ? "missing"
+    : freighterGone
+    ? "disconnected"
+    : "connected";
 
   // Short display format: GDAH5...J5W
-  const shortWallet = wallet
-    ? `${wallet.substring(0, 5)}...${wallet.substring(wallet.length - 4)}`
+  const shortWallet = address
+    ? `${address.substring(0, 5)}...${address.substring(address.length - 4)}`
     : "";
 
-  const disconnect = () => {
-    walletAdapter.disconnect();
+  const setWalletAddress = (newAddress: string) => {
+    setSession(newAddress, provider ?? (isMobileBrowser() ? "albedo" : "freighter"));
   };
 
-  return { wallet, loading, walletStatus, shortWallet, disconnect, setWalletAddress };
+  return {
+    wallet: address,
+    loading: !ready,
+    walletStatus,
+    shortWallet,
+    disconnect: ctxDisconnect,
+    setWalletAddress,
+    // Aviso de cambio de cuenta en Freighter (desktop).
+    walletMismatch,
+    activeAddress,
+  };
 };

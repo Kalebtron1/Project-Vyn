@@ -6,6 +6,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/context/AppContext";
+import { WalletSessionProvider, useWalletSession } from "@/context/WalletSessionContext";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import WalletSetupModal from "@/components/WalletSetupModal";
@@ -22,28 +23,18 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const isOnboarded = () => localStorage.getItem("vinculo_onboarded") === "1";
-const hasWallet = () => !!localStorage.getItem("vinculo_wallet");
+const Spinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const RequireWallet = ({ children }: { children: React.ReactNode }) => {
-  const [wallet, setWallet] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const savedWallet = localStorage.getItem("vinculo_wallet");
-    setWallet(savedWallet);
-    setLoading(false);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!wallet) return <Navigate to="/login" replace />;
+  const { address, ready } = useWalletSession();
+  // La sesión se carga una sola vez al arrancar; tras eso vive en memoria, así
+  // que navegar entre rutas (volver a Inicio) ya no re-lee almacenamiento.
+  if (!ready) return <Spinner />;
+  if (!address) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
@@ -105,8 +96,16 @@ const RequireAuth = ({ children }: { children: React.ReactNode }) => {
   return <WalletGate>{children}</WalletGate>;
 };
 
-const RequireOnboarding = ({ children }: { children: React.ReactNode }) =>
-  isOnboarded() ? <>{children}</> : <Navigate to="/bienvenida" replace />;
+const RequireOnboarding = ({ children }: { children: React.ReactNode }) => {
+  const { onboarded } = useWalletSession();
+  return onboarded ? <>{children}</> : <Navigate to="/bienvenida" replace />;
+};
+
+// Ruta /bienvenida: si ya completó onboarding, va directo a la app.
+const BienvenidaRoute = () => {
+  const { onboarded } = useWalletSession();
+  return onboarded ? <Navigate to="/" replace /> : <Onboarding />;
+};
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
@@ -116,13 +115,14 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <WalletSessionProvider>
           <AuthProvider>
             <Routes>
               {/* Login - sin RequireWallet, completamente público */}
               <Route path="/login" element={<Login />} />
-              
+
               {/* Rutas protegidas por wallet */}
-              <Route path="/bienvenida" element={<RequireWallet>{isOnboarded() ? <Navigate to="/" replace /> : <Onboarding />}</RequireWallet>} />
+              <Route path="/bienvenida" element={<RequireWallet><BienvenidaRoute /></RequireWallet>} />
               <Route path="/" element={<RequireWallet><RequireOnboarding><Index /></RequireOnboarding></RequireWallet>} />
               <Route path="/historial" element={<RequireWallet><RequireOnboarding><Historial /></RequireOnboarding></RequireWallet>} />
               <Route path="/perfil" element={<RequireWallet><RequireOnboarding><Perfil /></RequireOnboarding></RequireWallet>} />
@@ -134,6 +134,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
+          </WalletSessionProvider>
         </BrowserRouter>
       </AppProvider>
     </TooltipProvider>
