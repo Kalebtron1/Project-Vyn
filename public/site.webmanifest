@@ -2,8 +2,9 @@
   "name": "Vyn — Tu camino al crédito",
   "short_name": "Vyn",
   "icons": [
-    { "src": "/favicon-192x192.png", "type": "image/png", "sizes": "192x192" },
-    { "src": "/favicon-512x512.png", "type": "image/png", "sizes": "512x512" }
+    { "src": "/favicon-192x192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/favicon-512x512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/favicon-maskable-512x512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
   ],
   "theme_color": "#6d28d9",
   "background_color": "#ffffff",
