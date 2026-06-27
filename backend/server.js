@@ -1,19 +1,38 @@
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
-const { 
-  Keypair, 
-  rpc, 
-  TransactionBuilder, 
-  Networks, 
-  Operation, 
-  BASE_FEE, 
-  nativeToScVal, 
-  scValToNative 
+// El frontend (Vite) lee .env.local; el server Express debe leer EL MISMO archivo o
+// quedaría con un STAKING_CONTRACT_ID distinto (o sin él) y mostraría historial de
+// otro contrato. Resolvemos las rutas vía __dirname para no depender del cwd desde el
+// que se lanza `node backend/server.js`. dotenv NO sobreescribe claves ya definidas,
+// así que .env.local tiene prioridad sobre .env.
+require("dotenv").config({ path: path.resolve(__dirname, "../.env.local") });
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+const {
+  Keypair,
+  rpc,
+  TransactionBuilder,
+  Networks,
+  Operation,
+  BASE_FEE,
+  nativeToScVal,
+  scValToNative
 } = require("@stellar/stellar-sdk");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// staking_pool (DeFindex). Debe coincidir con VITE_STAKING_CONTRACT_ID del frontend.
+const STAKING_CONTRACT_ID = process.env.STAKING_CONTRACT_ID;
+
+// Núcleo de scoring compartido con api/calculate-score.js (única fuente de verdad).
+// Es ESM y este server es CommonJS, así que se carga con import() dinámico, cacheado.
+let scoringCorePromise;
+function loadScoringCore() {
+  if (!scoringCorePromise) {
+    scoringCorePromise = import("../api/_scoring-core.mjs");
+  }
+  return scoringCorePromise;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -35,7 +54,6 @@ app.get('/api/readiness', (req, res) => {
 });
 
 const RPC_URL = "https://soroban-testnet.stellar.org";
-const HORIZON_URL = "https://horizon-testnet.stellar.org"; // <-- Añadido Horizon
 const server = new rpc.Server(RPC_URL);
 
 // Simple store en memoria de nonces (dev)
@@ -55,101 +73,14 @@ const CREDIT_LIMITS = {
   4: { name: "Platino", amount: 5000 }
 };
 
-// Umbral mínimo de transacciones para testnet (ajustable)
-const MIN_TX_REQUIRED = 3;
-
-// ─────────────────────────────────────────────
-// HELPERS MATEMÁTICOS (Tu Motor de Riesgo)
-// ─────────────────────────────────────────────
-function weightedMean(deposits = []) {
-  if (!deposits || deposits.length === 0) return 0;
-  let weightedSum = 0;
-  let totalWeight = 0;
-  for (const { amount, daysAgo } of deposits) {
-    const weight = 1 / (daysAgo + 1);
-    weightedSum += (amount || 0) * weight;
-    totalWeight += weight;
-  }
-  return totalWeight === 0 ? 0 : weightedSum / totalWeight;
-}
-
-function meanAbsoluteDeviation(deposits = []) {
-  if (!deposits || deposits.length === 0) return 0;
-  const amounts = deposits.map((d) => d.amount || 0);
-  const mean = amounts.reduce((acc, v) => acc + v, 0) / amounts.length;
-  return amounts.reduce((acc, v) => acc + Math.abs(v - mean), 0) / amounts.length;
-}
-
-function computeScoreAndTier(wMean, mad, n) {
-  let score = 0;
-  if (wMean > 0 && mad <= wMean) {
-    score = (wMean * (1 - mad / wMean)) * Math.log(n + 1);
-  }
-
-  let tier = 0;
-  let tierName = "Bronce";
-
-  if (score >= 1000) { tier = 4; tierName = "Platino"; } 
-  else if (score >= 500) { tier = 3; tierName = "Diamante"; } 
-  else if (score >= 150) { tier = 2; tierName = "Oro"; } 
-  else if (score >= 50) { tier = 1; tierName = "Plata"; }
-
-  return { score: parseFloat(score.toFixed(4)), tier, tierName };
-}
-
-// ─────────────────────────────────────────────
-// NUEVO: LECTOR DE HISTORIAL BLOCKCHAIN (HORIZON) ⏱️
-// ─────────────────────────────────────────────
-async function getUserBlockchainHistory(userAddress, totalBalance) {
-  try {
-    console.log(`[DEBUG] ⏳ Buscando historial en Horizon para: ${userAddress}`);
-    
-    // 1. Consultamos las últimas 100 operaciones del usuario
-    const response = await fetch(`${HORIZON_URL}/accounts/${userAddress}/operations?limit=100&order=desc`);
-    
-    if (!response.ok) throw new Error("No se pudo leer la API de Horizon");
-    
-    const data = await response.json();
-    let transactionDates = [];
-
-    // 2. Filtramos interacciones con Smart Contracts (invoke_host_function)
-    data._embedded.records.forEach(op => {
-      if (op.type === 'invoke_host_function' && op.transaction_successful) {
-         transactionDates.push(new Date(op.created_at));
-      }
-    });
-
-    // 3. Limitamos a los últimos movimientos necesarios
-    transactionDates = transactionDates.slice(0, MIN_TX_REQUIRED);
-
-    // Fallback: Si no hay historial pero hay saldo (ej. fondeo directo sin contrato)
-    if (transactionDates.length === 0) {
-      console.log(`[DEBUG] ⚠️ No hay interacciones de contrato. Usando saldo base.`);
-      return [{ amount: totalBalance, daysAgo: 0 }];
-    }
-
-    // 4. Construimos el array para la matemática
-    const averageAmount = totalBalance / transactionDates.length;
-    const now = new Date();
-
-    const deposits = transactionDates.map(date => {
-      const diffTime = Math.abs(now - date);
-      const daysAgo = Math.floor(diffTime / (1000 * 60 * 60 * 24)); // Ms a Días
-      
-      return {
-        amount: averageAmount,
-        daysAgo: daysAgo
-      };
-    });
-
-    console.log(`[DEBUG] 📊 Se generaron ${deposits.length} registros desde Horizon.`);
-    return deposits;
-
-  } catch (error) {
-    console.error(`[DEBUG] 💥 Error en Horizon:`, error.message);
-    return [{ amount: totalBalance, daysAgo: 0 }];
-  }
-}
+// El scoring (depósitos / retención / actividad) y la elegibilidad por historial
+// viven en api/_scoring-core.mjs y se leen de los contadores ON-CHAIN del staking_pool
+// (get_total_deposited / get_total_withdrawn / get_position / get_tx_count).
+//
+// Se eliminó el antiguo lector de Horizon (weightedMean / meanAbsoluteDeviation /
+// computeScoreAndTier / getUserBlockchainHistory): contaba interacciones con CUALQUIER
+// contrato de la cuenta y fabricaba 1 tx cuando no había ninguna, por lo que un
+// contrato recién desplegado seguía mostrando "1/3" de historial viejo.
 
 // ─────────────────────────────────────────────
 // ENDPOINT: CONSULTAR TIER Y CRÉDITO 🔗
@@ -247,36 +178,25 @@ async function mintNftOnChain(userAddress, tier) {
 // ENDPOINT: CALCULAR SCORE DE RIESGO 🧮
 // ─────────────────────────────────────────────
 app.post("/api/calculate-score", async (req, res) => {
-  const { address, totalDeposited } = req.body;
-  
+  const { address } = req.body || {};
+  // `totalDeposited` del body se ignora a propósito: la fuente de verdad es el contrato.
+
   if (!address) return res.status(400).json({ error: "Falta wallet" });
+  if (!STAKING_CONTRACT_ID) {
+    console.error("[DEBUG] 💥 calculate-score: STAKING_CONTRACT_ID no configurado");
+    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
+  }
 
-  // 1. Obtenemos el historial real desde Horizon
-  const depositsHistory = await getUserBlockchainHistory(address, Number(totalDeposited) || 0);
-
-  // 2. Calculamos las métricas
-  const wMean = weightedMean(depositsHistory);
-  const mad = meanAbsoluteDeviation(depositsHistory);
-  const result = computeScoreAndTier(wMean, mad, depositsHistory.length);
-  // Añadimos información de elegibilidad para la UI (ProgressRing)
-  const eligibility = {
-    minHistoryRequired: MIN_TX_REQUIRED,
-    historyCount: depositsHistory.length,
-    isHistoryEligible: depositsHistory.length >= MIN_TX_REQUIRED,
-    remainingForUnlock: Math.max(0, MIN_TX_REQUIRED - depositsHistory.length)
-  };
-
-  const response = {
-    ...result,
-    eligibility,
-    metrics: {
-      weightedMean: wMean,
-      mad,
-      depositsCount: depositsHistory.length
-    }
-  };
-
-  res.json(response);
+  try {
+    const { computeFinancialReputation, getOnChainAggregates } = await loadScoringCore();
+    const aggregates = await getOnChainAggregates(address, { contractId: STAKING_CONTRACT_ID });
+    console.log(`[DEBUG] 📊 calculate-score address=${address} contract=${STAKING_CONTRACT_ID}`, aggregates);
+    const result = computeFinancialReputation(aggregates);
+    return res.json(result);
+  } catch (error) {
+    console.error("[DEBUG] 💥 Error en /calculate-score:", error.message);
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // ─────────────────────────────────────────────
@@ -318,20 +238,20 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid or expired nonce' });
     }
 
-    // Compute eligibility using on-chain history. Prefer client-supplied totalVolume for matching score calc.
-    const totalVolume = Number(req.body.totalVolume) || 0;
-    const depositsHistory = await getUserBlockchainHistory(address, totalVolume);
-    const isHistoryEligible = depositsHistory.length >= MIN_TX_REQUIRED;
-
-    if (!isHistoryEligible) {
-      return res.json({ success: false, error: 'Not eligible by history', eligibility: { minHistoryRequired: MIN_TX_REQUIRED, historyCount: depositsHistory.length } });
+    // Elegibilidad y tier desde los contadores ON-CHAIN del staking_pool (misma
+    // fuente que /api/calculate-score). Reemplaza el antiguo cálculo por Horizon.
+    if (!STAKING_CONTRACT_ID) {
+      return res.status(500).json({ success: false, error: 'Falta la variable de entorno STAKING_CONTRACT_ID' });
     }
+    const { computeFinancialReputation, getOnChainAggregates } = await loadScoringCore();
+    const aggregates = await getOnChainAggregates(address, { contractId: STAKING_CONTRACT_ID });
+    const scoreResult = computeFinancialReputation(aggregates);
+    const { tier, tierName } = scoreResult;
+    console.log('[DEBUG] evaluate-and-mint score:', { address, contract: STAKING_CONTRACT_ID, ...aggregates, tier, tierName });
 
-    // Compute tier and mint
-    const wMean = weightedMean(depositsHistory);
-    const mad = meanAbsoluteDeviation(depositsHistory);
-    console.log('[DEBUG] Computed wMean/mad/len for evaluate-and-mint:', { wMean, mad, len: depositsHistory.length });
-    const { tier, tierName } = computeScoreAndTier(wMean, mad, depositsHistory.length);
+    if (!scoreResult.eligibility.isHistoryEligible) {
+      return res.json({ success: false, error: 'Not eligible by history', eligibility: scoreResult.eligibility });
+    }
 
     // Check current on-chain tier to avoid panics in the contract (same-level mint)
     try {
@@ -379,6 +299,10 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
   }
 });
 // Inicia servidor
-app.listen(PORT, '0.0.0.0', () => { 
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 SERVIDOR VÍNCULO ACTIVO EN PUERTO ${PORT}`);
+  // Logueamos los contratos cargados para detectar de un vistazo un env desfasado
+  // (la causa de que un contrato nuevo mostrara historial viejo).
+  console.log(`   STAKING_CONTRACT_ID = ${STAKING_CONTRACT_ID || "(no configurado)"}`);
+  console.log(`   NFT_CONTRACT_ID     = ${process.env.NFT_CONTRACT_ID || "(no configurado)"}`);
 });
