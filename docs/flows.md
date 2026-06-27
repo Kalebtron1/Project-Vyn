@@ -8,17 +8,12 @@ User visits app
        └─ Redirect to /login
 
 /login
-  └─ Supabase email/password sign-in
-       └─ on success: supabase trigger creates profiles row
-            └─ WalletGate checks profiles.wallet_address
-                 └─ missing? → WalletSetupModal opens
-                      └─ User connects Freighter
-                           └─ wallet address saved to:
-                                - Supabase profiles.wallet_address
-                                - localStorage: vinculo_wallet
-                      └─ onboarded? check localStorage.vinculo_onboarded
-                           └─ no → redirect to /bienvenida (Onboarding)
-                           └─ yes → redirect to /
+  └─ User connects wallet (Freighter on desktop, Albedo on mobile)
+       └─ connect() returns the Stellar address
+            └─ saved to localStorage: vinculo_wallet (+ vinculo_wallet_provider)
+                 └─ onboarded? check localStorage.vinculo_onboarded
+                      └─ no → redirect to /bienvenida (Onboarding)
+                      └─ yes → redirect to /
 ```
 
 ---

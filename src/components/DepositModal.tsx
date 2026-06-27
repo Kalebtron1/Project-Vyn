@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Fingerprint, CheckCircle2, AlertCircle, ExternalLink, Smartphone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { useWallet } from "@/hooks/useWallet";
 import confetti from "canvas-confetti";
-import { supabase } from "@/integrations/supabase/client";
 import {
   TransactionBuilder,
   Networks,
@@ -39,30 +39,9 @@ const DepositModal = ({ open, onClose }: Props) => {
   const [step, setStep] = useState<"input" | "signing" | "success" | "error">("input");
   const [errorMsg, setErrorMsg] = useState("");
   const [txHash, setTxHash] = useState("");
-  const [registeredWallet, setRegisteredWallet] = useState<string | null>(null);
-
-  // Fetch the wallet address registered in Supabase for security validation
-  useEffect(() => {
-    let mounted = true;
-    const fetchWallet = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("wallet_address")
-          .eq("user_id", user.id)
-          .single();
-        if (profile?.wallet_address && mounted) {
-          setRegisteredWallet(profile.wallet_address);
-        }
-      } catch (e) {
-        console.error("Error obteniendo wallet registrada:", e);
-      }
-    };
-    if (open) fetchWallet();
-    return () => { mounted = false; };
-  }, [open]);
+  // Wallet de la sesión (localStorage.vinculo_wallet) para validar que el depósito
+  // se firme con la cuenta con la que se inició sesión. Mismo patrón que CreditSection.
+  const { wallet: registeredWallet } = useWallet();
 
   if (!open) return null;
 

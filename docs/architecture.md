@@ -2,15 +2,18 @@
 
 ## Overview
 
-Vyn is a DeFi savings and credit app built on Stellar/Soroban. It has four layers:
+Vyn is a DeFi savings and credit app built on Stellar/Soroban. It has three layers:
 
 ```
 Browser (React)
     │
-    ├── Supabase          — email auth + user profiles
     ├── Vercel API        — serverless functions (scoring, minting, credit)
     └── Stellar Testnet   — three Soroban smart contracts
 ```
+
+Authentication is **wallet-based** (Freighter/Albedo): the connected Stellar address is
+stored in `localStorage.vinculo_wallet` and gates the routes. There is no separate auth
+backend or user database.
 
 ---
 
@@ -35,7 +38,6 @@ Browser (React)
 **Guards:**
 - `RequireWallet` — redirects to `/login` if `localStorage.vinculo_wallet` is absent.
 - `RequireOnboarding` — redirects to `/bienvenida` if `localStorage.vinculo_onboarded !== "1"`.
-- `WalletGate` — shows `WalletSetupModal` if the Supabase profile has no `wallet_address`.
 
 ### State (`src/context/AppContext.tsx`)
 
@@ -56,7 +58,6 @@ In-memory React context. Tracks deposits, withdrawals, stakes, and credit state 
 | `ProgressRing` | Visual progress toward next tier |
 | `CreditSection` | Polls `/api/get-available-credit`, handles loan request and repayment |
 | `DepositModal` | Freighter-signed deposit to `staking_pool` contract |
-| `WalletSetupModal` | Links Freighter wallet to Supabase profile |
 | `NFTModal` | Shows NFT tier image and metadata |
 
 ### Stellar helpers (`src/stellar/`)
@@ -70,8 +71,7 @@ In-memory React context. Tracks deposits, withdrawals, stakes, and credit state 
 
 | Hook | Purpose |
 |---|---|
-| `useAuth` | Wraps Supabase auth state (`user`, `session`, `loading`, `signOut`) |
-| `useWallet` | Reads `vinculo_wallet` from localStorage, provides `shortWallet` and `disconnect` |
+| `useWallet` | Reads `vinculo_wallet` from localStorage, provides `shortWallet`, `walletMismatch` and `disconnect` |
 
 ---
 
@@ -99,25 +99,7 @@ All functions set permissive CORS headers and handle `OPTIONS` preflight.
 
 ---
 
-## Layer 3 — Supabase
-
-**Auth:** Supabase email/password. A `handle_new_user` trigger auto-creates a `profiles` row on signup.
-
-**Table: `profiles`**
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID | PK |
-| `user_id` | UUID | FK → `auth.users` |
-| `display_name` | TEXT | |
-| `avatar_url` | TEXT | |
-| `wallet_address` | TEXT | Set by `WalletSetupModal` after Freighter connection |
-
-Row-level security is enabled; users can only read and write their own row.
-
----
-
-## Layer 4 — Soroban Contracts
+## Layer 3 — Soroban Contracts
 
 Source in `backend/contracts/`. All deployed to Stellar Testnet.
 
@@ -164,5 +146,4 @@ The tier is stored on-chain in `vinculo_sbt`. The scoring engine in `api/calcula
 | Change score thresholds | `api/calculate-score.js` → tier mapping block |
 | Change staking APY | `src/context/AppContext.tsx` → `STAKING_APY` |
 | Add a contract function call | `src/stellar/queries.ts` (read) or component (write, Freighter-signed) |
-| Change Supabase schema | `supabase/migrations/` (new migration file) |
 | Add an API endpoint | `api/<name>.js` + entry in `vercel.json` routes |

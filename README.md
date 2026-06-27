@@ -1,6 +1,6 @@
 # Project Vyn
 
-Project Vyn is a Vite + React application backed by Supabase and Stellar/Soroban contract calls.
+Project Vyn is a Vite + React application backed by Stellar/Soroban contract calls. Authentication is wallet-based (Freighter/Albedo) — there is no separate auth backend.
 
 ## Getting Started
 
@@ -23,7 +23,7 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 
 ### What you need to replicate
 
-- A Supabase project or access to the shared test project.
+- A Stellar wallet (Freighter extension on desktop, or Albedo on mobile) to log in.
 - A Stellar testnet admin account for `SECRET_KEY_ADMIN` and `PUBLIC_KEY_ADMIN`.
 - The deployed Soroban contract IDs for `NFT_CONTRACT_ID`, `VITE_LENDING_CONTRACT_ID`, and the staking_pool (`VITE_STAKING_CONTRACT_ID` / `STAKING_CONTRACT_ID`).
 
@@ -33,9 +33,6 @@ If you do not have those values yet, you can still read the code and work on UI 
 
 The project uses the following variables:
 
-- `VITE_SUPABASE_PROJECT_ID`
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_KEY_ADMIN`
 - `SECRET_KEY_ADMIN`
 - `NFT_CONTRACT_ID`
@@ -48,14 +45,6 @@ The project uses the following variables:
 `VERCEL_OIDC_TOKEN` is created by Vercel for deployment workflows and is not required for normal local development.
 
 ## How To Get Each Value
-
-### Supabase values
-
-1. Open your project in the Supabase dashboard.
-2. Go to Project Settings > General and copy the Project ID for `VITE_SUPABASE_PROJECT_ID`.
-3. Go to Project Settings > API.
-4. Copy the Project URL into `VITE_SUPABASE_URL`.
-5. Copy the `anon` / publishable key into `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
 ### Stellar admin keys
 
@@ -81,7 +70,7 @@ The project uses the following variables:
 
 ## Architecture
 
-Vyn has four layers: a React frontend, Vercel serverless API functions, Supabase for auth and profiles, and three Soroban smart contracts on Stellar Testnet.
+Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless API functions, and three Soroban smart contracts on Stellar Testnet.
 
 - [Architecture overview](docs/architecture.md) — layers, components, contracts, and where to make common changes.
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.

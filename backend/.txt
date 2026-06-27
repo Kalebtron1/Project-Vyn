@@ -91,7 +91,7 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
   }
 
   // --- LÓGICA DE EVALUACIÓN ---
-  // Aquí puedes validar con Supabase o Horizon. 
+  // Aquí puedes validar con Horizon o datos on-chain.
   // Para el Hackathon, confiaremos en los datos enviados o haremos una regla simple:
   console.log(`Evaluando a ${userAddress}... Depósitos: ${depositsCount}, Volumen: ${totalVolume}`);
   
