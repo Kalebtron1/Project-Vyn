@@ -132,7 +132,7 @@ const DepositModal = ({ open, onClose }: Props) => {
 
       // 6. Submit
       const txToSubmit = TransactionBuilder.fromXDR(signResult.signedXdr, Networks.TESTNET);
-      const submitRes = await server.sendTransaction(txToSubmit) as any;
+      const submitRes = await server.sendTransaction(txToSubmit) as rpc.Api.SendTransactionResponse & { errorResultXdr?: string };
       const status = (submitRes.status ?? "").toUpperCase();
 
       if (status !== "PENDING" && status !== "SUCCESS") {
@@ -150,9 +150,10 @@ const DepositModal = ({ open, onClose }: Props) => {
       if (wasLocked && willUnlock) {
         setTimeout(() => setShowUnlockCelebration(true), 800);
       }
-    } catch (err: any) {
-      console.error("Deposit error:", err);
-      setErrorMsg(friendlyDepositError(err.message ?? "", !!err.cancelled));
+    } catch (err) {
+      const e = err as { message?: string; cancelled?: boolean };
+      console.error("Deposit error:", e);
+      setErrorMsg(friendlyDepositError(e.message ?? "", !!e.cancelled));
       setStep("error");
     }
   };
@@ -206,7 +207,7 @@ const DepositModal = ({ open, onClose }: Props) => {
                     amount === String(v) ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
                   }`}
                 >
-                  {v} {t("common.xlm")}
+                  {v} {t("common.usdc")}
                 </button>
               ))}
             </div>

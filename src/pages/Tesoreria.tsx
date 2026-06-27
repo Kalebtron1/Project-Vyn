@@ -180,7 +180,7 @@ const Tesoreria = () => {
         </div>
       </header>
 
-      <main className="px-5 max-w-md mx-auto space-y-4">
+      <main className="px-5 max-w-md md:max-w-2xl mx-auto space-y-4">
         {/* Interés acumulado disponible para retiro */}
         <div className="bg-primary rounded-2xl p-6 text-primary-foreground shadow-lg w-full relative overflow-hidden animate-fade-up">
           <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl" />

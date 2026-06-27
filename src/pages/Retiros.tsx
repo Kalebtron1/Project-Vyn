@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ArrowDownToLine, Fingerprint, CheckCircle2,
-  X, TrendingUp, Sparkles, Smartphone
+  X, TrendingUp, Sparkles, Smartphone,
+  Building2, Store, Clock, Globe, CircleCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import confetti from "canvas-confetti";
-import BottomNav from "@/components/BottomNav";
-import logoVin from "@/assets/logo-vin.png";
+import AppShell from "@/components/AppShell";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
@@ -150,51 +150,113 @@ const Retiros = () => {
   // Rendimiento real generado (posición − principal neto aportado).
   const yieldEarned = Math.max(0, realBalance - netPrincipal);
 
+  // Métodos de retiro: USDC real + roadmap MXN (próximamente).
+  const methods = [
+    { id: "usdc", title: t("withdrawals.method_usdc_title"), desc: t("withdrawals.method_usdc_desc"), icon: ArrowDownToLine, available: true },
+    { id: "spei", title: t("withdrawals.method_spei_title"), desc: t("withdrawals.method_spei_desc"), icon: Building2, available: false },
+    { id: "moneygram", title: t("withdrawals.method_moneygram_title"), desc: t("withdrawals.method_moneygram_desc"), icon: Store, available: false },
+  ];
+
   return (
-    <div className="min-h-screen bg-background pb-24 font-nunito">
-      <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex items-center gap-3">
-        <img src={logoVin} alt="Vyn" className="w-7 h-7 object-contain" />
-        <div>
-          <h1 className="text-xl font-bold text-foreground tracking-tight">{t("withdrawals.title")}</h1>
-          <p className="text-xs text-muted-foreground">{t("withdrawals.subtitle")}</p>
-        </div>
-      </header>
-
-      <main className="px-5 max-w-md mx-auto space-y-4">
-        {/* Balance Card — posición real con rendimiento incluido */}
-        <div className="card-elevated p-5 flex items-center justify-between animate-fade-up">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-0.5">{t("withdrawals.available_balance")}</p>
-            <p className="text-2xl font-extrabold text-foreground tabular-nums">{realBalance.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">USDC</span></p>
+    <AppShell title={t("withdrawals.title")} subtitle={t("withdrawals.subtitle")}>
+      <div className="max-w-[1100px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* Columna principal */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
+          {/* Balance + botón retirar */}
+          <div className="card-elevated p-5 flex items-center justify-between animate-fade-up">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-0.5">{t("withdrawals.available_balance")}</p>
+              <p className="text-2xl font-extrabold text-foreground tabular-nums">{realBalance.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">USDC</span></p>
+            </div>
+            <button onClick={() => setModalOpen(true)} disabled={realBalance <= 0} className="btn-emerald flex items-center gap-2 px-5 py-3 text-sm disabled:opacity-40">
+              <ArrowDownToLine className="w-4 h-4" /> {t("withdrawals.withdraw_button")}
+            </button>
           </div>
-          <button onClick={() => setModalOpen(true)} disabled={realBalance <= 0} className="btn-emerald flex items-center gap-2 px-5 py-3 text-sm disabled:opacity-40">
-            <ArrowDownToLine className="w-4 h-4" /> {t("withdrawals.withdraw_button")}
-          </button>
-        </div>
 
-        {/* Rendimiento real del vault DeFindex */}
-        <div className="card-elevated p-5 animate-fade-up" style={{ animationDelay: "80ms" }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-accent" />
+          {/* Selector de método de retiro */}
+          <div className="card-elevated p-5 md:p-6 animate-fade-up" style={{ animationDelay: "60ms" }}>
+            <h3 className="text-sm font-bold text-foreground mb-4">{t("withdrawals.method_step_title")}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {methods.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <div
+                    key={m.id}
+                    className={`relative rounded-2xl p-4 border-2 transition-all ${
+                      m.available
+                        ? "border-primary bg-primary/5 cursor-pointer hover:-translate-y-0.5"
+                        : "border-border bg-secondary/40 opacity-60 cursor-not-allowed"
+                    }`}
+                  >
+                    {m.available ? (
+                      <CircleCheck className="absolute top-3 right-3 w-4 h-4 text-primary" />
+                    ) : (
+                      <span className="absolute top-3 right-3 text-[8px] font-bold uppercase tracking-wider bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                        {t("withdrawals.coming_soon")}
+                      </span>
+                    )}
+                    <Icon className={`w-7 h-7 mb-3 ${m.available ? "text-primary" : "text-muted-foreground"}`} />
+                    <div className={`font-bold text-sm ${m.available ? "text-primary" : "text-foreground"}`}>{m.title}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground mt-0.5">{m.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-4 flex items-start gap-2">
+              <Globe className="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent" />
+              {t("withdrawals.roadmap_note")}
+            </p>
+          </div>
+
+          {/* Rendimiento real del vault DeFindex */}
+          <div className="card-elevated p-5 animate-fade-up" style={{ animationDelay: "120ms" }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">{t("withdrawals.yield_card_title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("withdrawals.yield_card_description")}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold text-foreground">{t("withdrawals.yield_card_title")}</p>
-                <p className="text-xs text-muted-foreground">{t("withdrawals.yield_card_description")}</p>
+              <div className="text-right">
+                <p className="text-sm font-bold text-emerald-500">+{yieldEarned.toFixed(2)} USDC</p>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1 justify-end">
+                  <Sparkles className="w-3 h-3 text-accent" /> {t("withdrawals.yield_label")}
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-bold text-emerald-500">+{yieldEarned.toFixed(2)} USDC</p>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1 justify-end">
-                <Sparkles className="w-3 h-3 text-accent" /> {t("withdrawals.yield_label")}
-              </p>
-            </div>
           </div>
         </div>
-      </main>
 
-      <BottomNav />
+        {/* Columna informativa */}
+        <div className="flex flex-col gap-5">
+          <div className="card-elevated p-6 animate-fade-up" style={{ animationDelay: "80ms" }}>
+            <h3 className="text-sm font-bold text-foreground mb-5">{t("withdrawals.info_title")}</h3>
+            <ul className="space-y-5">
+              <li className="flex gap-4">
+                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-foreground">{t("withdrawals.info_processing_title")}</h4>
+                  <p className="text-[11px] text-muted-foreground mt-1">{t("withdrawals.info_processing_desc")}</p>
+                </div>
+              </li>
+              <li className="flex gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-foreground">{t("withdrawals.info_network_title")}</h4>
+                  <p className="text-[11px] text-muted-foreground mt-1">{t("withdrawals.info_network_desc")}</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
       {/* MODAL DE RETIROS CON OPCIÓN MÁX */}
       {modalOpen && (
@@ -209,7 +271,7 @@ const Retiros = () => {
                 <p className="text-xs text-muted-foreground mb-6">{t("withdrawals.modal_withdraw_subtitle")}</p>
 
                 <div className="mb-4">
-                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 outline-none tabular-nums" />
+                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 outline-none tabular-nums text-foreground" />
                 </div>
 
                 <div className="flex gap-2 mb-6">
@@ -270,7 +332,7 @@ const Retiros = () => {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 };
 

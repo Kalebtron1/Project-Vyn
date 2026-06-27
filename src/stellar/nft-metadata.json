@@ -25,7 +25,7 @@
         "fields": {
           "level": "Nivel de reputación alcanzado (Bronce, Plata, Oro)",
           "deposits_count": "Número total de depósitos realizados",
-          "total_volume": "Volumen total ahorrado en XLM",
+          "total_volume": "Volumen total ahorrado en USDC",
           "issued_at": "Timestamp ISO 8601 del momento de emisión",
           "platform": "vyn"
         }

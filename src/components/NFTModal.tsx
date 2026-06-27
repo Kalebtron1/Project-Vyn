@@ -109,7 +109,7 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-muted-foreground">Volumen Protegido</span>
-              <span className="text-xs font-bold text-foreground">{totalVolume.toFixed(2)} XLM</span>
+              <span className="text-xs font-bold text-foreground">{totalVolume.toFixed(2)} USDC</span>
             </div>
             <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-2">
               <span className="text-xs text-muted-foreground">Propietario</span>

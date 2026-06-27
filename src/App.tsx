@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -108,6 +109,7 @@ const RequireOnboarding = ({ children }: { children: React.ReactNode }) =>
   isOnboarded() ? <>{children}</> : <Navigate to="/bienvenida" replace />;
 
 const App = () => (
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AppProvider>
@@ -136,6 +138,7 @@ const App = () => (
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

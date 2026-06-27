@@ -45,7 +45,7 @@ const Ayuda = () => {
         <h1 className="text-xl font-bold text-foreground tracking-tight">Centro de Ayuda</h1>
       </header>
 
-      <main className="px-5 max-w-md mx-auto space-y-5">
+      <main className="px-5 max-w-md md:max-w-2xl mx-auto space-y-5">
         {/* Contact Support Card */}
         <div className="card-elevated p-5 bg-primary/5 border border-primary/10 opacity-0 animate-fade-up">
           <div className="flex items-start gap-4">
