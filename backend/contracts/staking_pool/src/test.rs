@@ -101,6 +101,7 @@ impl MockVault {
 struct Setup {
     env: Env,
     staking: StakingContractClient<'static>,
+    admin: Address,
     token_addr: Address,
     token_admin: soroban_sdk::token::StellarAssetClient<'static>,
     vault_addr: Address,
@@ -118,18 +119,20 @@ fn setup() -> Setup {
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_addr);
 
     // Mock vault inicializado con ese token.
-    let vault_addr = env.register_contract(None, MockVault);
+    let vault_addr = env.register(MockVault, ());
     let vault = MockVaultClient::new(&env, &vault_addr);
     vault.init(&token_addr);
 
-    // Staking pool inicializado con token + vault.
-    let staking_addr = env.register_contract(None, StakingContract);
+    // Staking pool inicializado con admin + token + vault.
+    let admin = Address::generate(&env);
+    let staking_addr = env.register(StakingContract, ());
     let staking = StakingContractClient::new(&env, &staking_addr);
-    staking.init(&token_addr, &vault_addr);
+    staking.init(&admin, &token_addr, &vault_addr);
 
     Setup {
         env,
         staking,
+        admin,
         token_addr,
         token_admin,
         vault_addr,
@@ -140,8 +143,32 @@ fn setup() -> Setup {
 #[test]
 fn test_init_rejects_reinit() {
     let s = setup();
-    let res = s.staking.try_init(&s.token_addr, &s.vault_addr);
+    let res = s.staking.try_init(&s.admin, &s.token_addr, &s.vault_addr);
     assert_eq!(res, Err(Ok(Error::AlreadyInitialized)));
+}
+
+#[test]
+fn test_set_vault_migrates_vault() {
+    let s = setup();
+    assert_eq!(s.staking.get_vault(), s.vault_addr);
+
+    // Despliega un segundo vault y migra hacia él (sin redeploy del staking).
+    let new_vault_addr = s.env.register(MockVault, ());
+    MockVaultClient::new(&s.env, &new_vault_addr).init(&s.token_addr);
+
+    s.staking.set_vault(&new_vault_addr);
+    assert_eq!(s.staking.get_vault(), new_vault_addr);
+}
+
+#[test]
+fn test_set_vault_not_initialized() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let staking_addr = env.register(StakingContract, ());
+    let staking = StakingContractClient::new(&env, &staking_addr);
+    let some_vault = Address::generate(&env);
+    let res = staking.try_set_vault(&some_vault);
+    assert_eq!(res, Err(Ok(Error::NotInitialized)));
 }
 
 #[test]
@@ -235,7 +262,7 @@ fn test_withdraw_without_position() {
 fn test_not_initialized() {
     let env = Env::default();
     env.mock_all_auths();
-    let staking_addr = env.register_contract(None, StakingContract);
+    let staking_addr = env.register(StakingContract, ());
     let staking = StakingContractClient::new(&env, &staking_addr);
     let user = Address::generate(&env);
     let res = staking.try_deposit(&user, &100);

@@ -19,10 +19,13 @@
 # Usage:
 #   export ADMIN_SECRET="S..."
 #   export ADMIN_PUBLIC="G..."
-#   export TOKEN_ADDRESS="C..."   # SAC del USDC del vault (staking_pool)
-#   export VAULT_ADDRESS="CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN"
+#   export TOKEN_ADDRESS="CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU"   # SAC del USDC (GATALTGT)
+#   export VAULT_ADDRESS="CBPO3E7IFJRVP6MVNS4YJOVHEOEMNMUHV7AVAQ47IL53ERVCEJ6UIS76"     # vault DeFindex propio (fixed_apr)
 #   export TREASURY_ADDRESS="G..."
 #   bash scripts/deploy_contracts.sh
+#
+# El vault DeFindex propio se crea aparte vía el factory con la estrategia fixed_apr.
+# Ver scripts/create_vault.sh y scripts/harvest_keeper.sh.
 
 set -euo pipefail
 
@@ -91,9 +94,11 @@ stellar contract invoke \
   --source "$ADMIN_SECRET" \
   --network "$NETWORK" \
   -- init \
+  --admin "$ADMIN_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
   --vault "$VAULT_ADDRESS"
-echo "==> staking_pool initialized (token + DeFindex vault)"
+echo "==> staking_pool initialized (admin + token + DeFindex vault)"
+echo "    (el admin puede migrar el vault luego con: invoke -- set_vault --new_vault <C...>)"
 
 # ── 3. vinculo_lending ────────────────────────────────────────────────────────
 LENDING_CONTRACT_ID=$(deploy_contract "vinculo_lending")

@@ -63,9 +63,11 @@ pub enum Error {
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    /// Admin que puede migrar el vault (`set_vault`).
+    Admin,
     /// Token subyacente (USDC SAC).
     Token,
-    /// Dirección del vault DeFindex (configurable vía `init`).
+    /// Dirección del vault DeFindex (configurable vía `init` y `set_vault`).
     Vault,
     /// Shares (dfTokens) del usuario custodiadas por el contrato.
     Shares(Address),
@@ -82,15 +84,36 @@ pub struct StakingContract;
 
 #[contractimpl]
 impl StakingContract {
-    /// Inicializa el contrato con el token subyacente y el vault DeFindex.
+    /// Inicializa el contrato con el admin, el token subyacente y el vault DeFindex.
     /// Rechaza una segunda inicialización.
-    pub fn init(env: Env, token: Address, vault: Address) -> Result<(), Error> {
+    pub fn init(env: Env, admin: Address, token: Address, vault: Address) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Token) {
             return Err(Error::AlreadyInitialized);
         }
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
         Ok(())
+    }
+
+    /// Migra el vault DeFindex que respalda el apartado. Solo el admin.
+    /// Pensado para cuando la dirección del vault cambia (reset de testnet,
+    /// nueva estrategia) sin necesidad de redeploy ni nuevo contract id.
+    ///
+    /// AVISO: las `Shares(user)` existentes corresponden a los dfTokens del vault
+    /// ANTERIOR. Cámbialo solo cuando no haya posiciones vivas (o migra los
+    /// fondos por separado), o `get_position` consultaría shares de un vault que
+    /// ya no las reconoce.
+    pub fn set_vault(env: Env, new_vault: Address) -> Result<(), Error> {
+        let admin = Self::read_admin(&env)?;
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Vault, &new_vault);
+        Ok(())
+    }
+
+    /// Vault DeFindex actualmente configurado.
+    pub fn get_vault(env: Env) -> Result<Address, Error> {
+        Self::read_vault(&env)
     }
 
     /// Deposita `amount` del token en el vault y acredita las shares al usuario.
@@ -266,6 +289,13 @@ impl StakingContract {
     }
 
     // ─── Helpers internos ──────────────────────────────────────────────────────
+
+    fn read_admin(env: &Env) -> Result<Address, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)
+    }
 
     fn read_token(env: &Env) -> Result<Address, Error> {
         env.storage()
