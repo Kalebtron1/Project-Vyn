@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Fingerprint, CheckCircle2, AlertCircle, ExternalLink, Smartphone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { useWallet } from "@/hooks/useWallet";
 import confetti from "canvas-confetti";
-import { supabase } from "@/integrations/supabase/client";
 import {
   TransactionBuilder,
   Networks,
@@ -39,30 +39,9 @@ const DepositModal = ({ open, onClose }: Props) => {
   const [step, setStep] = useState<"input" | "signing" | "success" | "error">("input");
   const [errorMsg, setErrorMsg] = useState("");
   const [txHash, setTxHash] = useState("");
-  const [registeredWallet, setRegisteredWallet] = useState<string | null>(null);
-
-  // Fetch the wallet address registered in Supabase for security validation
-  useEffect(() => {
-    let mounted = true;
-    const fetchWallet = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("wallet_address")
-          .eq("user_id", user.id)
-          .single();
-        if (profile?.wallet_address && mounted) {
-          setRegisteredWallet(profile.wallet_address);
-        }
-      } catch (e) {
-        console.error("Error obteniendo wallet registrada:", e);
-      }
-    };
-    if (open) fetchWallet();
-    return () => { mounted = false; };
-  }, [open]);
+  // Wallet de la sesión (localStorage.vinculo_wallet) para validar que el depósito
+  // se firme con la cuenta con la que se inició sesión. Mismo patrón que CreditSection.
+  const { wallet: registeredWallet } = useWallet();
 
   if (!open) return null;
 
@@ -132,7 +111,7 @@ const DepositModal = ({ open, onClose }: Props) => {
 
       // 6. Submit
       const txToSubmit = TransactionBuilder.fromXDR(signResult.signedXdr, Networks.TESTNET);
-      const submitRes = await server.sendTransaction(txToSubmit) as any;
+      const submitRes = await server.sendTransaction(txToSubmit) as rpc.Api.SendTransactionResponse & { errorResultXdr?: string };
       const status = (submitRes.status ?? "").toUpperCase();
 
       if (status !== "PENDING" && status !== "SUCCESS") {
@@ -150,9 +129,10 @@ const DepositModal = ({ open, onClose }: Props) => {
       if (wasLocked && willUnlock) {
         setTimeout(() => setShowUnlockCelebration(true), 800);
       }
-    } catch (err: any) {
-      console.error("Deposit error:", err);
-      setErrorMsg(friendlyDepositError(err.message ?? "", !!err.cancelled));
+    } catch (err) {
+      const e = err as { message?: string; cancelled?: boolean };
+      console.error("Deposit error:", e);
+      setErrorMsg(friendlyDepositError(e.message ?? "", !!e.cancelled));
       setStep("error");
     }
   };
@@ -206,7 +186,7 @@ const DepositModal = ({ open, onClose }: Props) => {
                     amount === String(v) ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
                   }`}
                 >
-                  {v} {t("common.xlm")}
+                  {v} {t("common.usdc")}
                 </button>
               ))}
             </div>

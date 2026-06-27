@@ -2,14 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
-import { fetchContractBalance } from "../stellar/queries"; 
-import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity } from "lucide-react";
+import { fetchContractBalance } from "../stellar/queries";
+import { recordMint } from "../stellar/activity";
+import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import BottomNav from "@/components/BottomNav";
+import AppShell from "@/components/AppShell";
 import LanguageToggle from "@/components/LanguageToggle";
-import WalletSetupModal from "@/components/WalletSetupModal";
 import NFTModal from "@/components/NFTModal";
-import logoVin from "@/assets/logo-vin.png";
 import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
 
@@ -67,15 +66,14 @@ const Perfil = () => {
   const { wallet: walletAddress, shortWallet, disconnect } = useWallet();
 
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [showWalletModal, setShowWalletModal] = useState(false);
-  
+
   const [isMinting, setIsMinting] = useState(false);
   const [showNFTModal, setShowNFTModal] = useState(false);
   const [nftTxHash, setNftTxHash] = useState<string | undefined>();
   const [lastMintedLevel, setLastMintedLevel] = useState("Bronce");
 
   // --- ESTADOS ON-CHAIN ACTUALIZADOS ---
-  const [onChainXLM, setOnChainXLM] = useState<number | string>(0);
+  const [onChainUsdc, setOnChainUsdc] = useState<number | string>(0);
   const [availableCredit, setAvailableCredit] = useState(0); // <-- Nueva métrica real
   const [nftTier, setNftTier] = useState("Bronce");
   
@@ -105,7 +103,7 @@ const Perfil = () => {
 
         // --- A. OBTENER SALDO DIRECTO (Tu función Queries) ---
         const balance = await fetchContractBalance(walletAddress);
-        setOnChainXLM(balance);
+        setOnChainUsdc(balance);
         
         // --- B. OBTENER TIER Y LÍMITE DE CRÉDITO (Tu API de Vercel) ---
         try {
@@ -147,8 +145,8 @@ const Perfil = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             address: walletAddress, 
-            totalDeposited: Number(onChainXLM),
-            depositCount: Number(onChainXLM) > 0 ? 1 : 0 // Fallback mínimo
+            totalDeposited: Number(onChainUsdc),
+            depositCount: Number(onChainUsdc) > 0 ? 1 : 0 // Fallback mínimo
           }) 
         });
         const data = await response.json();
@@ -204,7 +202,7 @@ const Perfil = () => {
     };
     
     if (!loadingProfile) fetchRiskScore();
-  }, [onChainXLM, walletAddress, loadingProfile]);
+  }, [onChainUsdc, walletAddress, loadingProfile]);
 
   // Lógica de visualización de progreso alineada con ProgressRing:
   // avance dentro del rango del nivel actual hacia el siguiente nivel.
@@ -233,7 +231,7 @@ const Perfil = () => {
   const isMaxTier = currentTier >= 4;
   const eligibleTier = tierFromScore(riskData.score);
   const canMintUpgrade = eligibleTier > currentTier;
-  const mintButtonDisabled = isMinting || !walletAddress || Number(onChainXLM) === 0 || !canMintUpgrade;
+  const mintButtonDisabled = isMinting || !walletAddress || Number(onChainUsdc) === 0 || !canMintUpgrade;
 
   const tierNumberToName = (n: number) => {
     if (n === 4) return 'Platino';
@@ -247,7 +245,7 @@ const Perfil = () => {
   const mintButtonText = (() => {
     if (isMinting) return t("profile.mint_button_signing");
     if (!walletAddress) return t("profile.mint_button_no_wallet");
-    if (Number(onChainXLM) === 0) return t("profile.mint_button_no_balance");
+    if (Number(onChainUsdc) === 0) return t("profile.mint_button_no_balance");
     if (!canMintUpgrade && currentTier >= 4) return t("profile.mint_button_max_tier");
     if (!canMintUpgrade) return t("profile.mint_button_already_has", { tier: nftTier });
     return t("profile.mint_button_default");
@@ -266,19 +264,19 @@ const Perfil = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           userAddress: walletAddress, 
-          totalVolume: Number(onChainXLM),
-          depositCount: Number(onChainXLM) > 0 ? 1 : 0,
-          deposits: [{ amount: Number(onChainXLM), daysAgo: 0 }]
+          totalVolume: Number(onChainUsdc),
+          depositCount: Number(onChainUsdc) > 0 ? 1 : 0,
+          deposits: [{ amount: Number(onChainUsdc), daysAgo: 0 }]
         })
       });
       const raw = await response.text();
-      let data: any;
+      let data: { status?: string; tierName?: string; tier?: number; txHash?: string; message?: string } | null;
       try {
         data = raw ? JSON.parse(raw) : null;
       } catch {
         throw new Error(raw || "Respuesta no valida del servidor");
       }
-      if (response.ok && data.status === "minted") {
+      if (response.ok && data?.status === "minted") {
         const mintedLevel = data.tierName || nftTier;
         const mintedTier = Number(data.tier) || 0;
 
@@ -294,6 +292,9 @@ const Perfil = () => {
 
         setNftTxHash(data.txHash);
         setShowNFTModal(true);
+        // Registra el mint en el historial local (el mint lo firma el admin, por eso
+        // no aparece en las operaciones del usuario en Horizon).
+        if (data.txHash) recordMint(walletAddress, mintedLevel, data.txHash, new Date().toISOString());
         toast({
           title: t("profile.toast_minted_title"),
           description: t("profile.toast_minted_description", { level: mintedLevel }),
@@ -328,14 +329,10 @@ const Perfil = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-24 font-nunito">
-      <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-2 flex items-center gap-3">
-        <img src={logoVin} alt="Vin" className="w-7 h-7 object-contain" />
-        <h1 className="text-xl font-bold text-foreground tracking-tight">{t("profile.title")}</h1>
-        <div className="ml-auto"><LanguageToggle /></div>
-      </header>
-
-      <main className="px-5 max-w-md mx-auto space-y-4">
+    <AppShell title={t("profile.title")} subtitle={t("profile.subtitle")}>
+      <div className="max-w-[1100px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* Columna principal */}
+        <div className="lg:col-span-2 space-y-4">
         {/* Card de Identidad */}
         <div className="card-elevated p-6 flex items-center gap-4 animate-fade-up">
           <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-inner">
@@ -355,7 +352,7 @@ const Perfil = () => {
           <div className="card-elevated p-4 text-center">
             <Wallet className="w-4 h-4 text-muted-foreground mx-auto mb-1.5" />
             <p className="text-lg font-bold text-foreground tabular-nums">
-              {loadingProfile ? "..." : onChainXLM}
+              {loadingProfile ? "..." : onChainUsdc}
             </p>
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{t("profile.stat_savings")}</p>
           </div>
@@ -462,22 +459,65 @@ const Perfil = () => {
             </button>
           ))}
         </div>
+        </div>
 
-        <p className="text-center text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest pt-2 pb-6">{t("common.footer_version")}</p>
-      </main>
+        {/* Columna lateral: límites/nivel + preferencias */}
+        <div className="flex flex-col gap-5">
+          {/* Límites y nivel (datos reales) */}
+          <div className="card-elevated p-6 animate-fade-up">
+            <h3 className="text-sm font-bold text-foreground mb-5">{t("profile.limits_title")}</h3>
+
+            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5 mb-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">{t("home.nft_rank_label")}</span>
+                <span className="text-[9px] bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                  {t("credit.badge_onchain")}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Medal className="w-7 h-7 text-amber-500" />
+                <span className="text-2xl font-bold text-foreground">{loadingProfile ? "..." : nftTier}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("profile.stat_credit")}</p>
+                <p className="text-lg font-bold text-foreground tabular-nums">
+                  {loadingProfile ? "..." : availableCredit} <span className="text-[11px] text-muted-foreground font-normal">XLM</span>
+                </p>
+              </div>
+              <div className="w-24">
+                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-amber-500 transition-all duration-700" style={{ width: `${isMaxTier ? 100 : visualPercentage}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Preferencias: idioma (accesible también en móvil) */}
+          <div className="card-elevated p-6 flex items-center justify-between animate-fade-up" style={{ animationDelay: "100ms" }}>
+            <div className="flex items-center gap-3">
+              <Globe className="w-5 h-5 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Idioma / Language</span>
+            </div>
+            <LanguageToggle />
+          </div>
+        </div>
+      </div>
+
+      <p className="text-center text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest pt-6 pb-2">{t("common.footer_version")}</p>
 
       <NFTModal
         open={showNFTModal}
         onClose={() => setShowNFTModal(false)}
         walletAddress={walletAddress || ""}
         level={lastMintedLevel}
-        depositsCount={Number(onChainXLM) > 0 ? 1 : 0}
-        totalVolume={Number(onChainXLM)}
+        depositsCount={Number(onChainUsdc) > 0 ? 1 : 0}
+        totalVolume={Number(onChainUsdc)}
         txHash={nftTxHash}
       />
-
-      <BottomNav />
-    </div>
+    </AppShell>
   );
 };
 

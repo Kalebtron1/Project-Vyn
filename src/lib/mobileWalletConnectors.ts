@@ -15,6 +15,7 @@
 import albedo from "@albedo-link/intent";
 import * as FreighterAPI from "@stellar/freighter-api";
 import { Networks } from "@stellar/stellar-sdk";
+import * as sessionStore from "@/lib/sessionStore";
 
 // ─── Environment detection ────────────────────────────────────────────────────
 
@@ -163,11 +164,11 @@ async function signWithAlbedo(xdr: string): Promise<SignResult> {
 const PROVIDER_KEY = "vinculo_wallet_provider";
 
 export function saveProvider(provider: "freighter" | "albedo"): void {
-  localStorage.setItem(PROVIDER_KEY, provider);
+  sessionStore.setItem(PROVIDER_KEY, provider);
 }
 
 export function getSavedProvider(): "freighter" | "albedo" {
-  const saved = localStorage.getItem(PROVIDER_KEY);
+  const saved = sessionStore.getItem(PROVIDER_KEY);
   if (saved === "freighter" || saved === "albedo") return saved;
   // Default: if on mobile default to albedo, else freighter
   return isMobileBrowser() ? "albedo" : "freighter";

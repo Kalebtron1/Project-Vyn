@@ -3,32 +3,43 @@
 # Run from the repo root after setting the required environment variables.
 #
 # Required env vars:
-#   ADMIN_SECRET   — deployer secret key (S...)
-#   ADMIN_PUBLIC   — matching public key  (G...)
-#   TOKEN_ADDRESS  — SAC address of the underlying token (USDC en testnet) usado por
-#                    staking_pool y vinculo_lending. Debe ser el MISMO activo del vault.
-#   VAULT_ADDRESS  — dirección del vault DeFindex (USDC) que respalda el staking_pool
+#   ADMIN_SECRET          — deployer secret key (S...)
+#   ADMIN_PUBLIC          — matching public key  (G...)
+#   TOKEN_ADDRESS         — SAC del activo del staking_pool: el USDC del vault DeFindex.
+#                           Debe ser el MISMO activo del vault.
+#   VAULT_ADDRESS         — dirección del vault DeFindex (USDC) que respalda el staking_pool
+#   TREASURY_ADDRESS      — wallet (G...) dueña de las ganancias por interés del lending.
+#                           Única que podrá llamar `withdraw_interest`.
 #
 # Optional:
-#   NETWORK        — defaults to "testnet"
+#   LENDING_TOKEN_ADDRESS — SAC del activo que PRESTA vinculo_lending. Default: SAC nativo
+#                           de XLM en testnet. Es DISTINTO del USDC del staking_pool.
+#   NETWORK               — defaults to "testnet"
 #
 # Usage:
 #   export ADMIN_SECRET="S..."
 #   export ADMIN_PUBLIC="G..."
-#   export TOKEN_ADDRESS="C..."   # SAC del USDC del vault
-#   export VAULT_ADDRESS="CBMVK2JK6NTOT2O4HNQAIQFJY232BHKGLIMXDVQVHIIZKDACXDFZDWHN"
+#   export TOKEN_ADDRESS="CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU"   # SAC del USDC (GATALTGT)
+#   export VAULT_ADDRESS="CBPO3E7IFJRVP6MVNS4YJOVHEOEMNMUHV7AVAQ47IL53ERVCEJ6UIS76"     # vault DeFindex propio (fixed_apr)
+#   export TREASURY_ADDRESS="G..."
 #   bash scripts/deploy_contracts.sh
+#
+# El vault DeFindex propio se crea aparte vía el factory con la estrategia fixed_apr.
+# Ver scripts/create_vault.sh y scripts/harvest_keeper.sh.
 
 set -euo pipefail
 
 NETWORK="${NETWORK:-testnet}"
 CONTRACTS_DIR="backend/contracts"
+# SAC nativo de XLM en testnet (activo que presta vinculo_lending; distinto del USDC).
+LENDING_TOKEN_ADDRESS="${LENDING_TOKEN_ADDRESS:-CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC}"
 
 # ── Validate required vars ────────────────────────────────────────────────────
 : "${ADMIN_SECRET:?Set ADMIN_SECRET before running this script}"
 : "${ADMIN_PUBLIC:?Set ADMIN_PUBLIC before running this script}"
 : "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS before running this script}"
 : "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
+: "${TREASURY_ADDRESS:?Set TREASURY_ADDRESS (treasury wallet for loan interest) before running this script}"
 
 echo "==> Network: $NETWORK"
 echo "==> Admin:   $ADMIN_PUBLIC"
@@ -83,9 +94,11 @@ stellar contract invoke \
   --source "$ADMIN_SECRET" \
   --network "$NETWORK" \
   -- init \
+  --admin "$ADMIN_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
   --vault "$VAULT_ADDRESS"
-echo "==> staking_pool initialized (token + DeFindex vault)"
+echo "==> staking_pool initialized (admin + token + DeFindex vault)"
+echo "    (el admin puede migrar el vault luego con: invoke -- set_vault --new_vault <C...>)"
 
 # ── 3. vinculo_lending ────────────────────────────────────────────────────────
 LENDING_CONTRACT_ID=$(deploy_contract "vinculo_lending")
@@ -96,9 +109,10 @@ stellar contract invoke \
   --source "$ADMIN_SECRET" \
   --network "$NETWORK" \
   -- init_lending \
-  --token "$TOKEN_ADDRESS" \
-  --sbt "$SBT_CONTRACT_ID"
-echo "==> vinculo_lending initialized"
+  --token "$LENDING_TOKEN_ADDRESS" \
+  --sbt "$SBT_CONTRACT_ID" \
+  --treasury "$TREASURY_ADDRESS"
+echo "==> vinculo_lending initialized (XLM token + SBT + treasury)"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -107,5 +121,7 @@ echo " Deployment complete. Add to .env.local:"
 echo "════════════════════════════════════════"
 echo "NFT_CONTRACT_ID=$SBT_CONTRACT_ID"
 echo "VITE_LENDING_CONTRACT_ID=$LENDING_CONTRACT_ID"
-echo "# STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
+echo "VITE_STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
+echo "STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
+echo "VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS"
 echo "════════════════════════════════════════"

@@ -31,6 +31,7 @@ const es = {
     wallet_not_connected: "Wallet no conectada",
     stellar_testnet: "Stellar Testnet",
     xlm: "XLM",
+    usdc: "USDC",
     footer_version: "Vyn v1.0 · Stellar Network",
     footer_protocol: "Protocolo Vyn · Descentralizado",
     footer_stellar: "Stellar Protocol · 2026",
@@ -45,6 +46,17 @@ const es = {
     withdrawals: "Retiros",
     history: "Historial",
     profile: "Perfil",
+    treasury: "Tesorería",
+  },
+
+  // ─── App shell (sidebar / header) ────────────────────────────────────────────
+  shell: {
+    promo_title: "Aumenta tus límites",
+    promo_description: "Deposita USDC para subir de nivel y aumentar tus límites.",
+    promo_cta: "Depositar ahora",
+    wallet_mismatch_title: "Cambiaste de cuenta en Freighter",
+    wallet_mismatch_description:
+      "Tu sesión es con {{expected}} pero Freighter está en {{active}}. Vuelve a {{expected}} en la extensión para continuar tu sesión.",
   },
 
   // ─── Login / Auth ────────────────────────────────────────────────────────────
@@ -103,6 +115,19 @@ const es = {
       "Tu wallet no está disponible. Verifica que Freighter esté instalado y desbloqueado, o usa el botón de reconexión.",
     reconnect: "Reconectar",
     loading_wallet: "Cargando...",
+    welcome_title: "¡Bienvenido de nuevo!",
+    dashboard_subtitle: "Resumen de tu actividad en Stellar",
+    nft_card_title: "Nivel NFT",
+    nft_rank_label: "Rango actual",
+    nft_next_level: "Siguiente nivel: {{level}}",
+    nft_max_level: "Nivel máximo alcanzado",
+    yield_title: "Rendimiento real",
+    yield_subtitle: "Yield generado en el vault DeFindex",
+    period_title: "Resumen del periodo",
+    period_deposits: "Depósitos",
+    period_withdrawals: "Retiros",
+    period_volume_in: "Vol. ingresado",
+    period_volume_out: "Vol. retirado",
   },
 
   // ─── Balance card ────────────────────────────────────────────────────────────
@@ -143,13 +168,13 @@ const es = {
   // ─── Deposit modal ───────────────────────────────────────────────────────────
   deposit: {
     title: "Depositar Ganancias",
-    amount_label: "Monto (XLM)",
+    amount_label: "Monto (USDC)",
     confirm_button: "Confirmar con Freighter",
     signing_title: "Preparando contrato...",
     signing_description:
       "Calculando recursos y esperando confirmación en Freighter.",
     success_title: "¡Depósito exitoso! 🎉",
-    success_description: "Se depositaron {{amount}} XLM",
+    success_description: "Se depositaron {{amount}} USDC",
     view_explorer: "Ver en el explorador",
   },
 
@@ -161,6 +186,10 @@ const es = {
     empty_description_no_wallet: "Conecta Freighter para ver tu historial",
     empty_description_no_activity: "Realiza tu primer depósito para comenzar",
     tx_deposit: "Depósito a Vínculo",
+    tx_savings_withdraw: "Retiro de ahorro",
+    tx_loan: "Préstamo recibido",
+    tx_repay: "Pago de préstamo",
+    tx_mint: "SBT Nivel {{level}}",
     tx_withdrawal: "Retiro de Crédito",
   },
 
@@ -193,6 +222,15 @@ const es = {
     title: "Historial",
     subtitle: "Últimas 40 transacciones en Stellar",
     syncing: "Sincronizando blockchain...",
+    tab_all: "Todas",
+    tab_deposits: "Depósitos",
+    tab_withdrawals: "Retiros",
+    tab_loans: "Préstamos",
+    search_placeholder: "Buscar por tipo, monto o dirección...",
+    empty_filtered_title: "Sin resultados",
+    empty_filtered_description: "No hay transacciones que coincidan con este filtro.",
+    types_title: "Tipos de transacciones",
+    types_total: "Total",
     empty_title_no_wallet: "Wallet no conectada",
     empty_title_no_txs: "Sin transacciones",
     empty_description_no_wallet: "Conecta Freighter para ver tu historial",
@@ -209,7 +247,11 @@ const es = {
   // ─── Profile page ────────────────────────────────────────────────────────────
   profile: {
     title: "Perfil",
-    stat_savings: "XLM Ahorro",
+    subtitle: "Gestiona tu cuenta y preferencias",
+    limits_title: "Límites y nivel",
+    limit_daily: "Límite diario de retiro",
+    limit_monthly: "Límite mensual de retiro",
+    stat_savings: "USDC Ahorro",
     stat_credit: "Crédito XLM",
     stat_nft_level: "Nivel NFT",
     reputation_label: "Reputación Vínculo",
@@ -222,7 +264,7 @@ const es = {
     mint_button_default: "Evaluar y Subir de Nivel (NFT)",
     mint_button_signing: "Firmando en Soroban...",
     mint_button_no_wallet: "Conecta tu wallet para mintear",
-    mint_button_no_balance: "Deposita XLM para evaluar",
+    mint_button_no_balance: "Deposita USDC para evaluar",
     mint_button_max_tier: "Nivel maximo alcanzado",
     mint_button_already_has:
       "Ya tienes {{tier}}. Espera al siguiente nivel",
@@ -258,6 +300,20 @@ const es = {
     yield_card_title: "Rendimiento real",
     yield_card_description: "Tu apartado genera yield en el vault DeFindex",
     yield_label: "Generado",
+    method_step_title: "1. Selecciona el método de retiro",
+    method_usdc_title: "USDC",
+    method_usdc_desc: "Red Stellar",
+    method_spei_title: "SPEI / Transferencia MXN",
+    method_spei_desc: "A cuenta bancaria mexicana",
+    method_moneygram_title: "MoneyGram",
+    method_moneygram_desc: "Efectivo en locales",
+    coming_soon: "Próximamente",
+    roadmap_note: "El retiro a pesos (MXN) vía SPEI y MoneyGram en efectivo llegará pronto.",
+    info_title: "Información sobre retiros",
+    info_processing_title: "Tiempo de procesamiento",
+    info_processing_desc: "Usualmente de 5 a 15 minutos",
+    info_network_title: "Red utilizada",
+    info_network_desc: "Stellar Network (Testnet)",
     modal_withdraw_title: "Retirar fondos",
     modal_withdraw_subtitle: "Indica la cantidad que deseas enviar a tu wallet",
     modal_confirm_button: "Confirmar Retiro",
@@ -279,7 +335,7 @@ const es = {
     confirm_clear_all: "¿Borrar todas las notificaciones?",
     mock_deposit_title: "Depósito confirmado",
     mock_deposit_message:
-      "Tus 50 XLM ya están en el contrato inteligente generando reputación.",
+      "Tus 50 USDC ya están en el contrato inteligente generando reputación.",
     mock_deposit_time: "Hace 2 horas",
     mock_tier_title: "¡Nivel Plata disponible! 🥈",
     mock_tier_message:

@@ -63,9 +63,6 @@ Set these in **Vercel Dashboard → Project → Settings → Environment Variabl
 
 | Variable | Environment |
 |---|---|
-| `VITE_SUPABASE_PROJECT_ID` | Production, Preview |
-| `VITE_SUPABASE_URL` | Production, Preview |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Production, Preview |
 | `PUBLIC_KEY_ADMIN` | Production, Preview |
 | `SECRET_KEY_ADMIN` | Production, Preview |
 | `NFT_CONTRACT_ID` | Production, Preview |

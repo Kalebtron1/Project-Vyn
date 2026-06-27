@@ -1,6 +1,6 @@
 # Project Vyn
 
-Project Vyn is a Vite + React application backed by Supabase and Stellar/Soroban contract calls.
+Project Vyn is a Vite + React application backed by Stellar/Soroban contract calls. Authentication is wallet-based (Freighter/Albedo) — there is no separate auth backend.
 
 ## Getting Started
 
@@ -23,9 +23,9 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 
 ### What you need to replicate
 
-- A Supabase project or access to the shared test project.
+- A Stellar wallet (Freighter extension on desktop, or Albedo on mobile) to log in.
 - A Stellar testnet admin account for `SECRET_KEY_ADMIN` and `PUBLIC_KEY_ADMIN`.
-- The deployed Soroban contract IDs for `NFT_CONTRACT_ID` and `VITE_LENDING_CONTRACT_ID`.
+- The deployed Soroban contract IDs for `NFT_CONTRACT_ID`, `VITE_LENDING_CONTRACT_ID`, and the staking_pool (`VITE_STAKING_CONTRACT_ID` / `STAKING_CONTRACT_ID`).
 
 If you do not have those values yet, you can still read the code and work on UI or docs changes, but wallet, scoring, and minting flows will not work end to end.
 
@@ -33,26 +33,18 @@ If you do not have those values yet, you can still read the code and work on UI 
 
 The project uses the following variables:
 
-- `VITE_SUPABASE_PROJECT_ID`
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_KEY_ADMIN`
 - `SECRET_KEY_ADMIN`
 - `NFT_CONTRACT_ID`
 - `VITE_LENDING_CONTRACT_ID`
+- `VITE_STAKING_CONTRACT_ID` — staking_pool (DeFindex-backed) contract ID, read by the frontend (`src/stellar/contracts.ts`).
+- `STAKING_CONTRACT_ID` — same staking_pool contract ID, read by the serverless API functions (`api/get-user-data.js`, `api/evaluate-and-mint.js`). These two must hold the **same** contract ID; there is no hardcoded fallback, so the API returns a clear error if it is missing.
+- `VITE_TREASURY_ADDRESS` — treasury wallet (`G…` address). The only wallet that can see and operate the treasury panel (loan-interest profit). UI gating is cosmetic; the real authorization is enforced on-chain by `vinculo_lending.withdraw_interest`.
 - `PORT`
 
 `VERCEL_OIDC_TOKEN` is created by Vercel for deployment workflows and is not required for normal local development.
 
 ## How To Get Each Value
-
-### Supabase values
-
-1. Open your project in the Supabase dashboard.
-2. Go to Project Settings > General and copy the Project ID for `VITE_SUPABASE_PROJECT_ID`.
-3. Go to Project Settings > API.
-4. Copy the Project URL into `VITE_SUPABASE_URL`.
-5. Copy the `anon` / publishable key into `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
 ### Stellar admin keys
 
@@ -67,7 +59,9 @@ The project uses the following variables:
 2. Copy the contract ID from the deployment output into `NFT_CONTRACT_ID`.
 3. Deploy the lending contract to Soroban testnet.
 4. Copy that contract ID into `VITE_LENDING_CONTRACT_ID`.
-5. If you redeploy either contract, update the value in `.env.local`.
+5. Deploy the staking_pool contract (DeFindex-backed) and initialize it with its USDC token and vault.
+6. Copy that contract ID into **both** `VITE_STAKING_CONTRACT_ID` (frontend) and `STAKING_CONTRACT_ID` (API). They must match.
+7. If you redeploy any contract, update the value in `.env.local`.
 
 ### Local port
 
@@ -76,7 +70,7 @@ The project uses the following variables:
 
 ## Architecture
 
-Vyn has four layers: a React frontend, Vercel serverless API functions, Supabase for auth and profiles, and three Soroban smart contracts on Stellar Testnet.
+Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless API functions, and three Soroban smart contracts on Stellar Testnet.
 
 - [Architecture overview](docs/architecture.md) — layers, components, contracts, and where to make common changes.
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.

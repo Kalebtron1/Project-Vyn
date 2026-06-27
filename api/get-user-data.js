@@ -2,7 +2,9 @@ import { rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, 
 import { createLogger } from "./_logger.js";
 import { validateQuery, getUserDataQuerySchema, reportValidationError } from "./validation.js";
 
-const CONTRACT_ID = "CAIYBGMKSA5V5EYUFKGD5OCWWS5M34YC7MKUKE3BOQE2WZP3R7A4S2D2";
+// staking_pool respaldado por DeFindex. Se configura vía STAKING_CONTRACT_ID
+// (sin fallback hardcodeado; debe definirse en el entorno tras cada redeploy).
+const CONTRACT_ID = process.env.STAKING_CONTRACT_ID;
 const RPC_URL = "https://soroban-testnet.stellar.org";
 
 export default async function handler(req, res) {
@@ -10,6 +12,11 @@ export default async function handler(req, res) {
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método no permitido' });
+  }
+
+  if (!CONTRACT_ID) {
+    log.error("get_user_data.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
+    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
   }
 
   let address;

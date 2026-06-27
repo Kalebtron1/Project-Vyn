@@ -20,7 +20,7 @@ const mockNotifications: Notification[] = [
   {
     id: "1",
     title: "Depósito confirmado",
-    message: "Tus 50 XLM ya están en el contrato inteligente generando reputación.",
+    message: "Tus 50 USDC ya están en el contrato inteligente generando reputación.",
     time: "Hace 2 horas",
     read: false,
     type: "deposit",
@@ -108,7 +108,7 @@ const Notificaciones = () => {
         )}
       </header>
 
-      <main className="px-5 max-w-md mx-auto">
+      <main className="px-5 max-w-md md:max-w-2xl mx-auto">
         {/* Botón rápido para marcar como leído */}
         {notifications.length > 0 && unreadCount > 0 && (
           <button
