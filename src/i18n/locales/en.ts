@@ -52,14 +52,10 @@ const en = {
 
   login: {
     title: "Vínculo",
-    connect_freighter: "Connect with Freighter",
-    connect_albedo: "Connect with Albedo",
-    mobile_wallet_title: "Mobile wallet",
-    mobile_wallet_description:
-      "We'll use Albedo, a Stellar web wallet that works directly in your browser — no installation needed.",
-    freighter_not_detected_title: "Freighter not detected",
-    freighter_not_detected_description:
-      "To use Vínculo on desktop you need the Freighter extension, or you can connect with Albedo directly.",
+    connect_wallet: "Connect wallet",
+    wallet_picker_title: "Choose your Stellar wallet",
+    wallet_picker_description:
+      "Connect with Freighter, Albedo, xBull, Lobstr, Hana or Rabet. You'll pick your wallet in the next window.",
     errors: {
       cancelled: "Connection cancelled. You can try again whenever you're ready.",
       popup_blocked:

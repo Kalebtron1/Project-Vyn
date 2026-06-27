@@ -1,21 +1,30 @@
 /**
- * Mobile Wallet Connector Abstraction
+ * Conectores de wallet — capa de abstracción sobre Stellar Wallets Kit.
  *
- * Strategy:
- * - Desktop: Freighter browser extension (existing flow, unchanged)
- * - Mobile:  Albedo web wallet (works in any mobile browser via popup/redirect,
- *            already in package.json as @albedo-link/intent)
+ * Antes esta capa elegía manualmente entre Freighter (escritorio) y Albedo
+ * (móvil). Ahora delega en Stellar Wallets Kit (ver `stellarWalletsKit.ts`),
+ * que muestra un modal donde el usuario escoge su wallet (Freighter, Albedo,
+ * xBull, Lobstr, Hana, Rabet…) y unifica conexión y firma.
  *
- * Albedo is a standards-based Stellar web wallet that requires no app install
- * and supports both signing and public-key retrieval via a popup or redirect.
- * It is the safest non-lock-in choice: if a better mobile connector emerges
- * (e.g. WalletConnect for Stellar), only this file needs updating.
+ * La API pública (`connectWallet`, `signTransactionXdr`, `ConnectResult`,
+ * `SignResult`, `getSavedProvider`, `saveProvider`) se mantiene estable para no
+ * tocar los puntos de firma (DepositModal, CreditSection, Tesoreria, Retiros).
+ *
+ * Cambio de tipo: `provider` deja de ser `"freighter" | "albedo"` y pasa a ser
+ * el id de wallet del kit (string), ya que ahora puede ser cualquiera.
  */
 
-import albedo from "@albedo-link/intent";
 import * as FreighterAPI from "@stellar/freighter-api";
-import { Networks } from "@stellar/stellar-sdk";
+import {
+  getKit,
+  openWalletModal,
+  NETWORK_PASSPHRASE,
+  FREIGHTER_ID,
+} from "@/lib/stellarWalletsKit";
 import * as sessionStore from "@/lib/sessionStore";
+
+/** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
+export type WalletId = string;
 
 // ─── Environment detection ────────────────────────────────────────────────────
 
@@ -26,6 +35,7 @@ export function isMobileBrowser(): boolean {
   );
 }
 
+/** Sólo relevante para Freighter (detección de cambio de cuenta en escritorio). */
 export async function isFreighterAvailable(): Promise<boolean> {
   try {
     const result = await FreighterAPI.isConnected();
@@ -38,123 +48,75 @@ export async function isFreighterAvailable(): Promise<boolean> {
 // ─── Unified result types ─────────────────────────────────────────────────────
 
 export type ConnectResult =
-  | { ok: true; address: string; provider: "freighter" | "albedo" }
+  | { ok: true; address: string; provider: WalletId }
   | { ok: false; cancelled: boolean; error: string };
 
 export type SignResult =
   | { ok: true; signedXdr: string }
   | { ok: false; cancelled: boolean; error: string };
 
-// ─── Connect (get public key) ─────────────────────────────────────────────────
+function isCancellation(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("reject") ||
+    lower.includes("declined") ||
+    lower.includes("cancel") ||
+    lower.includes("closed") ||
+    lower.includes("dismiss")
+  );
+}
+
+// ─── Connect (open modal + get public key) ────────────────────────────────────
 
 export async function connectWallet(): Promise<ConnectResult> {
-  if (!isMobileBrowser() && await isFreighterAvailable()) {
-    return connectFreighter();
-  }
-  return connectAlbedo();
-}
-
-async function connectFreighter(): Promise<ConnectResult> {
   try {
-    const res = await FreighterAPI.requestAccess();
-    if (res.error) {
-      const cancelled =
-        res.error.includes("User declined") ||
-        res.error.includes("User rejected") ||
-        res.error.includes("rejected");
-      return { ok: false, cancelled, error: res.error };
-    }
-    if (!res.address) {
+    const { address, walletId } = await openWalletModal();
+    if (!address) {
       return { ok: false, cancelled: false, error: "No se obtuvo la dirección pública." };
     }
-    return { ok: true, address: res.address, provider: "freighter" };
-  } catch (err: any) {
-    return { ok: false, cancelled: false, error: err?.message ?? "Error desconocido con Freighter." };
-  }
-}
-
-async function connectAlbedo(): Promise<ConnectResult> {
-  try {
-    // albedo.publicKey() opens a popup/redirect and resolves with the user's
-    // public key once they approve. On mobile it uses a redirect flow.
-    const res = await albedo.publicKey({ require_existing: false });
-    if (!res.pubkey) {
-      return { ok: false, cancelled: false, error: "Albedo no devolvió una dirección." };
-    }
-    return { ok: true, address: res.pubkey, provider: "albedo" };
+    return { ok: true, address, provider: walletId };
   } catch (err: any) {
     const msg: string = err?.message ?? String(err);
-    // Albedo throws "Operation rejected" when the user closes the popup
-    const cancelled =
-      msg.toLowerCase().includes("rejected") ||
-      msg.toLowerCase().includes("cancel") ||
-      msg.toLowerCase().includes("closed");
+    const cancelled = isCancellation(msg);
     return {
       ok: false,
       cancelled,
       error: cancelled
         ? "Conexión cancelada. Puedes intentarlo de nuevo."
-        : `Error al conectar con Albedo: ${msg}`,
+        : `Error al conectar la wallet: ${msg}`,
     };
   }
 }
 
 // ─── Sign transaction XDR ─────────────────────────────────────────────────────
 
+const WALLET_KEY = "vinculo_wallet";
+
 export async function signTransactionXdr(
   xdr: string,
-  provider: "freighter" | "albedo"
+  provider: WalletId
 ): Promise<SignResult> {
-  if (provider === "freighter") {
-    return signWithFreighter(xdr);
-  }
-  return signWithAlbedo(xdr);
-}
-
-async function signWithFreighter(xdr: string): Promise<SignResult> {
   try {
-    const res = await FreighterAPI.signTransaction(xdr, {
-      networkPassphrase: Networks.TESTNET,
+    const kit = getKit();
+    kit.setWallet(provider);
+    const address = sessionStore.getItem(WALLET_KEY) ?? undefined;
+    const { signedTxXdr } = await kit.signTransaction(xdr, {
+      networkPassphrase: NETWORK_PASSPHRASE,
+      address,
     });
-    if (res.error) {
-      const cancelled =
-        res.error.includes("User declined") ||
-        res.error.includes("User rejected") ||
-        res.error.includes("rejected");
-      return { ok: false, cancelled, error: res.error };
+    if (!signedTxXdr) {
+      return { ok: false, cancelled: false, error: "La wallet no devolvió la transacción firmada." };
     }
-    if (!res.signedTxXdr) {
-      return { ok: false, cancelled: false, error: "Freighter no devolvió la transacción firmada." };
-    }
-    return { ok: true, signedXdr: res.signedTxXdr };
-  } catch (err: any) {
-    return { ok: false, cancelled: false, error: err?.message ?? "Error al firmar con Freighter." };
-  }
-}
-
-async function signWithAlbedo(xdr: string): Promise<SignResult> {
-  try {
-    const res = await albedo.tx({
-      xdr,
-      network: "testnet",
-      submit: false, // we submit ourselves for consistency
-    });
-    if (!res.signed_envelope_xdr) {
-      return { ok: false, cancelled: false, error: "Albedo no devolvió la transacción firmada." };
-    }
-    return { ok: true, signedXdr: res.signed_envelope_xdr };
+    return { ok: true, signedXdr: signedTxXdr };
   } catch (err: any) {
     const msg: string = err?.message ?? String(err);
-    const cancelled =
-      msg.toLowerCase().includes("rejected") ||
-      msg.toLowerCase().includes("cancel") ||
-      msg.toLowerCase().includes("closed");
+    const cancelled = isCancellation(msg);
     return {
       ok: false,
       cancelled,
       error: cancelled
         ? "Firma cancelada. Puedes intentarlo de nuevo."
-        : `Error al firmar con Albedo: ${msg}`,
+        : `Error al firmar la transacción: ${msg}`,
     };
   }
 }
@@ -163,13 +125,10 @@ async function signWithAlbedo(xdr: string): Promise<SignResult> {
 
 const PROVIDER_KEY = "vinculo_wallet_provider";
 
-export function saveProvider(provider: "freighter" | "albedo"): void {
+export function saveProvider(provider: WalletId): void {
   sessionStore.setItem(PROVIDER_KEY, provider);
 }
 
-export function getSavedProvider(): "freighter" | "albedo" {
-  const saved = sessionStore.getItem(PROVIDER_KEY);
-  if (saved === "freighter" || saved === "albedo") return saved;
-  // Default: if on mobile default to albedo, else freighter
-  return isMobileBrowser() ? "albedo" : "freighter";
+export function getSavedProvider(): WalletId {
+  return sessionStore.getItem(PROVIDER_KEY) ?? FREIGHTER_ID;
 }

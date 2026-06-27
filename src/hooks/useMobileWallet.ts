@@ -1,50 +1,31 @@
 /**
  * useMobileWallet
  *
- * Thin React hook that wraps the connector abstraction and exposes:
- *  - connect()        → get public key (auto-picks provider)
- *  - sign(xdr)        → sign a transaction XDR
- *  - isMobile         → boolean
- *  - provider         → "freighter" | "albedo"
- *  - isFreighterReady → boolean (extension detected)
+ * Hook React que envuelve la capa de conectores (Stellar Wallets Kit) y expone:
+ *  - connect()  → abre el modal multi-wallet y obtiene la dirección pública
+ *  - sign(xdr)  → firma una transacción XDR con la wallet seleccionada
+ *  - isMobile   → boolean
+ *  - provider   → id de wallet del kit (string)
+ *
+ * El nombre se conserva por compatibilidad con sus consumidores
+ * (DepositModal, Tesoreria, Retiros), aunque ya no es exclusivo de móvil.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   connectWallet,
   signTransactionXdr,
   isMobileBrowser,
-  isFreighterAvailable,
   getSavedProvider,
   saveProvider,
+  type WalletId,
   type ConnectResult,
   type SignResult,
 } from "@/lib/mobileWalletConnectors";
 
 export function useMobileWallet() {
   const [isMobile] = useState<boolean>(() => isMobileBrowser());
-  const [freighterReady, setFreighterReady] = useState<boolean>(false);
-  const [provider, setProvider] = useState<"freighter" | "albedo">(
-    getSavedProvider
-  );
-
-  // Poll for Freighter extension on desktop (it may inject after page load)
-  useEffect(() => {
-    if (isMobile) return;
-
-    const check = async () => {
-      const available = await isFreighterAvailable();
-      setFreighterReady(available);
-      // On desktop, Freighter wins whenever it is available.
-      if (available) {
-        setProvider("freighter");
-      }
-    };
-
-    void check();
-    const id = setInterval(check, 1000);
-    return () => clearInterval(id);
-  }, [isMobile]);
+  const [provider, setProvider] = useState<WalletId>(getSavedProvider);
 
   const connect = async (): Promise<ConnectResult> => {
     const result = await connectWallet();
@@ -62,7 +43,6 @@ export function useMobileWallet() {
   return {
     isMobile,
     provider,
-    isFreighterReady: freighterReady,
     connect,
     sign,
   };

@@ -62,14 +62,10 @@ const es = {
   // ─── Login / Auth ────────────────────────────────────────────────────────────
   login: {
     title: "Vínculo",
-    connect_freighter: "Conectar con Freighter",
-    connect_albedo: "Conectar con Albedo",
-    mobile_wallet_title: "Wallet móvil",
-    mobile_wallet_description:
-      "Usaremos Albedo, una wallet web de Stellar que funciona directamente en tu navegador — sin instalar nada.",
-    freighter_not_detected_title: "Freighter no detectado",
-    freighter_not_detected_description:
-      "Para usar Vínculo en escritorio necesitas la extensión Freighter, o puedes conectarte con Albedo directamente.",
+    connect_wallet: "Conectar wallet",
+    wallet_picker_title: "Elige tu wallet de Stellar",
+    wallet_picker_description:
+      "Conéctate con Freighter, Albedo, xBull, Lobstr, Hana o Rabet. Elegirás tu wallet en la siguiente ventana.",
     errors: {
       cancelled: "Conexión cancelada. Puedes intentarlo de nuevo cuando quieras.",
       popup_blocked:

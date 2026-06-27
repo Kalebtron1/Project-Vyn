@@ -21,12 +21,14 @@ import React, {
 import * as FreighterAPI from "@stellar/freighter-api";
 import * as sessionStore from "@/lib/sessionStore";
 import { isMobileBrowser } from "@/lib/mobileWalletConnectors";
+import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 
 export const WALLET_KEY = "vinculo_wallet";
 export const ONBOARDED_KEY = "vinculo_onboarded";
 export const PROVIDER_KEY = "vinculo_wallet_provider";
 
-export type WalletProvider = "freighter" | "albedo";
+/** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
+export type WalletProvider = string;
 
 interface WalletSessionValue {
   /** Dirección de la sesión (la wallet con la que se inició sesión). */
@@ -54,7 +56,7 @@ export const useWalletSession = (): WalletSessionValue => {
 };
 
 const normalizeProvider = (v: string | null): WalletProvider | null =>
-  v === "freighter" || v === "albedo" ? v : null;
+  v && v.trim() ? v : null;
 
 export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -105,9 +107,11 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   // Desktop + Freighter: detectar cambio de cuenta en la extensión.
+  // Sólo Freighter expone lectura silenciosa de la cuenta activa; para otras
+  // wallets del kit no hacemos polling de mismatch (igual que antes).
   useEffect(() => {
     if (!ready || !address) return;
-    if (provider !== "freighter") return;
+    if (provider !== FREIGHTER_ID) return;
     if (isMobileBrowser()) return;
 
     let cancelled = false;

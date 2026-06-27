@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { isFreighterAvailable, isMobileBrowser } from "@/lib/mobileWalletConnectors";
+import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useWalletSession } from "@/context/WalletSessionContext";
 
 export type WalletStatus = "loading" | "connected" | "disconnected" | "missing";
@@ -27,7 +28,7 @@ export const useWallet = () => {
 
   // Escritorio + Freighter: detectar que la extensión se quitó/bloqueó.
   useEffect(() => {
-    if (!address || provider !== "freighter" || isMobileBrowser()) {
+    if (!address || provider !== FREIGHTER_ID || isMobileBrowser()) {
       setFreighterGone(false);
       return;
     }
@@ -58,7 +59,7 @@ export const useWallet = () => {
     : "";
 
   const setWalletAddress = (newAddress: string) => {
-    setSession(newAddress, provider ?? (isMobileBrowser() ? "albedo" : "freighter"));
+    setSession(newAddress, provider ?? FREIGHTER_ID);
   };
 
   return {
