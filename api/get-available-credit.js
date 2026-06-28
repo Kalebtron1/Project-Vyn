@@ -1,6 +1,6 @@
 import { Keypair, rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
-import { createLogger } from "./_logger.js";
-import { validateBody, getAvailableCreditBodySchema, reportValidationError } from "./validation.js";
+import { createLogger } from "./_logger.mjs";
+import { validateBody, getAvailableCreditBodySchema, reportValidationError } from "./validation.mjs";
 
 const CREDIT_LIMITS = {
   0: { name: "Bronce", amount: 0 },

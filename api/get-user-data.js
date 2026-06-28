@@ -1,6 +1,6 @@
 import { rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
-import { createLogger } from "./_logger.js";
-import { validateQuery, getUserDataQuerySchema, reportValidationError } from "./validation.js";
+import { createLogger } from "./_logger.mjs";
+import { validateQuery, getUserDataQuerySchema, reportValidationError } from "./validation.mjs";
 
 // staking_pool respaldado por DeFindex. Se configura vía STAKING_CONTRACT_ID
 // (sin fallback hardcodeado; debe definirse en el entorno tras cada redeploy).

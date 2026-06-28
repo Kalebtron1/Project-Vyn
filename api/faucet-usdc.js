@@ -1,7 +1,7 @@
 // POST /api/faucet-usdc — envía una pequeña cantidad de USDC (testnet) a la wallet del
 // usuario para que pueda probar un depósito. Body: { address }. Requiere trustline USDC.
 import { sendFaucetUsdc } from "./_faucet-core.mjs";
-import { createLogger } from "./_logger.js";
+import { createLogger } from "./_logger.mjs";
 
 export default async function handler(req, res) {
   const log = createLogger(req);

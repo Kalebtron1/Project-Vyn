@@ -53,7 +53,7 @@ const Login = () => {
       setSession(w.stellarAddress, PRIVY_PROVIDER);
       setPrivyPending(false);
       // Mapping usuario ↔ blockchain wallet de BlindPay (atribución de depósitos SPEI).
-      void fetch("/api/onramp-init", {
+      void fetch("/api/onramp?action=init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: w.stellarAddress, email: w.email }),

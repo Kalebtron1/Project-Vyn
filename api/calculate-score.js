@@ -1,5 +1,5 @@
-import { createLogger } from "./_logger.js";
-import { validateBody, calculateScoreBodySchema, reportValidationError } from "./validation.js";
+import { createLogger } from "./_logger.mjs";
+import { validateBody, calculateScoreBodySchema, reportValidationError } from "./validation.mjs";
 import { computeFinancialReputation, getOnChainAggregates } from "./_scoring-core.mjs";
 
 // staking_pool respaldado por DeFindex. El score se calcula con los contadores

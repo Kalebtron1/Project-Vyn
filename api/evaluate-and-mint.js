@@ -9,8 +9,8 @@ import {
   scValToNative,
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
-import { createLogger } from "./_logger.js";
-import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.js";
+import { createLogger } from "./_logger.mjs";
+import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.mjs";
 
 dotenv.config();
 

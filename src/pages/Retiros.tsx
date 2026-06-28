@@ -176,7 +176,7 @@ const Retiros = () => {
     setQuoteLoading(true);
     const handle = setTimeout(async () => {
       try {
-        const r = await fetch("/api/blindpay-quote", {
+        const r = await fetch("/api/blindpay?action=quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ amount: val }),
@@ -216,7 +216,7 @@ const Retiros = () => {
 
     setSpeiSigningLabel(t("withdrawals.spei.sending"));
     try {
-      const r = await fetch("/api/blindpay-payout", {
+      const r = await fetch("/api/blindpay?action=payout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: val }),

@@ -3,8 +3,8 @@
  * SPEI y, tras confirmarse, el USDC sube a su saldo. La UI habla en MXN (lo que paga) y
  * USDC (lo que recibe); el USDB es un artefacto invisible de testnet (igual que el off-ramp).
  *
- * Flujo: input monto → cotización en vivo (/api/onramp-quote) → generar CLABE
- * (/api/onramp-payin) → polling (/api/onramp-status) hasta que BlindPay confirma el SPEI.
+ * Flujo: input monto → cotización en vivo (/api/onramp?action=quote) → generar CLABE
+ * (/api/onramp?action=payin) → polling (/api/onramp?action=status) hasta que BlindPay confirma el SPEI.
  * La liquidación on-chain (USDB→tesorería→USDC→vault) la hace el backend (Fase 6).
  */
 
@@ -56,7 +56,7 @@ const Depositar = () => {
     setQuoteLoading(true);
     const handle = setTimeout(async () => {
       try {
-        const r = await fetch("/api/onramp-quote", {
+        const r = await fetch("/api/onramp?action=quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress: address, amountMxn: val, email }),
@@ -85,7 +85,7 @@ const Depositar = () => {
     setError("");
     setStep("generating");
     try {
-      const r = await fetch("/api/onramp-payin", {
+      const r = await fetch("/api/onramp?action=payin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: address, amountMxn: val, email }),
@@ -105,7 +105,7 @@ const Depositar = () => {
     if (step !== "clabe" || !payin) return;
     const poll = async () => {
       try {
-        const r = await fetch(`/api/onramp-status?id=${encodeURIComponent(payin.payinId)}`);
+        const r = await fetch(`/api/onramp?action=status&id=${encodeURIComponent(payin.payinId)}`);
         const data = await r.json();
         const confirmed = r.ok && (data.status === "completed" || data?.payment?.step === "completed");
         if (confirmed) {
