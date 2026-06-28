@@ -49,11 +49,18 @@ const en = {
     copied: "Copied",
     you_send: "You send",
     waiting_payment: "Waiting for your transfer to be confirmed…",
+    simulate_cta: "Simulate SPEI transfer",
+    simulate_hint: "Demo only (sandbox): credits the deposit without waiting for the bank.",
+    settling: "Crediting your funds…",
+    settling_hint: "Converting your payment to USDC and moving it to your savings.",
     success_title: "Deposit confirmed!",
     success_desc: "We'll credit {{usd}} USDC to your account shortly.",
+    success_vault_desc: "{{usd}} USDC were deposited into your savings account.",
+    success_wallet_desc: "{{usd}} USDC were credited to your wallet. You can deposit them into savings anytime.",
     go_home: "Go home",
-    accesly_hint: "This deposit is designed for email-created accounts (Accesly). It also works with your connected wallet.",
-    min_error: "The minimum amount is 5 MXN.",
+    accesly_hint: "This deposit works with your email account or your connected wallet.",
+    min_hint: "Minimum: $10 USD (≈ 175 MXN). You enter pesos; you'll see how many USDC you receive.",
+    min_error: "The minimum is $10 USD (≈ 175 MXN).",
     no_wallet: "We couldn't find your account. Please sign in again.",
     generic_error: "We couldn't generate the deposit. Please try again.",
   },
@@ -67,9 +74,6 @@ const en = {
   },
 
   shell: {
-    promo_title: "Increase your limits",
-    promo_description: "Deposit USDC to level up and increase your limits.",
-    promo_cta: "Deposit now",
     wallet_mismatch_title: "You switched accounts in Freighter",
     wallet_mismatch_description:
       "Your session is with {{expected}} but Freighter is on {{active}}. Switch back to {{expected}} in the extension to continue your session.",
@@ -197,7 +201,7 @@ const en = {
         "You already have an active loan. You must pay it off before requesting a new one.",
       tier_insufficient:
         "Your current NFT does not enable this credit yet. Upgrade your level and try again.",
-      cancelled: "You cancelled the signature in Freighter. No withdrawal was made.",
+      cancelled: "You cancelled the signature. No withdrawal was made.",
       generic:
         "We couldn't process the withdrawal right now. Try again in a few seconds.",
       connect_wallet: "You must connect your wallet first",
@@ -207,12 +211,18 @@ const en = {
   },
 
   deposit: {
+    method_title: "Deposit",
+    method_subtitle: "Choose how you want to add funds.",
+    method_wallet_title: "With wallet",
+    method_wallet_desc: "Deposit USDC directly from your wallet.",
+    method_spei_title: "Via SPEI",
+    method_spei_desc: "Pay in pesos via bank transfer.",
     title: "Deposit Earnings",
     amount_label: "Amount (USDC)",
-    confirm_button: "Confirm with Freighter",
+    confirm_button: "Sign transaction",
     signing_title: "Preparing contract...",
     signing_description:
-      "Calculating resources and waiting for confirmation in Freighter.",
+      "Calculating resources and waiting for your signature.",
     success_title: "Deposit successful! 🎉",
     success_description: "{{amount}} USDC deposited",
     view_explorer: "View on explorer",
@@ -367,6 +377,8 @@ const en = {
     modal_success_title: "Withdrawal Successful",
     modal_error_title: "Couldn't complete",
     error_insufficient: "Insufficient balance",
+    min_hint_wallet: "Minimum: 1 USDC ($1 USD)",
+    min_wallet_error: "The minimum is 1 USDC ($1 USD)",
     spei: {
       kyc_title: "Identity verification",
       kyc_desc: "To withdraw to a Mexican bank account you need to verify your identity (KYC) once.",
@@ -377,6 +389,7 @@ const en = {
       clabe_locked_label: "Destination CLABE (predefined)",
       modal_title: "Withdraw to SPEI",
       modal_subtitle: "Your balance is withdrawn and arrives in pesos to your account",
+      min_hint: "Minimum: 10 USDC ($10 USD). You enter USDC; below you see how many pesos you receive.",
       quote_receive: "You'll receive",
       quote_rate: "Exchange rate",
       quote_fee: "Fee",
@@ -393,7 +406,7 @@ const en = {
       success_desc: "{{mxn}} MXN on its way to your bank account.",
       success_eta: "Arrives in minutes · via {{provider}}",
       error_title: "Couldn't send the SPEI",
-      min_error: "Minimum amount is 5 USDC",
+      min_error: "Minimum is 10 USDC (BlindPay requires ≥ $10 USD per SPEI transfer)",
     },
   },
 

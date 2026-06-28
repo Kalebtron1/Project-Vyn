@@ -91,6 +91,31 @@ export async function recordFaucetClaim(walletAddress) {
   });
 }
 
+// ── Liquidación on-ramp: una USDC por payin (idempotencia) ──────────────────
+const settlementMemory = new Set();
+
+/** ¿Este payin ya fue liquidado (USDC enviado al usuario)? */
+export async function hasSettledPayin(payinId) {
+  if (!isSupabaseConfigured()) return settlementMemory.has(payinId);
+  const rows = await sbFetch(
+    `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id&limit=1`
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/** Registra la liquidación de un payin (idempotente). */
+export async function recordSettlement(payinId, { walletAddress, amountUsd, hash }) {
+  if (!isSupabaseConfigured()) {
+    settlementMemory.add(payinId);
+    return;
+  }
+  await sbFetch(`onramp_settlements?on_conflict=payin_id`, {
+    method: "POST",
+    body: [{ payin_id: payinId, wallet_address: walletAddress, amount_usd: amountUsd, hash }],
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+  });
+}
+
 /** Inserta/actualiza el mapping (upsert por wallet_address). */
 export async function upsertOnrampUser(row) {
   if (!isSupabaseConfigured()) {

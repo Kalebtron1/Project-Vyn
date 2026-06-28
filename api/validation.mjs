@@ -46,14 +46,14 @@ export const getUserDataQuerySchema = z.object({
   address: nonEmptyString.describe("address es requerido"),
 });
 
-// Monto en USD (USDC desde la UI). Mínimo $5 = quote mínimo de BlindPay (500 centavos).
+// Monto en USD (USDC desde la UI). BlindPay exige ≥ $10 USD por transacción SPEI.
 const usdAmount = z.preprocess((value) => {
   if (typeof value === "string" && value.trim().length > 0) return Number(value);
   return value;
 }, z
   .number({ invalid_type_error: "debe ser un número" })
   .positive({ message: "debe ser mayor a 0" })
-  .min(5, { message: "el monto mínimo es 5 USDC" }));
+  .min(10, { message: "el monto mínimo es 10 USDC (BlindPay exige ≥ $10 USD)" }));
 
 export const blindpayQuoteBodySchema = z.object({
   amount: usdAmount,
@@ -63,14 +63,16 @@ export const blindpayStatusQuerySchema = z.object({
   id: nonEmptyString.describe("id del payout es requerido"),
 });
 
-// ── On-ramp (payin SPEI → USDC). El SENDER es MXN; mínimo 5 MXN = 500 centavos. ──
+// ── On-ramp (payin SPEI → USDC). El SENDER es MXN; BlindPay exige ≥ $10 USD,
+//    que a tipo de cambio actual ronda los 175 MXN. El front valida en USD con el
+//    tipo de cambio vivo; este es solo un piso de cordura (BlindPay es la fuente de verdad). ──
 const mxnAmount = z.preprocess((value) => {
   if (typeof value === "string" && value.trim().length > 0) return Number(value);
   return value;
 }, z
   .number({ invalid_type_error: "debe ser un número" })
   .positive({ message: "debe ser mayor a 0" })
-  .min(5, { message: "el monto mínimo es 5 MXN" }));
+  .min(175, { message: "el monto mínimo es ~175 MXN (BlindPay exige ≥ $10 USD)" }));
 
 // Dirección Stellar (cuenta clásica G…) de la wallet Accesly del usuario.
 const stellarAddress = z

@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, HelpCircle, LogOut, Wallet, Sparkles, AlertTriangle } from "lucide-react";
+import { Bell, HelpCircle, LogOut, Wallet, AlertTriangle } from "lucide-react";
 import logoVin from "@/assets/logo-vin.png";
 import BottomNav from "@/components/BottomNav";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -79,22 +79,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
           </button>
         </nav>
 
-        {/* Promo: subir límites depositando */}
-        <div className="p-4">
-          <div className="card-navy p-5 text-center relative overflow-hidden">
-            <Sparkles className="w-5 h-5 mx-auto mb-2 opacity-90" />
-            <h4 className="text-xs font-bold mb-1">{t("shell.promo_title")}</h4>
-            <p className="text-[10px] opacity-80 leading-relaxed mb-3">{t("shell.promo_description")}</p>
-            <button
-              onClick={() => navigate("/depositar")}
-              className="w-full bg-white/20 hover:bg-white/30 text-white text-xs font-bold py-2 rounded-xl transition-colors"
-            >
-              {t("shell.promo_cta")}
-            </button>
-          </div>
-        </div>
-
-        <div className="px-4 pb-5">
+        <div className="px-4 pb-5 mt-auto">
           <button
             onClick={disconnect}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold text-destructive hover:bg-destructive/10 transition-all"

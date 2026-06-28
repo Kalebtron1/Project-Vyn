@@ -9,6 +9,7 @@ import {
   createPayinQuote,
   quoteAndPayin,
   getPayin,
+  settlePayin,
   summarizePayinQuote,
   summarizePayin,
 } from "./_blindpay-onramp.mjs";
@@ -45,8 +46,26 @@ export default async function handler(req, res) {
     }
   }
 
+  // settle: liquidación on-chain (USDC al usuario) tras confirmarse el SPEI. POST { payinId }.
+  if (action === "settle") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
+    const payinId = req.body?.payinId;
+    const simulate = req.body?.simulate === true;
+    if (!payinId || typeof payinId !== "string") {
+      return res.status(400).json({ error: "payinId requerido" });
+    }
+    try {
+      const result = await settlePayin({ payinId, simulate });
+      log.info("onramp_settle.done", { payinId, simulate, ...result });
+      return res.status(200).json(result);
+    } catch (error) {
+      log.error("onramp_settle.error", { err: error.message });
+      return res.status(502).json({ error: error.message || "Error al liquidar el depósito" });
+    }
+  }
+
   if (action !== "init" && action !== "quote" && action !== "payin") {
-    return res.status(400).json({ error: "action inválida (usa init, quote, payin o status)" });
+    return res.status(400).json({ error: "action inválida (usa init, quote, payin, status o settle)" });
   }
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método no permitido" });

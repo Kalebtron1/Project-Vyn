@@ -150,7 +150,8 @@ const Retiros = () => {
 
   const handleWithdraw = async () => {
     const val = parseFloat(amount);
-    if (!val || val <= 0 || val > realBalance) { setErrorMsg(t("withdrawals.error_insufficient")); setStep("error"); return; }
+    if (!val || val < 1) { setErrorMsg(t("withdrawals.min_wallet_error")); setStep("error"); return; }
+    if (val > realBalance) { setErrorMsg(t("withdrawals.error_insufficient")); setStep("error"); return; }
     setStep("signing");
     const valStroops = BigInt(Math.floor(val * 10000000));
     const res = await submitContractCall("withdraw", [
@@ -171,7 +172,7 @@ const Retiros = () => {
   useEffect(() => {
     if (!speiOpen || speiStep !== "input") return;
     const val = parseFloat(speiAmount);
-    if (!val || val < 5 || val > realBalance) { setQuote(null); return; }
+    if (!val || val < 10) { setQuote(null); return; }
     let cancelled = false;
     setQuoteLoading(true);
     const handle = setTimeout(async () => {
@@ -196,8 +197,8 @@ const Retiros = () => {
   // Flujo SPEI: (1) withdraw REAL del vault (baja el saldo) → (2) payout USDB→SPEI en backend.
   const handleSpeiWithdraw = async () => {
     const val = parseFloat(speiAmount);
-    if (!val || val < 5 || val > realBalance) {
-      setSpeiError(val && val < 5 ? t("withdrawals.spei.min_error") : t("withdrawals.error_insufficient"));
+    if (!val || val < 10 || val > realBalance) {
+      setSpeiError(val && val < 10 ? t("withdrawals.spei.min_error") : t("withdrawals.error_insufficient"));
       setSpeiStep("error");
       return;
     }
@@ -470,6 +471,8 @@ const Retiros = () => {
                   </button>
                 </div>
 
+                <p className="text-[11px] text-muted-foreground mb-4">{t("withdrawals.min_hint_wallet")}</p>
+
                 {/* La tarifa de red real se muestra al firmar en la wallet */}
                 <div className="flex items-start gap-2 mb-5 rounded-xl bg-secondary/60 px-3 py-2.5">
                   <Fuel className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
@@ -480,7 +483,7 @@ const Retiros = () => {
 
                 <button
                   onClick={handleWithdraw}
-                  disabled={!parseFloat(amount) || parseFloat(amount) > realBalance}
+                  disabled={!parseFloat(amount) || parseFloat(amount) < 1 || parseFloat(amount) > realBalance}
                   className="btn-emerald w-full py-4 font-bold disabled:opacity-50 active:scale-95 transition-transform"
                 >
                   {t("withdrawals.modal_confirm_button")}
@@ -495,7 +498,7 @@ const Retiros = () => {
                   : <Fingerprint className="w-12 h-12 text-primary animate-pulse mb-4" />}
                 <p className="font-bold">{t("withdrawals.modal_signing")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Confirma en Freighter"}
+                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Firmar transacción"}
                 </p>
               </div>
             )}
@@ -572,7 +575,7 @@ const Retiros = () => {
                 <p className="text-xs text-muted-foreground mb-5">{t("withdrawals.spei.modal_subtitle")}</p>
 
                 <div className="mb-4">
-                  <input type="number" value={speiAmount} onChange={(e) => setSpeiAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 outline-none tabular-nums text-foreground" inputMode="decimal" min="5" />
+                  <input type="number" value={speiAmount} onChange={(e) => setSpeiAmount(e.target.value)} className="w-full text-3xl font-bold bg-secondary rounded-xl px-4 py-4 outline-none tabular-nums text-foreground" inputMode="decimal" min="10" />
                 </div>
 
                 <div className="flex gap-2 mb-4">
@@ -581,6 +584,8 @@ const Retiros = () => {
                   ))}
                   <button onClick={() => setSpeiAmount(realBalance.toString())} className="flex-1 py-2 rounded-lg bg-primary/10 text-primary text-sm font-bold border border-primary/20 hover:bg-primary/20 transition-colors">{t("withdrawals.modal_all_button")}</button>
                 </div>
+
+                <p className="text-[11px] text-muted-foreground mb-4">{t("withdrawals.spei.min_hint")}</p>
 
                 {/* CLABE destino — predefinida y bloqueada (simulación) */}
                 <div className="mb-4">

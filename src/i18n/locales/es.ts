@@ -56,11 +56,18 @@ const es = {
     copied: "Copiada",
     you_send: "Tú envías",
     waiting_payment: "Esperando la confirmación de tu transferencia…",
+    simulate_cta: "Simular envío SPEI",
+    simulate_hint: "Solo demo (sandbox): acredita el depósito sin esperar al banco.",
+    settling: "Acreditando tus fondos…",
+    settling_hint: "Convertimos tu pago a USDC y lo movemos a tu cuenta de ahorro.",
     success_title: "¡Depósito confirmado!",
     success_desc: "Acreditaremos {{usd}} USDC a tu cuenta en unos momentos.",
+    success_vault_desc: "{{usd}} USDC se depositaron en tu cuenta de ahorro.",
+    success_wallet_desc: "{{usd}} USDC se acreditaron a tu wallet. Puedes depositarlos a tu ahorro cuando quieras.",
     go_home: "Ir al inicio",
-    accesly_hint: "Este depósito está pensado para cuentas creadas con correo (Accesly). También funciona con tu wallet conectada.",
-    min_error: "El monto mínimo es 5 MXN.",
+    accesly_hint: "Este depósito funciona con tu cuenta de correo o con tu wallet conectada.",
+    min_hint: "Mínimo: $10 USD (≈ 175 MXN). Ingresas pesos; verás cuántos USDC recibes.",
+    min_error: "El monto mínimo es $10 USD (≈ 175 MXN).",
     no_wallet: "No encontramos tu cuenta. Vuelve a iniciar sesión.",
     generic_error: "No pudimos generar el depósito. Intenta de nuevo.",
   },
@@ -76,9 +83,6 @@ const es = {
 
   // ─── App shell (sidebar / header) ────────────────────────────────────────────
   shell: {
-    promo_title: "Aumenta tus límites",
-    promo_description: "Deposita USDC para subir de nivel y aumentar tus límites.",
-    promo_cta: "Depositar ahora",
     wallet_mismatch_title: "Cambiaste de cuenta en Freighter",
     wallet_mismatch_description:
       "Tu sesión es con {{expected}} pero Freighter está en {{active}}. Vuelve a {{expected}} en la extensión para continuar tu sesión.",
@@ -211,7 +215,7 @@ const es = {
         "Ya tienes un préstamo activo. Debes pagarlo antes de solicitar uno nuevo.",
       tier_insufficient:
         "Tu NFT actual no habilita este crédito todavía. Actualiza tu nivel e intenta nuevamente.",
-      cancelled: "Cancelaste la firma en Freighter. No se realizó el retiro.",
+      cancelled: "Cancelaste la firma. No se realizó el retiro.",
       generic:
         "No pudimos procesar el retiro ahora. Intenta nuevamente en unos segundos.",
       connect_wallet: "Debes conectar tu billetera primero",
@@ -222,12 +226,18 @@ const es = {
 
   // ─── Deposit modal ───────────────────────────────────────────────────────────
   deposit: {
+    method_title: "Depositar",
+    method_subtitle: "Elige cómo quieres agregar fondos.",
+    method_wallet_title: "Con wallet",
+    method_wallet_desc: "Deposita USDC directo desde tu wallet.",
+    method_spei_title: "Por SPEI",
+    method_spei_desc: "Paga en pesos por transferencia bancaria.",
     title: "Depositar Ganancias",
     amount_label: "Monto (USDC)",
-    confirm_button: "Confirmar con Freighter",
+    confirm_button: "Firmar transacción",
     signing_title: "Preparando contrato...",
     signing_description:
-      "Calculando recursos y esperando confirmación en Freighter.",
+      "Calculando recursos y esperando tu firma.",
     success_title: "¡Depósito exitoso! 🎉",
     success_description: "Se depositaron {{amount}} USDC",
     view_explorer: "Ver en el explorador",
@@ -397,6 +407,8 @@ const es = {
     modal_success_title: "Retiro Exitoso",
     modal_error_title: "No se pudo completar",
     error_insufficient: "Saldo insuficiente",
+    min_hint_wallet: "Mínimo: 1 USDC ($1 USD)",
+    min_wallet_error: "El monto mínimo es 1 USDC ($1 USD)",
     spei: {
       kyc_title: "Verificación de identidad",
       kyc_desc: "Para retirar a una cuenta bancaria mexicana necesitas verificar tu identidad (KYC) una sola vez.",
@@ -407,6 +419,7 @@ const es = {
       clabe_locked_label: "CLABE destino (predefinida)",
       modal_title: "Retirar a SPEI",
       modal_subtitle: "Tu saldo se retira y te llega en pesos a tu cuenta",
+      min_hint: "Mínimo: 10 USDC ($10 USD). Ingresas USDC; abajo ves cuántos pesos recibes.",
       quote_receive: "Recibirás",
       quote_rate: "Tipo de cambio",
       quote_fee: "Comisión",
@@ -423,7 +436,7 @@ const es = {
       success_desc: "{{mxn}} MXN en camino a tu cuenta bancaria.",
       success_eta: "Llega en minutos · vía {{provider}}",
       error_title: "No se pudo enviar el SPEI",
-      min_error: "El monto mínimo es 5 USDC",
+      min_error: "El monto mínimo es 10 USDC (BlindPay exige ≥ $10 USD por SPEI)",
     },
   },
 

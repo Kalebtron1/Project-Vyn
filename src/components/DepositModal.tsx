@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { X, Fingerprint, CheckCircle2, AlertCircle, ExternalLink, Smartphone } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { X, Fingerprint, CheckCircle2, AlertCircle, ExternalLink, Smartphone, Wallet, Building2, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
@@ -39,8 +40,9 @@ const DepositModal = ({ open, onClose }: Props) => {
   const { addDeposit, depositsCount, requiredDeposits, isUnlocked, setShowUnlockCelebration } = useApp();
   const { isMobile, provider, connect, sign } = useMobileWallet();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [amount, setAmount] = useState("50");
-  const [step, setStep] = useState<"input" | "signing" | "success" | "error">("input");
+  const [step, setStep] = useState<"method" | "input" | "signing" | "success" | "error">("method");
   const [errorMsg, setErrorMsg] = useState("");
   const [txHash, setTxHash] = useState("");
   // Wallet de la sesión (localStorage.vinculo_wallet) para validar que el depósito
@@ -50,7 +52,7 @@ const DepositModal = ({ open, onClose }: Props) => {
   if (!open) return null;
 
   const reset = () => {
-    setStep("input");
+    setStep("method");
     setAmount("50");
     setErrorMsg("");
     setTxHash("");
@@ -59,6 +61,12 @@ const DepositModal = ({ open, onClose }: Props) => {
   const handleClose = () => {
     reset();
     onClose();
+  };
+
+  // Ir al flujo SPEI (on-ramp en MXN). Cierra el modal y navega a la página dedicada.
+  const goToSpei = () => {
+    handleClose();
+    navigate("/depositar");
   };
 
   const handleConfirm = async () => {
@@ -167,6 +175,43 @@ const DepositModal = ({ open, onClose }: Props) => {
           >
             <X className="w-5 h-5 text-muted-foreground" />
           </button>
+        )}
+
+        {/* MÉTODO: elegir depositar con wallet o por SPEI */}
+        {step === "method" && (
+          <>
+            <h2 className="text-xl font-bold text-foreground mb-1">{t("deposit.method_title")}</h2>
+            <p className="text-sm text-muted-foreground mb-6">{t("deposit.method_subtitle")}</p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setStep("input")}
+                className="w-full flex items-center gap-4 rounded-2xl border border-border bg-secondary/40 hover:bg-secondary p-4 text-left active:scale-[0.98] transition-all"
+              >
+                <span className="w-11 h-11 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <Wallet className="w-5 h-5 text-emerald-500" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold text-foreground">{t("deposit.method_wallet_title")}</span>
+                  <span className="block text-xs text-muted-foreground">{t("deposit.method_wallet_desc")}</span>
+                </span>
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+              </button>
+
+              <button
+                onClick={goToSpei}
+                className="w-full flex items-center gap-4 rounded-2xl border border-border bg-secondary/40 hover:bg-secondary p-4 text-left active:scale-[0.98] transition-all"
+              >
+                <span className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Building2 className="w-5 h-5 text-primary" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold text-foreground">{t("deposit.method_spei_title")}</span>
+                  <span className="block text-xs text-muted-foreground">{t("deposit.method_spei_desc")}</span>
+                </span>
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+              </button>
+            </div>
+          </>
         )}
 
         {/* INPUT */}

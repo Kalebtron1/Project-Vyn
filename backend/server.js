@@ -53,6 +53,14 @@ function loadOnrampCore() {
   return onrampCorePromise;
 }
 
+// Dispatcher consolidado /api/onramp?action=init|quote|payin|status|settle (incluye Fase 6).
+// Reusa EXACTAMENTE el handler serverless api/onramp.js para no duplicar lógica en dev.
+let onrampHandlerPromise;
+function loadOnrampHandler() {
+  if (!onrampHandlerPromise) onrampHandlerPromise = import("../api/onramp.js");
+  return onrampHandlerPromise;
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -484,6 +492,17 @@ app.post("/api/faucet-usdc", async (req, res) => {
   } catch (error) {
     console.error("[DEBUG] 💥 /faucet-usdc:", error.message);
     return res.status(502).json({ error: error.message || "Error enviando USDC" });
+  }
+});
+
+// On-ramp consolidado (init/quote/payin/status/settle) — delega al handler serverless.
+app.all("/api/onramp", async (req, res) => {
+  try {
+    const mod = await loadOnrampHandler();
+    return mod.default(req, res);
+  } catch (error) {
+    console.error("[DEBUG] 💥 /api/onramp:", error.message);
+    return res.status(502).json({ error: error.message || "Error en on-ramp" });
   }
 });
 

@@ -288,7 +288,7 @@ const Tesoreria = () => {
                   : <Fingerprint className="w-12 h-12 text-primary animate-pulse mb-4" />}
                 <p className="font-bold">Firmando…</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Confirma en Freighter"}
+                  {isMobile ? `Aprueba en ${provider === "albedo" ? "Albedo" : "tu wallet"}` : "Firmar transacción"}
                 </p>
               </div>
             )}

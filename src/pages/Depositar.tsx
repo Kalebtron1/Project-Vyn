@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle,
+  ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle, Send,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePrivy } from "@privy-io/react-auth";
@@ -19,8 +19,11 @@ import confetti from "canvas-confetti";
 import AppShell from "@/components/AppShell";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER } from "@/lib/privyBridge";
+import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
+import { depositToVault } from "@/stellar/deposit";
 
-type Step = "input" | "generating" | "clabe" | "success" | "error";
+type Step = "input" | "generating" | "clabe" | "settling" | "success" | "error";
 
 interface Quote {
   receiverUsd: number;
@@ -34,8 +37,10 @@ const Depositar = () => {
   const navigate = useNavigate();
   const { address, provider } = useWalletSession();
   const { user } = usePrivy();
+  const { sign } = useMobileWallet();
   const email = user?.email?.address;
 
+  const [vaulted, setVaulted] = useState(false); // true si el USDC se depositó al vault
   const [amount, setAmount] = useState("500"); // MXN
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -44,6 +49,8 @@ const Depositar = () => {
   const [payin, setPayin] = useState<null | { payinId: string; clabe: string; receiverUsd: number }>(null);
   const [copied, setCopied] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Modo demo: el usuario fuerza el "envío SPEI" sin esperar la confirmación de BlindPay.
+  const simulateRef = useRef(false);
 
   const isPrivy = provider === PRIVY_PROVIDER;
 
@@ -80,7 +87,9 @@ const Depositar = () => {
 
   const generate = async () => {
     const val = parseFloat(amount);
-    if (!val || val < 5) { setError(t("deposit_spei.min_error")); setStep("error"); return; }
+    // BlindPay exige ≥ $10 USD. Validamos en USD usando el tipo de cambio del quote vivo.
+    const grossUsd = quote ? val / quote.rateMxnPerUsd : 0;
+    if (!val || grossUsd < 10) { setError(t("deposit_spei.min_error")); setStep("error"); return; }
     if (!address) { setError(t("deposit_spei.no_wallet")); setStep("error"); return; }
     setError("");
     setStep("generating");
@@ -109,8 +118,7 @@ const Depositar = () => {
         const data = await r.json();
         const confirmed = r.ok && (data.status === "completed" || data?.payment?.step === "completed");
         if (confirmed) {
-          setStep("success");
-          confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 } });
+          setStep("settling"); // SPEI confirmado → liquidar USDC + depositar al vault
         }
       } catch { /* reintenta en el próximo tick */ }
     };
@@ -118,6 +126,50 @@ const Depositar = () => {
     poll();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [step, payin]);
+
+  // Liquidación (Fase 6): SPEI confirmado → asegurar trustline USDC → backend acredita el
+  // USDC a la wallet del usuario → se deposita al vault firmando con la wallet (Privy).
+  useEffect(() => {
+    if (step !== "settling" || !payin || !address) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // 1) Trustline USDC (si falta) — la firma la wallet del usuario.
+        if (!(await hasUsdcTrustline(address))) {
+          const xdr = await buildUsdcTrustlineXdr(address);
+          const r = await sign(xdr);
+          if (!r.ok || !r.signedXdr) throw new Error(r.error || "No se pudo activar USDC");
+          await submitClassicXdr(r.signedXdr);
+        }
+        // 2) Liquidación: el backend envía el USDC equivalente a la wallet del usuario.
+        const sr = await fetch("/api/onramp?action=settle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payinId: payin.payinId, simulate: simulateRef.current }),
+        });
+        const sd = await sr.json();
+        if (!sr.ok) throw new Error(sd.error || "No se pudo acreditar el USDC");
+        const usd = (sd.amountUsd ?? payin.receiverUsd ?? 0) as number;
+        // 3) Auto-depósito al vault (firma la wallet del usuario). Best-effort: si falla,
+        //    el USDC queda en la wallet y el usuario puede depositar desde el flujo normal.
+        try {
+          if (usd > 0) {
+            await depositToVault(address, usd, sign);
+            if (!cancelled) setVaulted(true);
+          }
+        } catch { /* USDC en la wallet; depósito manual disponible */ }
+        if (cancelled) return;
+        setStep("success");
+        confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 } });
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setStep("error");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, payin, address, sign]);
 
   const copyClabe = async () => {
     if (!payin) return;
@@ -133,6 +185,14 @@ const Depositar = () => {
     setPayin(null);
     setError("");
     setQuote(null);
+    setVaulted(false);
+    simulateRef.current = false;
+  };
+
+  // Demo: forzar el "envío SPEI" sin esperar a BlindPay → dispara la liquidación on-chain.
+  const simulateSend = () => {
+    simulateRef.current = true;
+    setStep("settling");
   };
 
   return (
@@ -159,7 +219,7 @@ const Depositar = () => {
                 <input
                   type="number"
                   inputMode="decimal"
-                  min={5}
+                  min={200}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="flex-1 bg-transparent text-3xl font-black text-foreground outline-none"
@@ -168,6 +228,8 @@ const Depositar = () => {
                 <span className="text-lg font-bold text-muted-foreground">MXN</span>
               </div>
             </div>
+
+            <p className="text-[11px] text-muted-foreground -mt-1">{t("deposit_spei.min_hint")}</p>
 
             <div className="rounded-xl bg-secondary/60 p-4 text-sm">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-2">
@@ -241,6 +303,27 @@ const Depositar = () => {
               <Clock className="w-4 h-4 animate-pulse" />
               {t("deposit_spei.waiting_payment")}
             </div>
+
+            {/* Demo: simular el envío SPEI sin esperar la confirmación de BlindPay (sandbox). */}
+            <button
+              onClick={simulateSend}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 text-primary px-5 py-3 text-xs font-bold active:scale-[0.98] transition-all"
+            >
+              <Send className="w-4 h-4" />
+              {t("deposit_spei.simulate_cta")}
+            </button>
+            <p className="text-[10px] text-center text-muted-foreground -mt-2">
+              {t("deposit_spei.simulate_hint")}
+            </p>
+          </div>
+        )}
+
+        {/* ── Paso: liquidando (SPEI confirmado → USDC → vault) ── */}
+        {step === "settling" && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+            <p className="text-sm font-bold text-foreground">{t("deposit_spei.settling")}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{t("deposit_spei.settling_hint")}</p>
           </div>
         )}
 
@@ -252,7 +335,9 @@ const Depositar = () => {
             </div>
             <p className="text-lg font-black text-foreground">{t("deposit_spei.success_title")}</p>
             <p className="text-sm text-muted-foreground mt-1 mb-6">
-              {t("deposit_spei.success_desc", { usd: (payin?.receiverUsd ?? 0).toFixed(2) })}
+              {vaulted
+                ? t("deposit_spei.success_vault_desc", { usd: (payin?.receiverUsd ?? 0).toFixed(2) })
+                : t("deposit_spei.success_wallet_desc", { usd: (payin?.receiverUsd ?? 0).toFixed(2) })}
             </p>
             <button
               onClick={() => navigate("/")}
