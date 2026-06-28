@@ -14,6 +14,7 @@ import {
   rpc,
 } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
+import { getUsdcBalance } from "@/stellar/trustline";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,9 @@ function friendlyDepositError(msg: string, cancelled: boolean): string {
   if (msg.includes("Instala") || msg.includes("not installed")) return "Wallet no disponible. Conecta tu wallet primero.";
   if (msg.includes("Acceso denegado") || msg.includes("rejected")) return "Acceso denegado. Aprueba la solicitud en tu wallet.";
   if (msg.includes("insufficient")) return "Saldo insuficiente para cubrir la transacción y las comisiones.";
+  // Token Soroban: balance fuera de rango = no alcanza el USDC para ese depósito.
+  if (msg.includes("#10") || msg.includes("not within the allowed range") || msg.includes("balance is not within"))
+    return "Saldo USDC insuficiente para ese depósito. Revisa tu saldo disponible.";
   return msg || "Error al procesar el depósito. Intenta de nuevo.";
 }
 
@@ -66,17 +70,27 @@ const DepositModal = ({ open, onClose }: Props) => {
 
     try {
       const server = new rpc.Server(RPC_URL);
-      // 1. Ensure we have a connected wallet address
-      const connectResult = await connect();
-      if (!connectResult.ok) {
-        throw Object.assign(new Error(connectResult.error), { cancelled: connectResult.cancelled });
+      // 1. Usar la wallet de la sesión; conectar SOLO si no hay ninguna.
+      //    Evita reabrir el modal de selección de wallet en cada depósito.
+      let sourcePublicKey = registeredWallet;
+      if (!sourcePublicKey) {
+        const connectResult = await connect();
+        if (!connectResult.ok) {
+          throw Object.assign(new Error(connectResult.error), { cancelled: connectResult.cancelled });
+        }
+        sourcePublicKey = connectResult.address;
       }
-      const sourcePublicKey = connectResult.address;
 
       // 2. Security: validate against registered wallet
       if (registeredWallet && sourcePublicKey !== registeredWallet) {
         const short = `${registeredWallet.substring(0, 4)}...${registeredWallet.substring(52)}`;
         throw new Error(`Cuenta incorrecta. Usa tu cuenta registrada: ${short}`);
+      }
+
+      // 2b. Pre-chequeo de saldo USDC → error claro en vez del Error(Contract,#10).
+      const usdcBal = await getUsdcBalance(sourcePublicKey);
+      if (val > usdcBal) {
+        throw new Error(`Saldo USDC insuficiente. Tienes ${usdcBal.toFixed(2)} USDC disponibles.`);
       }
 
       // 3. Fetch account and build transaction

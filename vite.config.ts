@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // Permite que los popups OAuth (Accesly login con Google/Apple) conserven la
+    // relación con la ventana que los abre, para que el postMessage de éxito llegue
+    // de vuelta. Sin esto, COOP corta el window.opener y el login no completa.
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    },
     hmr: {
       overlay: false,
     },
@@ -20,6 +26,11 @@ export default defineConfig(({ mode }) => ({
         rewrite: (path) => path.replace(/^\/api/, "/api")
       }
     }
+  },
+  preview: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

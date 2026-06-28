@@ -4,9 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "@/stellar/queries";
 import { getCurrentLevel, getNextLevel } from "@/components/ProgressRing";
-
-// Mapeo tier on-chain → score base (mismo que ProgressRing/Perfil).
-const TIER_TO_SCORE: Record<number, number> = { 0: 0, 1: 50, 2: 150, 3: 500, 4: 1000 };
+import { tierLabel } from "@/lib/tier";
 
 /** Tarjeta dedicada del nivel NFT/SBT con progreso al siguiente nivel (dato real). */
 const NftLevelCard = () => {
@@ -44,7 +42,8 @@ const NftLevelCard = () => {
         const dynamicScore = Number(scoreData?.score) || 0;
         if (!mounted) return;
         setTier(onChainTier);
-        setScore(Math.max(TIER_TO_SCORE[onChainTier] || 0, dynamicScore));
+        // Score en vivo: sube al depositar, baja al retirar (sin piso por tier).
+        setScore(dynamicScore);
       } catch (error) {
         console.error("Error cargando nivel NFT:", error);
       } finally {
@@ -86,7 +85,7 @@ const NftLevelCard = () => {
         </div>
         <div>
           <p className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">{t("home.nft_rank_label")}</p>
-          <h3 className="text-xl font-bold text-foreground">{current.name} {current.emoji}</h3>
+          <h3 className="text-xl font-bold text-foreground">{tierLabel(t, current.tier)} {current.emoji}</h3>
         </div>
       </div>
 
@@ -96,7 +95,7 @@ const NftLevelCard = () => {
       <div className="flex justify-between text-[11px] font-bold text-muted-foreground">
         {next ? (
           <>
-            <span>{t("home.nft_next_level", { level: next.name })}</span>
+            <span>{t("home.nft_next_level", { level: tierLabel(t, next.tier) })}</span>
             <span className="tabular-nums">{Math.round(score)} / {next.minScore} pts</span>
           </>
         ) : (

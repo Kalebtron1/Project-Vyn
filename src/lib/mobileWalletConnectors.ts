@@ -22,6 +22,7 @@ import {
   FREIGHTER_ID,
 } from "@/lib/stellarWalletsKit";
 import * as sessionStore from "@/lib/sessionStore";
+import { PRIVY_PROVIDER, privySign } from "@/lib/privyBridge";
 
 /** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
 export type WalletId = string;
@@ -97,6 +98,13 @@ export async function signTransactionXdr(
   provider: WalletId
 ): Promise<SignResult> {
   try {
+    // Sesión Privy (login con correo): la firma la maneja el SDK vía el puente,
+    // no el kit multi-wallet.
+    if (provider === PRIVY_PROVIDER) {
+      const signedXdr = await privySign(xdr);
+      return { ok: true, signedXdr };
+    }
+
     const kit = getKit();
     kit.setWallet(provider);
     const address = sessionStore.getItem(WALLET_KEY) ?? undefined;

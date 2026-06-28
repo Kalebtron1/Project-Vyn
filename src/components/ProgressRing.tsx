@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "../stellar/queries";
-import { Shield, Star, Crown, Gem, Trophy, Activity, Loader2, ArrowRight, RefreshCw } from "lucide-react";
+import { tierLabel } from "@/lib/tier";
+import { Shield, Star, Crown, Gem, Trophy, Activity, Loader2, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Level {
   name: string;
+  tier: number;
   emoji: string;
   icon: React.ElementType;
   minScore: number;
@@ -13,13 +16,14 @@ interface Level {
   creditAmount?: number;
 }
 
-// Niveles sincronizados con tu Backend (api/get-available-credit)
+// Niveles sincronizados con tu Backend (api/get-available-credit).
+// `name` queda como identidad interna; el nombre visible se traduce vía tierLabel(t, tier).
 const LEVELS: Level[] = [
-  { name: "Bronce", emoji: "🥉", icon: Shield, minScore: 0, color: "var(--sky)" },
-  { name: "Plata", emoji: "🥈", icon: Star, minScore: 50, color: "var(--sky)" },
-  { name: "Oro", emoji: "🥇", icon: Crown, minScore: 150, color: "var(--deep)" },
-  { name: "Diamante", emoji: "💎", icon: Gem, minScore: 500, color: "var(--grape)" },
-  { name: "Platino", emoji: "🏆", icon: Trophy, minScore: 1000, color: "var(--grape)" },
+  { name: "Bronce", tier: 0, emoji: "🥉", icon: Shield, minScore: 0, color: "var(--sky)" },
+  { name: "Plata", tier: 1, emoji: "🥈", icon: Star, minScore: 50, color: "var(--sky)" },
+  { name: "Oro", tier: 2, emoji: "🥇", icon: Crown, minScore: 150, color: "var(--deep)" },
+  { name: "Diamante", tier: 3, emoji: "💎", icon: Gem, minScore: 500, color: "var(--grape)" },
+  { name: "Platino", tier: 4, emoji: "🏆", icon: Trophy, minScore: 1000, color: "var(--grape)" },
 ];
 
 export function getCurrentLevel(score: number): Level {
@@ -39,12 +43,12 @@ export function getNextLevel(score: number): Level | null {
 
 const ProgressRing = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { wallet: walletAddress } = useWallet();
 
   const [riskScore, setRiskScore] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [onChainTier, setOnChainTier] = useState(0); 
+  const [onChainTier, setOnChainTier] = useState(0);
   const [needsMinting, setNeedsMinting] = useState(false);
   const [levelToMint, setLevelToMint] = useState<Level | null>(null);
   const [historyCount, setHistoryCount] = useState(0);
@@ -97,15 +101,12 @@ const ProgressRing = () => {
       setMinHistoryRequired(minRequired);
       setIsHistoryEligible(eligibleByHistory);
 
-      // Mapeo de seguridad para que la barra nunca baje si ya tiene un NFT
-      const tierToScore: Record<number, number> = { 0: 0, 1: 50, 2: 150, 3: 500, 4: 1000 };
+      // El Ring Score refleja el score dinámico en vivo (sube al depositar, baja al
+      // retirar). El tier on-chain solo gobierna las medallas de niveles alcanzados.
       const blockchainTier = onChainData.tier || 0;
-      const baseScoreFromNFT = tierToScore[blockchainTier] || 0;
       const dynamicScore = scoreData.score || 0;
 
-      const finalScore = Math.max(baseScoreFromNFT, dynamicScore);
-      
-      setRiskScore(finalScore);
+      setRiskScore(dynamicScore);
       setOnChainTier(blockchainTier);
 
       // Verificamos si merece un ascenso solo cuando hay historial suficiente.
@@ -134,16 +135,6 @@ const ProgressRing = () => {
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  const handleManualRefresh = async () => {
-    if (!walletAddress || isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await refreshData(false);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
   const current = getCurrentLevel(riskScore);
   const next = getNextLevel(riskScore);
 
@@ -171,8 +162,8 @@ const ProgressRing = () => {
     return (
       <div className="card-elevated p-5 flex flex-col items-center justify-center min-h-[140px] text-center gap-2 opacity-70">
         <Shield className="w-8 h-8 text-muted-foreground mb-1" />
-        <p className="text-sm font-bold text-foreground">Reputación Vínculo</p>
-        <p className="text-xs text-muted-foreground">Conecta tu wallet para ver tu nivel</p>
+        <p className="text-sm font-bold text-foreground">{t("home.ring_no_wallet_title")}</p>
+        <p className="text-xs text-muted-foreground">{t("home.ring_no_wallet_desc")}</p>
       </div>
     );
   }
@@ -181,16 +172,6 @@ const ProgressRing = () => {
     <div className="card-elevated p-5 transition-all duration-500 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-bold tracking-wide uppercase text-muted-foreground">Ring Score</span>
-        <button
-          type="button"
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-60"
-          title="Actualizar Ring Score"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-          {isRefreshing ? "Actualizando..." : "Refresh"}
-        </button>
       </div>
 
       <div className="flex items-center gap-5">
@@ -208,7 +189,7 @@ const ProgressRing = () => {
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-lg font-extrabold text-foreground tabular-nums leading-none">
-              {isHistoryEligible ? `${Math.round(displayProgress * 100)}%` : "Bloq"}
+              {isHistoryEligible ? `${Math.round(displayProgress * 100)}%` : t("home.ring_locked_short")}
             </span>
           </div>
         </div>
@@ -216,27 +197,31 @@ const ProgressRing = () => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <Icon className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-bold tracking-wide uppercase text-muted-foreground">Reputación</span>
+            <span className="text-xs font-bold tracking-wide uppercase text-muted-foreground">{t("home.ring_reputation_label")}</span>
           </div>
-          
+
           <p className="text-base font-bold text-foreground text-balance">
             {isHistoryEligible
               ? (next
-                ? `Camino al Nivel ${next.name} ${next.emoji}`
-                : `¡Nivel ${current.name} Máximo! ${current.emoji}`)
-              : "Sigue usando Vyn para desbloquear tu reputación"}
+                ? t("home.ring_path_to_level", { level: tierLabel(t, next.tier), emoji: next.emoji })
+                : t("home.ring_max_level_named", { level: tierLabel(t, current.tier), emoji: current.emoji }))
+              : t("home.ring_locked_desc")}
           </p>
-          
+
           <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground font-medium">
             <Activity className="w-3.5 h-3.5 text-primary" />
             {isHistoryEligible ? (
-              <>
-                Trust Score: <span className="font-bold text-primary">{riskScore.toFixed(1)} pts</span>
-              </>
+              <Trans
+                i18nKey="home.ring_trust_score"
+                values={{ score: riskScore.toFixed(1) }}
+                components={{ b: <span className="font-bold text-primary" /> }}
+              />
             ) : (
-              <>
-                Historial: <span className="font-bold text-primary">{historyCount}/{minHistoryRequired} transacciones</span>
-              </>
+              <Trans
+                i18nKey="home.ring_history"
+                values={{ count: historyCount, min: minHistoryRequired }}
+                components={{ b: <span className="font-bold text-primary" /> }}
+              />
             )}
           </div>
 
@@ -266,7 +251,7 @@ const ProgressRing = () => {
           >
             <div className="flex items-center gap-2">
               <span className="text-base">{levelToMint.emoji}</span>
-              <span>Reclamar NFT {levelToMint.name} disponible</span>
+              <span>{t("home.ring_claim_nft", { level: tierLabel(t, levelToMint.tier) })}</span>
             </div>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>

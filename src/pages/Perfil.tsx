@@ -4,25 +4,23 @@ import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "../stellar/queries";
 import { recordMint } from "../stellar/activity";
-import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe } from "lucide-react";
+import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useExportWallet } from "@privy-io/react-auth/extended-chains";
 import AppShell from "@/components/AppShell";
 import LanguageToggle from "@/components/LanguageToggle";
 import NFTModal from "@/components/NFTModal";
 import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
+import { tierLabel, tierNumberFromName } from "@/lib/tier";
+import { useWalletSession } from "@/context/WalletSessionContext";
+import { PRIVY_PROVIDER } from "@/lib/privyBridge";
+import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
 
 const Perfil = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  const tierToNumber = (tierName: string) => {
-    if (tierName === "Plata") return 1;
-    if (tierName === "Oro") return 2;
-    if (tierName === "Diamante") return 3;
-    if (tierName === "Platino") return 4;
-    return 0;
-  };
 
   const tierFromScore = (score: number) => {
     if (score >= 1000) return 4;
@@ -64,6 +62,82 @@ const Perfil = () => {
 
   const { creditWithdrawn } = useApp();
   const { wallet: walletAddress, shortWallet, disconnect } = useWallet();
+  const { provider } = useWalletSession();
+  const { exportWallet } = useExportWallet();
+  const { sign } = useMobileWallet();
+  const isPrivy = provider === PRIVY_PROVIDER;
+  const [activatingUsdc, setActivatingUsdc] = useState(false);
+  // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"): bloquea el botón
+  // para no re-activar ni volver a pedir faucet. Persiste entre recargas (se lee on-chain).
+  const [usdcActivated, setUsdcActivated] = useState(false);
+
+  useEffect(() => {
+    if (!isPrivy || !walletAddress) return;
+    let cancelled = false;
+    hasUsdcTrustline(walletAddress)
+      .then((has) => { if (!cancelled) setUsdcActivated(has); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isPrivy, walletAddress]);
+
+  // Activa la trustline USDC firmando con la wallet del usuario (primera prueba real de
+  // la firma de Privy). Necesario para que la wallet pueda recibir/depositar USDC.
+  const activateUsdc = async () => {
+    if (!walletAddress) return;
+    setActivatingUsdc(true);
+    try {
+      // 1) Trustline USDC (la firma tu wallet). Si ya existe, se omite.
+      const already = await hasUsdcTrustline(walletAddress);
+      if (!already) {
+        const xdr = await buildUsdcTrustlineXdr(walletAddress);
+        const res = await sign(xdr);
+        if (!res.ok) throw new Error(res.error || "No se pudo firmar");
+        const hash = await submitClassicXdr(res.signedXdr);
+        console.log("USDC trustline tx:", hash);
+      }
+      // 2) Faucet: 2 USDC para probar un depósito (idempotente; si ya tienes, no envía).
+      let faucetMsg = "";
+      try {
+        const fr = await fetch("/api/faucet-usdc", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: walletAddress }),
+        });
+        const fd = await fr.json();
+        if (fr.ok && fd.sent) faucetMsg = ` +${fd.amount} USDC`;
+      } catch { /* faucet best-effort */ }
+      setUsdcActivated(true); // bloquea el botón: ya no se puede re-activar/re-faucet
+      toast({
+        title: t("profile.usdc_activated_title"),
+        description: t("profile.usdc_activated_desc") + faucetMsg,
+      });
+    } catch (e) {
+      toast({
+        title: t("common.error"),
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setActivatingUsdc(false);
+    }
+  };
+
+  // "Abrir wallet": para sesiones Privy abre el modal de Privy (ver/exportar la wallet
+  // Stellar embebida). Para wallets externas, abre Freighter.
+  const openWallet = async () => {
+    try {
+      if (isPrivy && walletAddress) {
+        await exportWallet({ address: walletAddress });
+      } else {
+        await requestAccess();
+      }
+    } catch {
+      toast({
+        title: t("profile.open_wallet"),
+        description: t("profile.open_wallet_hint"),
+      });
+    }
+  };
 
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -181,14 +255,11 @@ const Perfil = () => {
               }
             }
 
-            // Map tier to base score (same mapping used in ProgressRing)
-            const tierToScore: Record<number, number> = { 0: 0, 1: 50, 2: 150, 3: 500, 4: 1000 };
-            const baseScoreFromNFT = tierToScore[blockchainTier] || 0;
-
+            // Score en vivo: refleja depósitos/retiros sin piso por tier (el tier
+            // on-chain solo gobierna lo ya minteado, no el avance del score).
             const dynamicScore = Number(data.score) || 0;
-            const finalScore = Math.max(baseScoreFromNFT, dynamicScore);
 
-            setRiskData(prev => ({ ...prev, score: finalScore, tier: blockchainTier }));
+            setRiskData(prev => ({ ...prev, score: dynamicScore, tier: blockchainTier }));
 
           } catch (err) {
             console.warn('Error sincronizando tier despues de score:', err);
@@ -227,27 +298,20 @@ const Perfil = () => {
   );
   const visualPercentage = historyGate.isHistoryEligible ? tierVisualPercentage : historyVisualPercentage;
   const isUnlocked = riskData.tier >= 1; 
-  const currentTier = tierToNumber(nftTier);
+  const currentTier = tierNumberFromName(nftTier);
   const isMaxTier = currentTier >= 4;
   const eligibleTier = tierFromScore(riskData.score);
   const canMintUpgrade = eligibleTier > currentTier;
   const mintButtonDisabled = isMinting || !walletAddress || Number(onChainUsdc) === 0 || !canMintUpgrade;
 
-  const tierNumberToName = (n: number) => {
-    if (n === 4) return 'Platino';
-    if (n === 3) return 'Diamante';
-    if (n === 2) return 'Oro';
-    if (n === 1) return 'Plata';
-    return 'Bronce';
-  };
-  const claimableTierName = tierNumberToName(eligibleTier);
+  const claimableTierName = tierLabel(t, eligibleTier);
 
   const mintButtonText = (() => {
     if (isMinting) return t("profile.mint_button_signing");
     if (!walletAddress) return t("profile.mint_button_no_wallet");
     if (Number(onChainUsdc) === 0) return t("profile.mint_button_no_balance");
     if (!canMintUpgrade && currentTier >= 4) return t("profile.mint_button_max_tier");
-    if (!canMintUpgrade) return t("profile.mint_button_already_has", { tier: nftTier });
+    if (!canMintUpgrade) return t("profile.mint_button_already_has", { tier: tierLabel(t, tierNumberFromName(nftTier)) });
     return t("profile.mint_button_default");
   })();
 
@@ -340,10 +404,10 @@ const Perfil = () => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-lg font-bold text-foreground truncate font-mono">{displayName}</p>
-            <p className="text-sm text-muted-foreground truncate flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-sm text-muted-foreground truncate flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
               {t("common.wallet_connected")}
-            </p>
+            </span>
           </div>
         </div>
 
@@ -370,7 +434,7 @@ const Perfil = () => {
 
           <div className="card-elevated p-4 text-center bg-primary/5 border border-primary/20">
             <Shield className="w-4 h-4 text-primary mx-auto mb-1.5" />
-            <p className="text-lg font-bold text-primary">{loadingProfile ? "..." : nftTier}</p>
+            <p className="text-lg font-bold text-primary">{loadingProfile ? "..." : tierLabel(t, tierNumberFromName(nftTier))}</p>
             {canMintUpgrade && (
               <p className="text-[11px] text-primary/80 font-medium mt-1">{claimableTierName}</p>
             )}
@@ -476,7 +540,7 @@ const Perfil = () => {
               </div>
               <div className="flex items-center gap-3">
                 <Medal className="w-7 h-7 text-amber-500" />
-                <span className="text-2xl font-bold text-foreground">{loadingProfile ? "..." : nftTier}</span>
+                <span className="text-2xl font-bold text-foreground">{loadingProfile ? "..." : tierLabel(t, tierNumberFromName(nftTier))}</span>
               </div>
             </div>
 
@@ -493,6 +557,32 @@ const Perfil = () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Tu wallet: ver balances. Accesly abre su panel; otras, su extensión. */}
+          <div className="card-elevated p-6 animate-fade-up">
+            <div className="flex items-center gap-2 mb-4">
+              <Wallet className="w-5 h-5 text-primary" />
+              <h3 className="text-sm font-bold text-foreground">{t("profile.wallet_panel_title")}</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">{t("profile.wallet_panel_desc")}</p>
+            <button
+              onClick={openWallet}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-3.5 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all"
+            >
+              <Wallet className="w-5 h-5" />
+              {t("profile.open_wallet")}
+            </button>
+            {isPrivy && (
+              <button
+                onClick={activateUsdc}
+                disabled={activatingUsdc || usdcActivated}
+                className="w-full mt-3 flex items-center justify-center gap-2 rounded-2xl border border-primary/30 text-primary px-5 py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {activatingUsdc ? <Loader2 className="w-5 h-5 animate-spin" /> : <CircleCheck className="w-5 h-5" />}
+                {usdcActivated ? t("profile.usdc_active_label") : t("profile.activate_usdc")}
+              </button>
+            )}
           </div>
 
           {/* Preferencias: idioma (accesible también en móvil) */}

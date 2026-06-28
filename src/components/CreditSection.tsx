@@ -1,7 +1,8 @@
 import { Lock, Sparkles, ArrowDownToLine, Loader2, Activity, ArrowUpFromLine, CalendarClock, TrendingUp, AlertCircle } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
-import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useState, useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 
 // 🚀 IMPORTACIONES WEB3
@@ -32,10 +33,13 @@ const getLendingContractId = () => {
 };
 
 const CreditSection = () => {
+  const { t } = useTranslation();
   const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
-  const [loadingTx, setLoadingTx] = useState(false); 
+  const [loadingTx, setLoadingTx] = useState(false);
   const [loadingCredit, setLoadingCredit] = useState(true);
+  // Solo mostramos el spinner en la primera carga; los refrescos del polling son silenciosos.
+  const hasLoadedRef = useRef(false);
   
   // 💅 ESTADO PARA ERRORES ESTÉTICOS (Reemplaza al alert)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -64,23 +68,26 @@ const CreditSection = () => {
       raw.includes("balance") &&
       (raw.includes("hosterror") || raw.includes("invalidaction") || raw.includes("unreachablecodereached"))
     ) {
-      return "No hay liquidez suficiente en el pool para desembolsar este monto ahora. Intenta más tarde o retira un monto menor.";
+      return t("credit.errors.no_liquidity");
     }
 
     if (raw.includes("active loan") || raw.includes("no active loan")) {
-      return "Ya tienes un préstamo activo. Debes pagarlo antes de solicitar uno nuevo.";
+      return t("credit.errors.active_loan");
     }
 
     if (raw.includes("tier") || raw.includes("sbt")) {
-      return "Tu NFT actual no habilita este crédito todavía. Actualiza tu nivel e intenta nuevamente.";
+      return t("credit.errors.tier_insufficient");
     }
 
     if (raw.includes("cancelada") || raw.includes("cancelled")) {
-      return "Cancelaste la firma en Freighter. No se realizó el retiro.";
+      return t("credit.errors.cancelled");
     }
 
-    return "No pudimos procesar el retiro ahora. Intenta nuevamente en unos segundos.";
+    return t("credit.errors.generic");
   };
+
+  // Nombre del nivel traducido (cae al nombre del backend si falta la clave).
+  const tierLabel = t(`credit.tiers.${creditData.tier}`, { defaultValue: creditData.tierName });
 
   // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
   const totalToPay = creditData.limit * 1.05;
@@ -90,14 +97,14 @@ const CreditSection = () => {
     let isMounted = true;
 
     const fetchBlockchainCredit = async () => {
-      try {
-        if (!wallet) {
-          // Esperamos a que la wallet del contexto esté disponible.
-          if (isMounted) setLoadingCredit(true);
-          return;
-        }
+      // Esperamos a que la wallet del contexto esté disponible; mantenemos el
+      // loader inicial (useState(true)) sin volver a tocarlo en cada poll.
+      if (!wallet) return;
 
-        if (isMounted) setLoadingCredit(true);
+      const silent = hasLoadedRef.current;
+
+      try {
+        if (!silent && isMounted) setLoadingCredit(true);
 
         // Guardamos la wallet real del usuario
         setRegisteredWallet(wallet);
@@ -107,23 +114,24 @@ const CreditSection = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userAddress: wallet })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success && isMounted) {
           setCreditData({
-            limit: data.availableCredit, 
+            limit: data.availableCredit,
             tierName: data.tierName,
             tier: data.tier,
-            isUnlocked: data.tier >= 1 
+            isUnlocked: data.tier >= 1
           });
           if (data.anomaly) setScoreAnomaly(true);
         }
-        
+
       } catch (error) {
         console.error("Error cargando crédito on-chain:", error);
       } finally {
-        if (isMounted) setLoadingCredit(false);
+        hasLoadedRef.current = true;
+        if (!silent && isMounted) setLoadingCredit(false);
       }
     };
 
@@ -158,12 +166,12 @@ const CreditSection = () => {
     try {
       // Use persisted address if available; connect (and prompt) only when needed.
       const userAddress = walletAdapter.getAddress() ?? await walletAdapter.connect();
-      if (!userAddress) throw new Error("Debes conectar tu billetera primero");
+      if (!userAddress) throw new Error(t("credit.errors.connect_wallet"));
 
       // 🛡️ CANDADO: Validamos que use la cuenta correcta
       if (registeredWallet && userAddress !== registeredWallet) {
         const shortWallet = `${registeredWallet.substring(0, 4)}...${registeredWallet.substring(52)}`;
-        throw new Error(`Cuenta incorrecta. Cambia en Freighter a: ${shortWallet}`);
+        throw new Error(t("credit.errors.wrong_account", { wallet: shortWallet }));
       }
 
       const server = new rpc.Server("https://soroban-testnet.stellar.org");
@@ -214,12 +222,12 @@ const CreditSection = () => {
     try {
       // Use persisted address if available; connect (and prompt) only when needed.
       const userAddress = walletAdapter.getAddress() ?? await walletAdapter.connect();
-      if (!userAddress) throw new Error("Debes conectar tu billetera primero");
+      if (!userAddress) throw new Error(t("credit.errors.connect_wallet"));
 
       // 🛡️ CANDADO: Validamos que use la cuenta correcta para pagar
       if (registeredWallet && userAddress !== registeredWallet) {
         const shortWallet = `${registeredWallet.substring(0, 4)}...${registeredWallet.substring(52)}`;
-        throw new Error(`Cuenta incorrecta. Cambia en Freighter a: ${shortWallet}`);
+        throw new Error(t("credit.errors.wrong_account", { wallet: shortWallet }));
       }
 
       const server = new rpc.Server("https://soroban-testnet.stellar.org");
@@ -252,7 +260,7 @@ const CreditSection = () => {
 
     } catch (error: any) {
       console.error("❌ Error al pagar:", error);
-      setErrorMsg(error?.message || "No se pudo realizar el pago. Revisa tus fondos.");
+      setErrorMsg(error?.message || t("credit.errors.repay_generic"));
     } finally {
       setLoadingTx(false);
     }
@@ -263,7 +271,7 @@ const CreditSection = () => {
     return (
       <div className="card-elevated p-10 flex flex-col items-center justify-center min-h-[220px]">
         <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-        <p className="text-xs text-muted-foreground font-medium">Sincronizando con Soroban...</p>
+        <p className="text-xs text-muted-foreground font-medium">{t("credit.syncing")}</p>
       </div>
     );
   }
@@ -276,10 +284,9 @@ const CreditSection = () => {
           <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3 border border-border">
             <Lock className="w-5 h-5 text-muted-foreground" />
           </div>
-          <p className="text-sm font-bold text-foreground mb-1">Crédito Bloqueado 🔒</p>
+          <p className="text-sm font-bold text-foreground mb-1">{t("credit.locked_title")}</p>
           <p className="text-sm text-muted-foreground max-w-[260px]">
-            Tu nivel actual es <span className="text-foreground font-bold">{creditData.tierName}</span>. 
-            Reclama tu NFT para desbloquear.
+            {t("credit.locked_description", { tier: tierLabel })}
           </p>
         </div>
       </div>
@@ -293,19 +300,19 @@ const CreditSection = () => {
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary" />
           <span className="text-xs font-bold tracking-wide uppercase text-primary">
-            Crédito — Nivel {creditData.tierName}
+            {t("credit.title", { tier: tierLabel })}
           </span>
         </div>
         <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
           <Activity className="w-3 h-3 animate-pulse" />
-          ON-CHAIN
+          {t("credit.badge_onchain")}
         </div>
       </div>
 
       {scoreAnomaly && (
         <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-600 text-xs animate-fade-in">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>Score anómalo detectado. Los datos serán revisados antes de habilitar operaciones.</p>
+          <p>{t("credit.anomaly")}</p>
         </div>
       )}
 
@@ -318,23 +325,23 @@ const CreditSection = () => {
                 <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Lock className="w-6 h-6 text-red-500" />
                 </div>
-                <p className="text-lg font-bold text-red-500">¡CUENTA CONGELADA!</p>
+                <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
                 <p className="text-xs text-red-400 mt-2">
-                  Tu plazo de pago ha expirado. Deuda pendiente: <strong>{totalToPay.toFixed(2)} XLM</strong>.
+                  {t("credit.frozen_description")} <strong>{totalToPay.toFixed(2)} XLM</strong>.
                 </p>
               </div>
               <button
                 disabled
                 className="w-full mt-4 flex items-center justify-center gap-3 py-3 text-sm font-bold rounded-xl bg-secondary text-muted-foreground cursor-not-allowed opacity-50"
               >
-                Contactar a Soporte
+                {t("credit.contact_support")}
               </button>
             </div>
           ) : (
             // 🟢 ESTADO NORMAL: PRÉSTAMO ACTIVO
             <div className="py-2 text-center animate-fade-in flex flex-col h-full justify-between">
               <div>
-                <p className="text-sm font-bold text-foreground">Deuda Total a Pagar:</p>
+                <p className="text-sm font-bold text-foreground">{t("credit.debt_label")}:</p>
                 
                 <div className="flex items-center justify-center gap-2 mt-1">
                   <TrendingUp className="w-5 h-5 text-amber-500" />
@@ -349,7 +356,7 @@ const CreditSection = () => {
                   timeLeft <= 15 ? "text-red-500 bg-red-500/10 animate-pulse" : "text-amber-600 bg-amber-500/10"
                 }`}>
                   <CalendarClock className="w-4 h-4" />
-                  <span>Vence en: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')} min</span>
+                  <span>{t("credit.expires_in", { time: `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')} min` })}</span>
                 </div>
               </div>
 
@@ -368,11 +375,11 @@ const CreditSection = () => {
               >
                 {loadingTx ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Procesando...
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t("credit.processing")}
                   </>
                 ) : (
                   <>
-                    <ArrowUpFromLine className="w-4 h-4" /> Pagar {totalToPay.toFixed(2)} XLM
+                    <ArrowUpFromLine className="w-4 h-4" /> {t("credit.pay_button", { amount: totalToPay.toFixed(2) })}
                   </>
                 )}
               </button>
@@ -387,7 +394,7 @@ const CreditSection = () => {
               </span>
               <span className="text-lg font-bold text-muted-foreground">XLM</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">Límite de crédito disponible según tu SBT</p>
+            <p className="text-sm text-muted-foreground mb-4">{t("credit.limit_label")}</p>
             
             {/* 🛑 BANNER DE ERROR AMIGABLE */}
             {errorMsg && (
@@ -404,18 +411,18 @@ const CreditSection = () => {
             >
               {loadingTx ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> Autorizando...
+                  <Loader2 className="w-5 h-5 animate-spin" /> {t("credit.authorizing")}
                 </>
               ) : (
                 <>
-                  <ArrowDownToLine className="w-5 h-5" /> Retirar a mi Wallet
+                  <ArrowDownToLine className="w-5 h-5" /> {t("credit.withdraw_button")}
                 </>
               )}
             </button>
             <div className="text-[10px] text-center text-muted-foreground mt-4 space-y-1">
-              <p>El retiro genera una transacción en la red Testnet de Stellar.</p>
+              <p>{t("credit.footer_network")}</p>
               <p className="font-semibold text-amber-500/80">
-                Total a pagar al vencer (1 mes): {totalToPay.toFixed(2)} XLM (Incluye 5% interés)
+                {t("credit.footer_interest", { amount: totalToPay.toFixed(2) })}
               </p>
             </div>
           </div>

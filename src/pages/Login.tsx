@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Wallet, AlertCircle } from "lucide-react";
+import { Loader2, Wallet, AlertCircle, Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { usePrivy } from "@privy-io/react-auth";
 import logoVin from "@/assets/logo-vin.png";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { useWalletSession } from "@/context/WalletSessionContext";
+import { PRIVY_PROVIDER, onPrivyConnected, type PrivyConnectedWallet } from "@/lib/privyBridge";
 
 // Human-readable error messages resolved through i18n
 function friendlyError(
@@ -26,9 +28,12 @@ const Login = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { connect } = useMobileWallet();
+  const { login, authenticated } = usePrivy();
   const { address, onboarded, ready, setSession } = useWalletSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // true mientras el usuario está completando el login con correo (Privy).
+  const [privyPending, setPrivyPending] = useState(false);
 
   // If already connected, skip straight to the app
   useEffect(() => {
@@ -36,6 +41,43 @@ const Login = () => {
       navigate("/", { replace: true });
     }
   }, [ready, address, onboarded, navigate]);
+
+  // Entrar a la app cuando Privy entrega la wallet Stellar. `PrivyBridge` (en el root)
+  // asegura/crea la wallet tras autenticar y publica el evento; aquí lo escuchamos.
+  // Idempotente (enteredRef) para no entrar dos veces.
+  const enteredRef = useRef(false);
+  const enterWithPrivy = useCallback(
+    (w: PrivyConnectedWallet) => {
+      if (enteredRef.current) return;
+      enteredRef.current = true;
+      setSession(w.stellarAddress, PRIVY_PROVIDER);
+      setPrivyPending(false);
+      // Mapping usuario ↔ blockchain wallet de BlindPay (atribución de depósitos SPEI).
+      void fetch("/api/onramp-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: w.stellarAddress, email: w.email }),
+      }).catch(() => {});
+      navigate("/", { replace: true });
+    },
+    [setSession, navigate]
+  );
+
+  useEffect(() => onPrivyConnected(enterWithPrivy), [enterWithPrivy]);
+
+  const loginWithPrivy = () => {
+    setError(null);
+    setPrivyPending(true);
+    try {
+      login();
+    } catch (err: any) {
+      setError(err?.message ?? t("login.errors.generic"));
+      setPrivyPending(false);
+    }
+  };
+
+  // Spinner mientras Privy autentica y crea/asegura la wallet Stellar.
+  const privyLoading = privyPending || (authenticated && !enteredRef.current);
 
   const connectWallet = async () => {
     setLoading(true);
@@ -64,6 +106,34 @@ const Login = () => {
       </div>
 
       <div className="w-full max-w-sm space-y-4">
+
+        {/* ── Entrar con correo (Privy: Google/Apple/email → wallet Stellar sin seed) ── */}
+        <button
+          onClick={loginWithPrivy}
+          disabled={privyLoading || loading}
+          className="w-full flex items-center justify-center gap-3 rounded-2xl bg-foreground text-background px-5 py-4 text-sm font-bold shadow-lg active:scale-[0.98] transition-all disabled:opacity-60"
+        >
+          {privyLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mail className="h-5 w-5" />}
+          {privyLoading ? t("login.accesly_creating") : t("login.accesly_cta")}
+        </button>
+        {privyPending ? (
+          <p className="text-center text-[11px] font-semibold text-primary animate-pulse">
+            {t("login.accesly_popup_hint")}
+          </p>
+        ) : (
+          <p className="text-center text-[11px] text-muted-foreground">
+            {t("login.accesly_hint")}
+          </p>
+        )}
+
+        {/* ── Separador ── */}
+        <div className="flex items-center gap-3 py-1">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            {t("login.or_divider")}
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
 
         {/* ── Conectar wallet (modal multi-wallet de Stellar Wallets Kit) ── */}
         <div className="p-4 rounded-xl bg-primary/5 border border-primary/15 text-center">

@@ -1,4 +1,6 @@
 import { X, ExternalLink, Award, CheckCircle2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { tierLabel, tierNumberFromName } from "@/lib/tier";
 
 interface NFTModalProps {
   open: boolean;
@@ -10,23 +12,25 @@ interface NFTModalProps {
   txHash?: string;
 }
 
-const LEVEL_META: Record<string, { label: string; image: string }> = {
-  Bronce: { label: "Bronce", image: "/images/bronce.png" },
-  Plata: { label: "Plata", image: "/images/plata.png" },
-  Oro: { label: "Oro", image: "/images/oro.png" },
-  Diamante: { label: "Diamante", image: "/images/diamante.png" },
-  Platino: { label: "Platino", image: "/images/platino.png" },
+// Imágenes por nombre de nivel (identidad interna). La etiqueta visible se traduce.
+const LEVEL_IMAGE: Record<string, string> = {
+  Bronce: "/images/bronce.png",
+  Plata: "/images/plata.png",
+  Oro: "/images/oro.png",
+  Diamante: "/images/diamante.png",
+  Platino: "/images/platino.png",
 };
 
 const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVolume, txHash }: NFTModalProps) => {
+  const { t } = useTranslation();
   if (!open) return null;
 
   const truncate = (addr: string) =>
     addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 
-  const currentLevel = LEVEL_META[level] ? level : "Bronce";
-  const imageUrl = LEVEL_META[currentLevel].image;
-  const levelLabel = LEVEL_META[currentLevel].label;
+  const currentLevel = LEVEL_IMAGE[level] ? level : "Bronce";
+  const imageUrl = LEVEL_IMAGE[currentLevel];
+  const levelLabel = tierLabel(t, tierNumberFromName(currentLevel));
 
   // Mapeo de colores para el borde brillante según el nivel
   const levelColors: Record<string, string> = {
@@ -66,9 +70,9 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
             <div className="absolute inset-[3px] rounded-2xl bg-card flex flex-col items-center justify-center gap-2 overflow-hidden">
               
               {/* Cargando la imagen desde GitHub */}
-              <img 
-                src={imageUrl} 
-                alt={`NFT Nivel ${levelLabel}`} 
+              <img
+                src={imageUrl}
+                alt={t("nft_modal.nft_alt", { level: levelLabel })}
                 className="w-full h-full object-cover rounded-xl drop-shadow-md group-hover:scale-110 transition-transform duration-500"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
@@ -79,8 +83,8 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
               {/* Fallback si la imagen no está disponible. */}
               <div className="hidden flex-col items-center justify-center">
                 <Award className="w-14 h-14 text-primary" />
-                <p className="text-lg font-extrabold text-foreground tracking-tight leading-none mt-2">Nivel {levelLabel}</p>
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest mt-1">Vin · Stellar</p>
+                <p className="text-lg font-extrabold text-foreground tracking-tight leading-none mt-2">{t("nft_modal.fallback_level", { level: levelLabel })}</p>
+                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest mt-1">{t("nft_modal.fallback_brand")}</p>
               </div>
 
             </div>
@@ -89,30 +93,30 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
           {/* Badge */}
           <div className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-full px-3 py-1 mb-3">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span className="text-xs font-bold">NFT Acreditado</span>
+            <span className="text-xs font-bold">{t("nft_modal.badge")}</span>
           </div>
 
-          <h2 className="text-xl font-extrabold text-foreground mb-1">¡Felicidades!</h2>
+          <h2 className="text-xl font-extrabold text-foreground mb-1">{t("nft_modal.title")}</h2>
           <p className="text-sm text-muted-foreground mb-5">
-            Tu NFT de reputación ha sido minteado exitosamente en la red Stellar.
+            {t("nft_modal.subtitle")}
           </p>
 
           {/* Metadata On-Screen */}
           <div className="w-full bg-secondary rounded-xl p-4 space-y-2.5 text-left mb-5">
             <div className="flex justify-between">
-              <span className="text-xs text-muted-foreground">Nivel Alcanzado</span>
+              <span className="text-xs text-muted-foreground">{t("nft_modal.meta_level")}</span>
               <span className="text-xs font-bold text-foreground">{levelLabel}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-xs text-muted-foreground">Historial de Depósitos</span>
+              <span className="text-xs text-muted-foreground">{t("nft_modal.meta_deposits")}</span>
               <span className="text-xs font-bold text-foreground">{depositsCount}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-xs text-muted-foreground">Volumen Protegido</span>
+              <span className="text-xs text-muted-foreground">{t("nft_modal.meta_volume")}</span>
               <span className="text-xs font-bold text-foreground">{totalVolume.toFixed(2)} USDC</span>
             </div>
             <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-2">
-              <span className="text-xs text-muted-foreground">Propietario</span>
+              <span className="text-xs text-muted-foreground">{t("nft_modal.meta_owner")}</span>
               <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                 {truncate(walletAddress)}
               </span>
@@ -128,7 +132,7 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
               className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 hover:underline mb-4 transition-colors"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              Ver en StellarExpert
+              {t("nft_modal.explorer_link")}
             </a>
           )}
 
@@ -136,7 +140,7 @@ const NFTModal = ({ open, onClose, walletAddress, level, depositsCount, totalVol
             onClick={onClose}
             className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-bold shadow-sm hover:bg-primary/90 active:scale-[0.97] transition-all"
           >
-            Aceptar y Continuar
+            {t("nft_modal.accept_button")}
           </button>
         </div>
       </div>

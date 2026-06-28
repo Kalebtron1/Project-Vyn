@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { walletAdapter } from "@/wallet";
-import { fetchContractBalance } from "../stellar/queries"; 
-import { Wallet, RefreshCw } from "lucide-react";
+import { fetchContractBalance } from "../stellar/queries";
+import { Wallet } from "lucide-react";
 
 const BalanceCard = () => {
   const [realBalance, setRealBalance] = useState<number | string>("...");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  
+
   // NUEVO: Guardamos la dirección de la wallet para no pedirla a cada rato
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
@@ -23,17 +22,13 @@ const BalanceCard = () => {
   }, []); // <-- El array vacío garantiza que esto pase SOLO UNA VEZ
 
   // 2. PASO DOS: Consultar el saldo usando la dirección ya guardada
-  const loadBalance = useCallback(async (address: string, silent = false) => {
-    if (!silent) setIsRefreshing(true);
-    
+  const loadBalance = useCallback(async (address: string) => {
     try {
       // Ya no llamamos a requestAccess() aquí, solo vamos directo a Soroban
       const balance = await fetchContractBalance(address);
       setRealBalance(balance);
     } catch (error) {
       console.error("❌ Error consultando el saldo:", error);
-    } finally {
-      if (!silent) setIsRefreshing(false);
     }
   }, []);
 
@@ -43,11 +38,11 @@ const BalanceCard = () => {
     if (!walletAddress) return;
 
     // Carga inicial inmediata
-    loadBalance(walletAddress, false);
+    loadBalance(walletAddress);
 
     // Preguntamos a Soroban cada 5 segundos (silenciosamente)
     const intervalId = setInterval(() => {
-      loadBalance(walletAddress, true); 
+      loadBalance(walletAddress);
     }, 5000);
 
     // Limpieza
@@ -63,15 +58,6 @@ const BalanceCard = () => {
           <Wallet className="w-5 h-5 opacity-80" />
           <span className="text-sm font-semibold tracking-wider opacity-90">MI AHORRO</span>
         </div>
-        
-        <button 
-          onClick={() => walletAddress && loadBalance(walletAddress, false)} 
-          disabled={isRefreshing || !walletAddress}
-          className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all active:scale-95 disabled:opacity-50"
-          title="Actualizar saldo"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
       </div>
 
       <div className="flex items-baseline gap-2 relative z-10">

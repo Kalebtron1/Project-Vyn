@@ -86,7 +86,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
             <h4 className="text-xs font-bold mb-1">{t("shell.promo_title")}</h4>
             <p className="text-[10px] opacity-80 leading-relaxed mb-3">{t("shell.promo_description")}</p>
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/depositar")}
               className="w-full bg-white/20 hover:bg-white/30 text-white text-xs font-bold py-2 rounded-xl transition-colors"
             >
               {t("shell.promo_cta")}

@@ -34,6 +34,25 @@ function loadScoringCore() {
   return scoringCorePromise;
 }
 
+// Core de BlindPay (off-ramp SPEI) — también ESM; se carga con import() dinámico cacheado.
+let blindpayCorePromise;
+function loadBlindpayCore() {
+  if (!blindpayCorePromise) {
+    blindpayCorePromise = import("../api/_blindpay-core.mjs");
+  }
+  return blindpayCorePromise;
+}
+const DEMO_BANK_ACCOUNT_ID = process.env.BLINDPAY_DEMO_BANK_ACCOUNT_ID;
+
+// Core de BlindPay ON-RAMP (payin SPEI) — ESM; se carga con import() dinámico cacheado.
+let onrampCorePromise;
+function loadOnrampCore() {
+  if (!onrampCorePromise) {
+    onrampCorePromise = import("../api/_blindpay-onramp.mjs");
+  }
+  return onrampCorePromise;
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -229,14 +248,9 @@ function consumeNonce(address, nonce) {
 app.post('/api/evaluate-and-mint', async (req, res) => {
   try {
     console.log('[DEBUG] /api/evaluate-and-mint body:', req.body);
-    const { address: maybeAddress, userAddress, signedTxXdr, nonce } = req.body || {};
+    const { address: maybeAddress, userAddress } = req.body || {};
     const address = maybeAddress || userAddress;
     if (!address) return res.status(400).json({ error: 'address required' });
-
-    // Verify nonce
-    if (!consumeNonce(address, nonce)) {
-      return res.status(400).json({ success: false, error: 'Invalid or expired nonce' });
-    }
 
     // Elegibilidad y tier desde los contadores ON-CHAIN del staking_pool (misma
     // fuente que /api/calculate-score). Reemplaza el antiguo cálculo por Horizon.
@@ -298,6 +312,181 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
     return res.status(500).json({ success: false, error: error.message || String(error) });
   }
 });
+// ─────────────────────────────────────────────
+// ENDPOINTS: BLINDPAY OFF-RAMP (SPEI) 💸
+// La UI maneja USDC; el USDB→SPEI lo firma la wallet de payout del backend.
+// Mismo handler que las funciones serverless api/blindpay-*.js (core compartido).
+// ─────────────────────────────────────────────
+function blindpayAmount(req, res) {
+  const raw = req.body && req.body.amount;
+  const amount = typeof raw === "string" ? Number(raw) : raw;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 5) {
+    res.status(400).json({ error: "amount inválido (mínimo 5 USDC)", status: "error" });
+    return null;
+  }
+  if (!DEMO_BANK_ACCOUNT_ID) {
+    res.status(500).json({ error: "BlindPay demo no configurado (BLINDPAY_DEMO_BANK_ACCOUNT_ID)" });
+    return null;
+  }
+  return amount;
+}
+
+app.post("/api/blindpay-quote", async (req, res) => {
+  const amount = blindpayAmount(req, res);
+  if (amount === null) return;
+  try {
+    const { createQuote, summarizeQuote } = await loadBlindpayCore();
+    const quote = await createQuote({ amountCents: Math.round(amount * 100), bankAccountId: DEMO_BANK_ACCOUNT_ID });
+    return res.json(summarizeQuote(quote));
+  } catch (error) {
+    console.error("[DEBUG] 💥 /blindpay-quote:", error.message);
+    return res.status(502).json({ error: error.message || "Error al cotizar con BlindPay" });
+  }
+});
+
+app.post("/api/blindpay-payout", async (req, res) => {
+  const amount = blindpayAmount(req, res);
+  if (amount === null) return;
+  try {
+    const { quoteAndPayout, summarizeQuote } = await loadBlindpayCore();
+    const { quote, payout } = await quoteAndPayout({ amountCents: Math.round(amount * 100), bankAccountId: DEMO_BANK_ACCOUNT_ID });
+    return res.json({
+      payoutId: payout.id,
+      status: payout.status,
+      quote: summarizeQuote(quote),
+      tracking: payout.tracking_complete || payout.tracking_transaction || null,
+      payment: payout.tracking_payment || null,
+    });
+  } catch (error) {
+    console.error("[DEBUG] 💥 /blindpay-payout:", error.message);
+    return res.status(502).json({ error: error.message || "Error al ejecutar el retiro a SPEI" });
+  }
+});
+
+app.get("/api/blindpay-status", async (req, res) => {
+  const id = req.query && req.query.id;
+  if (!id) return res.status(400).json({ error: "id requerido", status: "error" });
+  try {
+    const { getPayout } = await loadBlindpayCore();
+    const payout = await getPayout(id);
+    return res.json({
+      payoutId: payout.id,
+      status: payout.status,
+      tracking: payout.tracking_complete || payout.tracking_transaction || null,
+      payment: payout.tracking_payment || null,
+    });
+  } catch (error) {
+    console.error("[DEBUG] 💥 /blindpay-status:", error.message);
+    return res.status(502).json({ error: error.message || "Error al consultar el payout" });
+  }
+});
+
+// ─────────────────────────────────────────────
+// ENDPOINTS: BLINDPAY ON-RAMP (SPEI → USDC) 💰
+// Receiver compartido + 1 blockchain wallet por usuario (su dirección Accesly).
+// Mismo handler que api/onramp-*.js (core compartido _blindpay-onramp.mjs).
+// ─────────────────────────────────────────────
+function onrampWalletAddress(req, res) {
+  const addr = req.body && req.body.walletAddress;
+  if (typeof addr !== "string" || !/^G[A-Z2-7]{55}$/.test(addr.trim())) {
+    res.status(400).json({ error: "walletAddress inválida (dirección Stellar G…)", status: "error" });
+    return null;
+  }
+  return addr.trim();
+}
+
+function onrampAmountMxn(req, res) {
+  const raw = req.body && req.body.amountMxn;
+  const amount = typeof raw === "string" ? Number(raw) : raw;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 5) {
+    res.status(400).json({ error: "amountMxn inválido (mínimo 5 MXN)", status: "error" });
+    return null;
+  }
+  return amount;
+}
+
+app.post("/api/onramp-init", async (req, res) => {
+  const walletAddress = onrampWalletAddress(req, res);
+  if (walletAddress === null) return;
+  try {
+    const { ensureBlockchainWallet } = await loadOnrampCore();
+    const result = await ensureBlockchainWallet({ walletAddress, email: req.body && req.body.email });
+    return res.json(result);
+  } catch (error) {
+    console.error("[DEBUG] 💥 /onramp-init:", error.message);
+    return res.status(502).json({ error: error.message || "Error al registrar la wallet en BlindPay" });
+  }
+});
+
+app.post("/api/onramp-quote", async (req, res) => {
+  const walletAddress = onrampWalletAddress(req, res);
+  if (walletAddress === null) return;
+  const amountMxn = onrampAmountMxn(req, res);
+  if (amountMxn === null) return;
+  try {
+    const { ensureBlockchainWallet, createPayinQuote, summarizePayinQuote } = await loadOnrampCore();
+    const { blockchainWalletId } = await ensureBlockchainWallet({ walletAddress, email: req.body && req.body.email });
+    const quote = await createPayinQuote({ blockchainWalletId, amountCents: Math.round(amountMxn * 100) });
+    return res.json(summarizePayinQuote(quote));
+  } catch (error) {
+    console.error("[DEBUG] 💥 /onramp-quote:", error.message);
+    return res.status(502).json({ error: error.message || "Error al cotizar el depósito SPEI" });
+  }
+});
+
+app.post("/api/onramp-payin", async (req, res) => {
+  const walletAddress = onrampWalletAddress(req, res);
+  if (walletAddress === null) return;
+  const amountMxn = onrampAmountMxn(req, res);
+  if (amountMxn === null) return;
+  try {
+    const { ensureBlockchainWallet, quoteAndPayin, summarizePayinQuote, summarizePayin } = await loadOnrampCore();
+    const { blockchainWalletId } = await ensureBlockchainWallet({ walletAddress, email: req.body && req.body.email });
+    const { quote, payin } = await quoteAndPayin({ blockchainWalletId, amountCents: Math.round(amountMxn * 100) });
+    return res.json({ ...summarizePayin(payin), quote: summarizePayinQuote(quote) });
+  } catch (error) {
+    console.error("[DEBUG] 💥 /onramp-payin:", error.message);
+    return res.status(502).json({ error: error.message || "Error al generar el depósito SPEI" });
+  }
+});
+
+app.get("/api/onramp-status", async (req, res) => {
+  const id = req.query && req.query.id;
+  if (!id) return res.status(400).json({ error: "id requerido", status: "error" });
+  try {
+    const { getPayin, summarizePayin } = await loadOnrampCore();
+    const payin = await getPayin(id);
+    return res.json(summarizePayin(payin));
+  } catch (error) {
+    console.error("[DEBUG] 💥 /onramp-status:", error.message);
+    return res.status(502).json({ error: error.message || "Error al consultar el depósito" });
+  }
+});
+
+// ─────────────────────────────────────────────
+// ENDPOINT: FAUCET USDC (testnet) 🚰 — manda 2 USDC al usuario para probar depósitos.
+// ─────────────────────────────────────────────
+let faucetCorePromise;
+function loadFaucetCore() {
+  if (!faucetCorePromise) faucetCorePromise = import("../api/_faucet-core.mjs");
+  return faucetCorePromise;
+}
+
+app.post("/api/faucet-usdc", async (req, res) => {
+  const address = req.body && req.body.address;
+  if (!address || !/^G[A-Z2-7]{55}$/.test(String(address))) {
+    return res.status(400).json({ error: "address inválida (dirección Stellar G…)" });
+  }
+  try {
+    const { sendFaucetUsdc } = await loadFaucetCore();
+    const result = await sendFaucetUsdc({ to: address });
+    return res.json(result);
+  } catch (error) {
+    console.error("[DEBUG] 💥 /faucet-usdc:", error.message);
+    return res.status(502).json({ error: error.message || "Error enviando USDC" });
+  }
+});
+
 // Inicia servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 SERVIDOR VÍNCULO ACTIVO EN PUERTO ${PORT}`);
