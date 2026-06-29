@@ -77,9 +77,17 @@ const Perfil = () => {
   useEffect(() => {
     if (!walletAddress) return;
     let cancelled = false;
-    hasUsdcTrustline(walletAddress)
-      .then((has) => { if (!cancelled) setUsdcActivated(has); })
-      .catch(() => {});
+    // Pre-fondea la cuenta (si es nueva, testnet) y checa la trustline EN SEGUNDO PLANO.
+    // Así, al pulsar "Activar USDC", el popup de firma (Albedo) se abre de inmediato tras
+    // el clic, sin la espera de Friendbot que dispara el bloqueador de ventanas emergentes.
+    (async () => {
+      try { await ensureTestnetAccount(walletAddress); } catch { /* best-effort */ }
+      if (cancelled) return;
+      try {
+        const has = await hasUsdcTrustline(walletAddress);
+        if (!cancelled) setUsdcActivated(has);
+      } catch { /* ignore */ }
+    })();
     return () => { cancelled = true; };
   }, [walletAddress]);
 
@@ -159,9 +167,15 @@ const Perfil = () => {
       const raw = e instanceof Error ? e.message : String(e);
       // 404/Not Found = la cuenta aún no existe on-chain (no se pudo fondear). Mensaje claro.
       const isNotFound = /not found|404|resource missing/i.test(raw);
+      // Popup de Albedo bloqueado por el navegador: indicar cómo resolverlo.
+      const isPopup = /popup|ventana emergente|blocked|pop-up/i.test(raw);
       toast({
         title: t("common.error"),
-        description: isNotFound ? t("profile.usdc_account_not_funded") : raw,
+        description: isPopup
+          ? t("profile.usdc_popup_blocked")
+          : isNotFound
+            ? t("profile.usdc_account_not_funded")
+            : raw,
         variant: "destructive",
       });
     } finally {

@@ -352,6 +352,7 @@ const es = {
     usdc_already_claimed_title: "USDC de prueba ya reclamado",
     usdc_already_claimed_desc: "Esta wallet ya recibió el USDC de prueba.",
     usdc_account_not_funded: "Tu cuenta aún no existe en la red (sin XLM). Inténtalo de nuevo en unos segundos; si persiste, fondéala con XLM de testnet.",
+    usdc_popup_blocked: "Tu navegador bloqueó la ventana de Albedo. Permite las ventanas emergentes para este sitio y vuelve a pulsar Activar USDC.",
     menu_notifications: "Notificaciones",
     menu_notifications_detail: "Activadas",
     menu_help: "Centro de ayuda",
