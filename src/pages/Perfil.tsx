@@ -67,24 +67,28 @@ const Perfil = () => {
   const { sign } = useMobileWallet();
   const isPrivy = provider === PRIVY_PROVIDER;
   const [activatingUsdc, setActivatingUsdc] = useState(false);
-  // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"): bloquea el botón
-  // para no re-activar ni volver a pedir faucet. Persiste entre recargas (se lee on-chain).
+  // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"). Persiste entre
+  // recargas (se lee on-chain). Se aplica a CUALQUIER wallet, no solo Privy.
   const [usdcActivated, setUsdcActivated] = useState(false);
+  // true si la trustline quedó activa pero el faucet de USDC no se entregó: deja el botón
+  // accionable para reintentar el faucet SIN volver a firmar la trustline.
+  const [faucetFailed, setFaucetFailed] = useState(false);
 
   useEffect(() => {
-    if (!isPrivy || !walletAddress) return;
+    if (!walletAddress) return;
     let cancelled = false;
     hasUsdcTrustline(walletAddress)
       .then((has) => { if (!cancelled) setUsdcActivated(has); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [isPrivy, walletAddress]);
+  }, [walletAddress]);
 
   // Activa la trustline USDC firmando con la wallet del usuario (primera prueba real de
   // la firma de Privy). Necesario para que la wallet pueda recibir/depositar USDC.
   const activateUsdc = async () => {
     if (!walletAddress) return;
     setActivatingUsdc(true);
+    setFaucetFailed(false);
     try {
       // 1) Trustline USDC (la firma tu wallet). Si ya existe, se omite.
       const already = await hasUsdcTrustline(walletAddress);
@@ -94,23 +98,60 @@ const Perfil = () => {
         if (!res.ok) throw new Error(res.error || "No se pudo firmar");
         const hash = await submitClassicXdr(res.signedXdr);
         console.log("USDC trustline tx:", hash);
+        // Espera a que Horizon refleje la trustline antes de pedir el faucet. El submit
+        // ya se incluyó en un ledger, pero un nodo con lag (frecuente en redes móviles)
+        // puede no verla aún → el faucet respondería no_trustline y no enviaría nada.
+        for (let i = 0; i < 5; i++) {
+          if (await hasUsdcTrustline(walletAddress)) break;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       }
+      setUsdcActivated(true); // la trustline quedó activa
+
       // 2) Faucet: 2 USDC para probar un depósito (idempotente; si ya tienes, no envía).
       let faucetMsg = "";
+      let faucetIssue: { title: string; desc: string } | null = null;
       try {
         const fr = await fetch("/api/faucet-usdc", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ address: walletAddress }),
         });
-        const fd = await fr.json();
-        if (fr.ok && fd.sent) faucetMsg = ` +${fd.amount} USDC`;
-      } catch { /* faucet best-effort */ }
-      setUsdcActivated(true); // bloquea el botón: ya no se puede re-activar/re-faucet
-      toast({
-        title: t("profile.usdc_activated_title"),
-        description: t("profile.usdc_activated_desc") + faucetMsg,
-      });
+        const fd = await fr.json().catch(() => ({}));
+        if (fr.ok && fd.sent) {
+          faucetMsg = ` +${fd.amount} USDC`;
+        } else if (fr.ok && fd.reason === "already_claimed") {
+          // Ya reclamado: no es un error, el flujo se considera completo.
+        } else if (fr.ok && fd.reason === "no_trustline") {
+          setFaucetFailed(true);
+          faucetIssue = {
+            title: t("profile.usdc_faucet_failed_title"),
+            desc: t("profile.usdc_faucet_no_trustline"),
+          };
+        } else {
+          // 502 u otro fallo del backend (p. ej. SECRET_KEY_ADMIN). Surface del motivo.
+          setFaucetFailed(true);
+          faucetIssue = {
+            title: t("profile.usdc_faucet_failed_title"),
+            desc: fd?.error || t("profile.usdc_faucet_failed_desc"),
+          };
+        }
+      } catch {
+        setFaucetFailed(true);
+        faucetIssue = {
+          title: t("profile.usdc_faucet_failed_title"),
+          desc: t("profile.usdc_faucet_failed_desc"),
+        };
+      }
+
+      if (faucetIssue) {
+        toast({ title: faucetIssue.title, description: faucetIssue.desc, variant: "destructive" });
+      } else {
+        toast({
+          title: t("profile.usdc_activated_title"),
+          description: t("profile.usdc_activated_desc") + faucetMsg,
+        });
+      }
     } catch (e) {
       toast({
         title: t("common.error"),
@@ -573,14 +614,18 @@ const Perfil = () => {
               <Wallet className="w-5 h-5" />
               {t("profile.open_wallet")}
             </button>
-            {isPrivy && (
+            {walletAddress && (
               <button
                 onClick={activateUsdc}
-                disabled={activatingUsdc || usdcActivated}
+                disabled={activatingUsdc || (usdcActivated && !faucetFailed)}
                 className="w-full mt-3 flex items-center justify-center gap-2 rounded-2xl border border-primary/30 text-primary px-5 py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {activatingUsdc ? <Loader2 className="w-5 h-5 animate-spin" /> : <CircleCheck className="w-5 h-5" />}
-                {usdcActivated ? t("profile.usdc_active_label") : t("profile.activate_usdc")}
+                {faucetFailed
+                  ? t("profile.usdc_retry_faucet")
+                  : usdcActivated
+                    ? t("profile.usdc_active_label")
+                    : t("profile.activate_usdc")}
               </button>
             )}
           </div>

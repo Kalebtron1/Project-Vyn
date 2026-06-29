@@ -18,7 +18,13 @@ export async function sendFaucetUsdc({ to }) {
     return { sent: false, reason: "already_claimed" };
   }
 
-  const balance = await usdcBalance(server, to);
+  // La trustline pudo enviarse hace un instante; un nodo de Horizon con lag aún no la ve.
+  // Reintentar la lectura un par de veces antes de rendirse (evita falsos no_trustline).
+  let balance = await usdcBalance(server, to);
+  for (let i = 0; balance === null && i < 3; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    balance = await usdcBalance(server, to);
+  }
   if (balance === null) {
     return { sent: false, reason: "no_trustline" }; // el usuario debe activar USDC primero
   }
