@@ -322,6 +322,7 @@ const en = {
     usdc_faucet_no_trustline: "Your trustline isn't visible on the network yet. Wait a few seconds and try again.",
     usdc_already_claimed_title: "Test USDC already claimed",
     usdc_already_claimed_desc: "This wallet already received the test USDC.",
+    usdc_account_not_funded: "Your account doesn't exist on the network yet (no XLM). Try again in a few seconds; if it persists, fund it with testnet XLM.",
     menu_notifications: "Notifications",
     menu_notifications_detail: "Enabled",
     menu_help: "Help center",

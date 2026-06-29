@@ -351,6 +351,7 @@ const es = {
     usdc_faucet_no_trustline: "Aún no se ve tu trustline en la red. Espera unos segundos y vuelve a intentar.",
     usdc_already_claimed_title: "USDC de prueba ya reclamado",
     usdc_already_claimed_desc: "Esta wallet ya recibió el USDC de prueba.",
+    usdc_account_not_funded: "Tu cuenta aún no existe en la red (sin XLM). Inténtalo de nuevo en unos segundos; si persiste, fondéala con XLM de testnet.",
     menu_notifications: "Notificaciones",
     menu_notifications_detail: "Activadas",
     menu_help: "Centro de ayuda",

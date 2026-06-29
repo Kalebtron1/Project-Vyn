@@ -9,6 +9,26 @@
 import { TransactionBuilder, Operation, Asset, BASE_FEE, Networks, Horizon } from "@stellar/stellar-sdk";
 
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
+const FRIENDBOT_URL = "https://friendbot.stellar.org";
+
+/**
+ * Asegura que la cuenta exista on-chain en testnet. Una wallet nueva (Albedo/Freighter)
+ * sin XLM no existe y `loadAccount` devolvería 404 ("Not Found"): no se le puede añadir
+ * una trustline hasta que exista. Si falta, la crea con Friendbot y espera a que Horizon
+ * la refleje. Idempotente: si ya existe, no hace nada. En mainnet esto lo haría la tesorería.
+ */
+export async function ensureTestnetAccount(address: string): Promise<void> {
+  const res = await fetch(`${HORIZON_URL}/accounts/${address}`);
+  if (res.ok) return;
+  if (res.status !== 404) return; // otro error: deja que el flujo siga y falle claro
+  await fetch(`${FRIENDBOT_URL}/?addr=${encodeURIComponent(address)}`);
+  // Espera a que la cuenta recién creada sea visible (puede tardar un par de ledgers).
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const check = await fetch(`${HORIZON_URL}/accounts/${address}`);
+    if (check.ok) return;
+  }
+}
 
 // USDC del vault (testnet). Issuer del proyecto (el que tienen las wallets de prueba).
 export const USDC_ASSET = new Asset(

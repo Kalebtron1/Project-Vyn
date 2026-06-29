@@ -16,7 +16,7 @@ import { tierLabel, tierNumberFromName } from "@/lib/tier";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER } from "@/lib/privyBridge";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
-import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
+import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
 
 const Perfil = () => {
   const navigate = useNavigate();
@@ -93,6 +93,9 @@ const Perfil = () => {
       // 1) Trustline USDC (la firma tu wallet). Si ya existe, se omite.
       const already = await hasUsdcTrustline(walletAddress);
       if (!already) {
+        // Una wallet externa nueva (Albedo/Freighter) puede no existir on-chain (0 XLM):
+        // sin esto, buildUsdcTrustlineXdr daría 404 "Not Found". La fondea con Friendbot.
+        await ensureTestnetAccount(walletAddress);
         const xdr = await buildUsdcTrustlineXdr(walletAddress);
         const res = await sign(xdr);
         if (!res.ok) throw new Error(res.error || "No se pudo firmar");
@@ -153,9 +156,12 @@ const Perfil = () => {
         });
       }
     } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      // 404/Not Found = la cuenta aún no existe on-chain (no se pudo fondear). Mensaje claro.
+      const isNotFound = /not found|404|resource missing/i.test(raw);
       toast({
         title: t("common.error"),
-        description: e instanceof Error ? e.message : String(e),
+        description: isNotFound ? t("profile.usdc_account_not_funded") : raw,
         variant: "destructive",
       });
     } finally {
