@@ -193,7 +193,33 @@ async function mintNftOnChain(userAddress, tier) {
     transaction.sign(adminKeypair);
 
     const submitRes = await server.sendTransaction(transaction);
-    return { success: true, hash: submitRes.hash };
+
+    if (submitRes.status === "ERROR") {
+      const reason = submitRes.errorResult
+        ? JSON.stringify(submitRes.errorResult)
+        : "sendTransaction devolvió ERROR";
+      console.error("[DEBUG] 💥 Mint rechazado:", reason);
+      return { success: false, hash: submitRes.hash, error: `La red rechazó el mint: ${reason}` };
+    }
+
+    // sendTransaction solo encola; confirmamos el resultado real con polling.
+    const hash = submitRes.hash;
+    let getRes = await server.getTransaction(hash);
+    const deadline = Date.now() + 45000;
+    while (getRes.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      getRes = await server.getTransaction(hash);
+    }
+
+    if (getRes.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+      return { success: true, hash };
+    }
+    if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
+      console.error("[DEBUG] 💥 Mint revertido on-chain:", hash);
+      return { success: false, hash, error: "La transacción de mint falló al aplicarse en la red" };
+    }
+    console.warn("[DEBUG] ⚠️ Mint sin confirmar a tiempo:", hash);
+    return { success: false, hash, error: "No se pudo confirmar la transacción de mint a tiempo" };
 
   } catch (error) {
     console.error(`[DEBUG] 💥 Error Mint:`, error);

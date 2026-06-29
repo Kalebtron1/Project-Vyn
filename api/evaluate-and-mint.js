@@ -14,6 +14,10 @@ import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "
 
 dotenv.config();
 
+// El mint encadena calculate-score (RPC Soroban) + prepare + polling de confirmación;
+// el default de 10 s del plan hobby lo cortaba (504 → front colgado). 60 s es el máx en hobby.
+export const config = { maxDuration: 60 };
+
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const server = new rpc.Server(RPC_URL);
 // staking_pool respaldado por DeFindex. Se configura vía STAKING_CONTRACT_ID
@@ -95,8 +99,39 @@ async function mintNftOnChain(log, userAddress, tier) {
     transaction.sign(adminKeypair);
 
     const submitRes = await server.sendTransaction(transaction);
-    log.info("evaluate_and_mint.minted", { userAddress, tier, txHash: submitRes.hash });
-    return { success: true, hash: submitRes.hash };
+
+    // sendTransaction solo ENCOLA la tx; un status ERROR aquí es rechazo inmediato
+    // (p. ej. fee insuficiente o tx mal formada). No es éxito.
+    if (submitRes.status === "ERROR") {
+      const reason = submitRes.errorResult
+        ? JSON.stringify(submitRes.errorResult)
+        : "sendTransaction devolvió ERROR";
+      log.error("evaluate_and_mint.send_rejected", { userAddress, tier, txHash: submitRes.hash, reason });
+      return { success: false, hash: submitRes.hash, error: `La red rechazó el mint: ${reason}` };
+    }
+
+    // Confirmamos el resultado real on-chain con polling (antes se devolvía success:true
+    // a ciegas y una tx que fallaba al aplicarse dejaba la UI "minteada" sin SBT real).
+    const hash = submitRes.hash;
+    let getRes = await server.getTransaction(hash);
+    const deadline = Date.now() + 45000; // por debajo del maxDuration de la función
+    while (getRes.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      getRes = await server.getTransaction(hash);
+    }
+
+    if (getRes.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+      log.info("evaluate_and_mint.minted", { userAddress, tier, txHash: hash });
+      return { success: true, hash };
+    }
+
+    if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
+      log.error("evaluate_and_mint.mint_reverted", { userAddress, tier, txHash: hash });
+      return { success: false, hash, error: "La transacción de mint falló al aplicarse en la red" };
+    }
+
+    log.warn("evaluate_and_mint.mint_unconfirmed", { userAddress, tier, txHash: hash, status: getRes.status });
+    return { success: false, hash, error: "No se pudo confirmar la transacción de mint a tiempo" };
 
   } catch (error) {
     log.error("evaluate_and_mint.mint_failed", { userAddress, tier, err: error.message });

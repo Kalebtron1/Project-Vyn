@@ -8,6 +8,10 @@ import { computeFinancialReputation, getOnChainAggregates } from "./_scoring-cor
 // (backend/server.js) y no vuelvan a divergir las dos implementaciones.
 const CONTRACT_ID = process.env.STAKING_CONTRACT_ID;
 
+// Consulta agregados on-chain (Soroban RPC); el default de 10 s del plan hobby
+// puede cortarla y arrastrar al mint que la encadena. 60 s es el máx en hobby.
+export const config = { maxDuration: 60 };
+
 // Re-export para los tests de regresión (src/test/calculate-score.test.ts) y para
 // cualquier consumidor que ya importaba desde aquí.
 export { computeFinancialReputation };

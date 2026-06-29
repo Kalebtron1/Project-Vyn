@@ -66,7 +66,13 @@ Set these in **Vercel Dashboard → Project → Settings → Environment Variabl
 | `PUBLIC_KEY_ADMIN` | Production, Preview |
 | `SECRET_KEY_ADMIN` | Production, Preview |
 | `NFT_CONTRACT_ID` | Production, Preview |
+| `STAKING_CONTRACT_ID` | Production, Preview |
+| `VITE_STAKING_CONTRACT_ID` | Production, Preview |
 | `VITE_LENDING_CONTRACT_ID` | Production, Preview |
+
+> ⚠️ `STAKING_CONTRACT_ID` y `VITE_STAKING_CONTRACT_ID` son **obligatorias**: si faltan,
+> `calculate-score`, `get-user-data` y `evaluate-and-mint` responden `500` y el minteo del
+> SBT se queda colgado en el frontend. Deben coincidir con el contrato `staking_pool` desplegado.
 
 `VERCEL_OIDC_TOKEN` is injected automatically by Vercel and does not need to be set manually.
 
