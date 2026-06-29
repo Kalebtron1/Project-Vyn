@@ -13,9 +13,15 @@ export async function sendFaucetUsdc({ to }) {
   if (!to || !/^G[A-Z2-7]{55}$/.test(to)) throw new Error("Dirección Stellar inválida");
   const server = new Horizon.Server(HORIZON_URL);
 
-  // Una sola vez por wallet (aunque luego gaste/deposite el USDC).
-  if (await hasClaimedFaucet(to)) {
-    return { sent: false, reason: "already_claimed" };
+  // Una sola vez por wallet (aunque luego gaste/deposite el USDC). El dedup es secundario:
+  // si Supabase falla (clave inválida, tabla ausente, red), NO bloqueamos el envío de USDC,
+  // que es lo importante. Solo lo registramos.
+  try {
+    if (await hasClaimedFaucet(to)) {
+      return { sent: false, reason: "already_claimed" };
+    }
+  } catch (e) {
+    console.warn("faucet: hasClaimedFaucet falló, continúo sin dedup:", e?.message || e);
   }
 
   // La trustline pudo enviarse hace un instante; un nodo de Horizon con lag aún no la ve.
@@ -30,6 +36,11 @@ export async function sendFaucetUsdc({ to }) {
   }
 
   const hash = await sendUsdcFromAdmin({ to, amount: FAUCET_AMOUNT });
-  await recordFaucetClaim(to); // marca la wallet como ya fondeada (una sola vez)
+  // Registrar el claim es best-effort: si Supabase falla, el USDC ya se envió igual.
+  try {
+    await recordFaucetClaim(to); // marca la wallet como ya fondeada (una sola vez)
+  } catch (e) {
+    console.warn("faucet: recordFaucetClaim falló (USDC ya enviado):", e?.message || e);
+  }
   return { sent: true, hash, amount: FAUCET_AMOUNT };
 }
