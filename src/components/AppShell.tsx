@@ -42,10 +42,14 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
     <div className="min-h-screen flex bg-background text-foreground">
       {/* ─── Sidebar (escritorio) ─────────────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col w-64 shrink-0 sticky top-0 h-screen bg-card border-r border-border">
-        <div className="h-20 flex items-center gap-3 px-6">
+        <button
+          onClick={() => navigate("/")}
+          className="h-20 flex items-center gap-3 px-6 hover:opacity-80 transition-opacity"
+          aria-label={t("common.app_name")}
+        >
           <img src={logoVin} alt={t("common.app_name")} className="w-9 h-9 object-contain" />
           <span className="text-xl font-extrabold tracking-tight">{t("common.app_name")}</span>
-        </div>
+        </button>
 
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
           {navItems.map(({ icon: Icon, labelKey, path }) => {
@@ -93,8 +97,14 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg px-4 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Logo solo en móvil (en escritorio ya está en el sidebar) */}
-            <img src={logoVin} alt={t("common.app_name")} className="w-8 h-8 object-contain lg:hidden shrink-0" />
+            {/* Logo solo en móvil (en escritorio ya está en el sidebar). Lleva al inicio. */}
+            <button
+              onClick={() => navigate("/")}
+              className="lg:hidden shrink-0 hover:opacity-80 transition-opacity"
+              aria-label={t("common.app_name")}
+            >
+              <img src={logoVin} alt={t("common.app_name")} className="w-8 h-8 object-contain" />
+            </button>
             <div className="min-w-0">
               <h1 className="text-xl md:text-2xl font-extrabold tracking-tight truncate">{title}</h1>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}

@@ -70,6 +70,7 @@ const es = {
     min_error: "El monto mínimo es $10 USD (≈ 175 MXN).",
     no_wallet: "No encontramos tu cuenta. Vuelve a iniciar sesión.",
     generic_error: "No pudimos generar el depósito. Intenta de nuevo.",
+    quote_error: "No pudimos cotizar el depósito. Intenta de nuevo en un momento.",
   },
 
   // ─── Bottom navigation ───────────────────────────────────────────────────────

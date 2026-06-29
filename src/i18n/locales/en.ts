@@ -63,6 +63,7 @@ const en = {
     min_error: "The minimum is $10 USD (≈ 175 MXN).",
     no_wallet: "We couldn't find your account. Please sign in again.",
     generic_error: "We couldn't generate the deposit. Please try again.",
+    quote_error: "We couldn't get a quote. Please try again in a moment.",
   },
 
   nav: {

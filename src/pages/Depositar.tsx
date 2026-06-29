@@ -44,6 +44,7 @@ const Depositar = () => {
   const [amount, setAmount] = useState("500"); // MXN
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState(""); // motivo si la cotización falla (no se traga en silencio)
   const [step, setStep] = useState<Step>("input");
   const [error, setError] = useState("");
   const [payin, setPayin] = useState<null | { payinId: string; clabe: string; receiverUsd: number }>(null);
@@ -58,9 +59,12 @@ const Depositar = () => {
   useEffect(() => {
     if (step !== "input") return;
     const val = parseFloat(amount);
-    if (!val || val < 5 || !address) { setQuote(null); return; }
+    // Sin wallet en sesión, el quote nunca se pide (BlindPay necesita la dirección).
+    if (!address) { setQuote(null); setQuoteError(t("deposit_spei.no_wallet")); return; }
+    if (!val || val < 5) { setQuote(null); setQuoteError(""); return; }
     let cancelled = false;
     setQuoteLoading(true);
+    setQuoteError("");
     const handle = setTimeout(async () => {
       try {
         const r = await fetch("/api/onramp?action=quote", {
@@ -68,16 +72,28 @@ const Depositar = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress: address, amountMxn: val, email }),
         });
-        const data = await r.json();
+        const data = await r.json().catch(() => null);
         if (cancelled) return;
-        setQuote(r.ok ? {
-          receiverUsd: data.receiverUsd,
-          rateMxnPerUsd: data.rateMxnPerUsd,
-          flatFeeUsd: data.flatFeeUsd,
-          partnerFeeUsd: data.partnerFeeUsd ?? 0,
-        } : null);
-      } catch {
-        if (!cancelled) setQuote(null);
+        if (r.ok && data) {
+          setQuote({
+            receiverUsd: data.receiverUsd,
+            rateMxnPerUsd: data.rateMxnPerUsd,
+            flatFeeUsd: data.flatFeeUsd,
+            partnerFeeUsd: data.partnerFeeUsd ?? 0,
+          });
+          setQuoteError("");
+        } else {
+          // El backend respondió con error (p. ej. 502 "BlindPay no configurado" si
+          // faltan las env vars en prod). Lo mostramos en vez de tragarlo en silencio.
+          setQuote(null);
+          setQuoteError((data && data.error) || t("deposit_spei.quote_error"));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error("[deposit_spei] quote failed:", e);
+          setQuote(null);
+          setQuoteError(t("deposit_spei.quote_error"));
+        }
       } finally {
         if (!cancelled) setQuoteLoading(false);
       }
@@ -247,6 +263,13 @@ const Depositar = () => {
                 </span>
               </div>
             </div>
+
+            {quoteError && !quoteLoading && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-[11px]">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{quoteError}</span>
+              </div>
+            )}
 
             {!isPrivy && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[11px]">
