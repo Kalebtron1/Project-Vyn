@@ -381,14 +381,19 @@ const Perfil = () => {
     setIsMinting(true);
     try {
       // 1) Solo validamos que la wallet conectada sea la misma en Freighter.
-      // Con timeout para que un popup de Freighter que nunca responde no deje el botón colgado.
-      const access = await Promise.race([
-        requestAccess(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Freighter no respondió a tiempo")), 30000)
-        ),
-      ]);
-      if (!access?.address || access.address !== walletAddress) throw new Error("Conecta la misma wallet en Freighter");
+      // El mint lo firma el admin; este chequeo solo confirma que la wallet de Freighter
+      // coincide. En móvil (Privy) NO hay extensión Freighter, así que requestAccess()
+      // lanzaba y caía al toast de "conexión inestable": para Privy lo saltamos.
+      if (!isPrivy) {
+        // Con timeout para que un popup de Freighter que nunca responde no deje el botón colgado.
+        const access = await Promise.race([
+          requestAccess(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Freighter no respondió a tiempo")), 30000)
+          ),
+        ]);
+        if (!access?.address || access.address !== walletAddress) throw new Error("Conecta la misma wallet en Freighter");
+      }
 
       const response = await fetch(`/api/evaluate-and-mint`, {
         method: "POST",
