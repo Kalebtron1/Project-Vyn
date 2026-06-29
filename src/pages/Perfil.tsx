@@ -15,6 +15,7 @@ import { requestAccess } from "@stellar/freighter-api";
 import { tierLabel, tierNumberFromName } from "@/lib/tier";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER } from "@/lib/privyBridge";
+import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
 
@@ -382,9 +383,10 @@ const Perfil = () => {
     try {
       // 1) Solo validamos que la wallet conectada sea la misma en Freighter.
       // El mint lo firma el admin; este chequeo solo confirma que la wallet de Freighter
-      // coincide. En móvil (Privy) NO hay extensión Freighter, así que requestAccess()
-      // lanzaba y caía al toast de "conexión inestable": para Privy lo saltamos.
-      if (!isPrivy) {
+      // coincide. Solo aplica si el provider conectado ES Freighter. Para cualquier otra
+      // wallet (Privy, Albedo, xBull, Lobstr, Hana, Rabet) requestAccess() de Freighter
+      // lanzaría y caería al toast de "conexión inestable", así que lo saltamos.
+      if (provider === FREIGHTER_ID) {
         // Con timeout para que un popup de Freighter que nunca responde no deje el botón colgado.
         const access = await Promise.race([
           requestAccess(),
