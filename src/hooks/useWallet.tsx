@@ -12,6 +12,14 @@ export type WalletStatus = "loading" | "connected" | "disconnected" | "missing";
  * router). Este hook solo deriva el estado de presentación y, en escritorio con
  * Freighter, marca "disconnected" si la extensión deja de estar disponible.
  * Mantiene su API pública previa para no romper a los consumidores.
+ *
+ * Notas por provider:
+ *  - freighter  Soporta polling silencioso para detectar extensión no disponible.
+ *  - lobstr     No expone API de polling silencioso; no se sondea el estado de la
+ *               extensión. La sesión se considera válida mientras el usuario no
+ *               cierre sesión explícitamente.
+ *  - albedo     Igual que lobstr: sin polling.
+ *  - privy      Gestionado por Privy SDK; sin polling local.
  */
 export const useWallet = () => {
   const {
@@ -27,6 +35,8 @@ export const useWallet = () => {
   const [freighterGone, setFreighterGone] = useState(false);
 
   // Escritorio + Freighter: detectar que la extensión se quitó/bloqueó.
+  // LOBSTR y otros wallets del kit no exponen una API de polling silencioso,
+  // por lo que el sondeo sólo se activa cuando el provider es Freighter.
   useEffect(() => {
     if (!address || provider !== FREIGHTER_ID || isMobileBrowser()) {
       setFreighterGone(false);
@@ -70,6 +80,7 @@ export const useWallet = () => {
     disconnect: ctxDisconnect,
     setWalletAddress,
     // Aviso de cambio de cuenta en Freighter (desktop).
+    // Para LOBSTR y otros wallets del kit este valor siempre es false.
     walletMismatch,
     activeAddress,
   };

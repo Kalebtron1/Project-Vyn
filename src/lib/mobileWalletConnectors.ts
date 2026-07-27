@@ -20,9 +20,34 @@ import {
   openWalletModal,
   NETWORK_PASSPHRASE,
   FREIGHTER_ID,
+  LOBSTR_ID,
 } from "@/lib/stellarWalletsKit";
 import * as sessionStore from "@/lib/sessionStore";
 import { PRIVY_PROVIDER, privySign } from "@/lib/privyBridge";
+
+// Re-export wallet ID constants so consumers can reference them without
+// importing from the lower-level stellarWalletsKit module directly.
+export { FREIGHTER_ID, LOBSTR_ID };
+
+/**
+ * Provider-specific limitations:
+ *
+ * - freighter  Desktop browser extension. Supports silent address polling via
+ *              FreighterAPI.getAddress(), which enables account-change detection.
+ *
+ * - lobstr     Desktop browser extension (Chrome/Brave). Connects and signs via
+ *              the @lobstrco/signer-extension-api under the hood. No silent
+ *              address-polling API is exposed, so account-change detection is
+ *              not available. Works identically to Freighter for connect/sign.
+ *              LOBSTR does NOT have a mobile deep-link mode; on mobile the kit
+ *              will show the option but the extension won't be available.
+ *
+ * - albedo     Web-based popup signer. Works on any browser including mobile.
+ *              No address-polling API.
+ *
+ * - privy      Email / Google / Apple login. Managed embedded wallet.
+ *              Signing is handled by privyBridge, not the kit.
+ */
 
 /** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
 export type WalletId = string;

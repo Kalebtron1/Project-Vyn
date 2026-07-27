@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Wallet, AlertCircle, Mail } from "lucide-react";
+import { Loader2, Wallet, AlertCircle, Mail, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePrivy } from "@privy-io/react-auth";
 import logoVin from "@/assets/logo-vin.png";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER, onPrivyConnected, type PrivyConnectedWallet } from "@/lib/privyBridge";
+import { WalletSetupModal } from "@/components/WalletSetupModal";
 
 // Human-readable error messages resolved through i18n
 function friendlyError(
@@ -34,6 +35,8 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   // true mientras el usuario está completando el login con correo (Privy).
   const [privyPending, setPrivyPending] = useState(false);
+  // true cuando el usuario quiere ver qué wallets son compatibles.
+  const [walletSetupOpen, setWalletSetupOpen] = useState(false);
 
   // If already connected, skip straight to the app
   useEffect(() => {
@@ -99,6 +102,8 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+      {/* Wallet setup info modal */}
+      <WalletSetupModal open={walletSetupOpen} onClose={() => setWalletSetupOpen(false)} />
       <div className="mb-10 text-center animate-in fade-in zoom-in duration-500">
         <img src={logoVin} alt={t("common.app_name")} className="w-20 h-20 object-contain mx-auto mb-4" />
         <h1 className="text-2xl font-black text-foreground tracking-tight italic">{t("login.title")}</h1>
@@ -139,9 +144,18 @@ const Login = () => {
         <div className="p-4 rounded-xl bg-primary/5 border border-primary/15 text-center">
           <Wallet className="w-5 h-5 text-primary mx-auto mb-1" />
           <p className="text-sm font-bold text-foreground mb-0.5">{t("login.wallet_picker_title")}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground mb-2">
             {t("login.wallet_picker_description")}
           </p>
+          {/* Supported-wallets hint: Freighter, LOBSTR, Albedo, xBull */}
+          <button
+            type="button"
+            onClick={() => setWalletSetupOpen(true)}
+            className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold hover:underline"
+          >
+            <Info className="w-3 h-3" />
+            {t("login.wallet_setup_link", "Freighter · LOBSTR · Albedo · xBull — which one to use?")}
+          </button>
         </div>
 
         <button
