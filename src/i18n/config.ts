@@ -4,12 +4,23 @@
  * - Default language: Spanish (es)
  * - Fallback language: Spanish (es)
  * - Namespace: "translation" (single namespace, flat structure)
- * - Missing key behavior: returns the key itself so nothing silently breaks
+ * - Missing key behavior: returns the key path itself (e.g. "wallet_setup.error_generic")
+ *   so the UI never silently shows a blank string — a visible key path signals a gap.
+ *
+ * Fallback chain for a missing key in locale "en":
+ *   1. Look up key in "en" translation resources.
+ *   2. If not found, look up key in fallback locale "es".
+ *   3. If still not found, parseMissingKeyHandler returns the key path as a string.
  *
  * To add a new locale:
  *   1. Create src/i18n/locales/<lang>.ts mirroring the es.ts shape
  *   2. Import it here and add it to the `resources` map
  *   3. Update the `supportedLngs` array
+ *
+ * To add a new key:
+ *   1. Add the key and English value to en.ts
+ *   2. Add the key and translated value to es.ts (and any other locales)
+ *   3. Never rename or delete a key — change only the value to avoid breaking saved references
  */
 
 import i18n from "i18next";

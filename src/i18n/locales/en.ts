@@ -131,7 +131,7 @@ const en = {
     deposit_button: "Deposit Earnings",
     wallet_disconnected_title: "Wallet disconnected",
     wallet_disconnected_description:
-      "Freighter is not available. Reconnect your wallet to operate.",
+      "Your wallet is not available. Make sure Freighter is installed and unlocked, or use the reconnect button.",
     reconnect: "Reconnect",
     loading_wallet: "Loading...",
     welcome_title: "Welcome back!",
@@ -251,8 +251,18 @@ const en = {
     connect_freighter: "Connect with Freighter",
     freighter_not_detected: "Freighter not detected",
     freighter_not_detected_description:
-      "Install the extension or continue with Albedo...",
+      "Install the extension or continue with Albedo, a web wallet that requires no installation.",
+    install_freighter_alt: "Install Freighter instead",
+    install_freighter_link: "Don't have Freighter? Download it here",
     error_cancelled: "Connection cancelled. You can try again.",
+    error_popup_blocked:
+      "The popup was blocked. Allow pop-ups for this site and try again.",
+    error_wallet_locked:
+      "Your wallet is locked. Unlock it and try again.",
+    error_no_network:
+      "No network connection. Check your internet and try again.",
+    error_generic:
+      "Connection error. Make sure your wallet is unlocked and try again.",
     error_save: "Could not save. Try again.",
   },
 
