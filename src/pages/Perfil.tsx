@@ -6,6 +6,7 @@ import { fetchContractBalance } from "../stellar/queries";
 import { recordMint } from "../stellar/activity";
 import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useFormatters } from "@/lib/format";
 import { useExportWallet } from "@privy-io/react-auth/extended-chains";
 import AppShell from "@/components/AppShell";
 import LanguageToggle from "@/components/LanguageToggle";
@@ -22,6 +23,7 @@ import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestne
 const Perfil = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { formatAmount } = useFormatters();
 
   const tierFromScore = (score: number) => {
     if (score >= 1000) return 4;
@@ -490,7 +492,7 @@ const Perfil = () => {
           <div className="card-elevated p-4 text-center">
             <Wallet className="w-4 h-4 text-muted-foreground mx-auto mb-1.5" />
             <p className="text-lg font-bold text-foreground tabular-nums">
-              {loadingProfile ? "..." : onChainUsdc}
+              {loadingProfile ? "..." : formatAmount(onChainUsdc)}
             </p>
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{t("profile.stat_savings")}</p>
           </div>
@@ -498,7 +500,7 @@ const Perfil = () => {
           <div className="card-elevated p-4 text-center border-emerald-500/20 bg-emerald-500/5">
             <Star className="w-4 h-4 text-emerald-600 mx-auto mb-1.5" />
             <p className="text-lg font-bold text-emerald-700 tabular-nums">
-              {loadingProfile ? "..." : availableCredit}
+              {loadingProfile ? "..." : formatAmount(availableCredit)}
             </p>
             <p className="text-[10px] text-emerald-600/80 font-bold uppercase tracking-wider">{t("profile.stat_credit")}</p>
             {canMintUpgrade && (
@@ -525,7 +527,7 @@ const Perfil = () => {
             </div>
             <div className="flex items-center gap-1 text-xs text-primary font-medium bg-primary/10 px-2 py-1 rounded-full">
               <Activity className="w-3 h-3" />
-              <span className="font-bold">{riskData.score.toFixed(1)} pts</span>
+              <span className="font-bold">{formatAmount(riskData.score, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pts</span>
             </div>
           </div>
           
@@ -622,7 +624,7 @@ const Perfil = () => {
               <div>
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("profile.stat_credit")}</p>
                 <p className="text-lg font-bold text-foreground tabular-nums">
-                  {loadingProfile ? "..." : availableCredit} <span className="text-[11px] text-muted-foreground font-normal">XLM</span>
+                  {loadingProfile ? "..." : formatAmount(availableCredit)} <span className="text-[11px] text-muted-foreground font-normal">XLM</span>
                 </p>
               </div>
               <div className="w-24">
