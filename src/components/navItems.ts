@@ -16,7 +16,7 @@ export interface NavItem {
  * contrato impone la seguridad real con `treasury.require_auth()`).
  */
 export function getNavItems(): NavItem[] {
-  const savedWallet = (sessionStore.getItem("vinculo_wallet") || "").trim();
+  const savedWallet = (sessionStore.getItem(sessionStore.WALLET_KEY) || "").trim();
   const isTreasury = !!TREASURY_ADDRESS && savedWallet === TREASURY_ADDRESS.trim();
 
   return [

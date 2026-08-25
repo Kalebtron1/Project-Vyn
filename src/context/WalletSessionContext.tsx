@@ -1,14 +1,12 @@
 /**
  * WalletSessionContext — fuente única de verdad de la sesión de wallet.
  *
- * Carga la sesión UNA sola vez al arrancar (con respaldo en cookie) y la mantiene
- * en memoria por encima del router. Así, navegar entre rutas (incluido volver a
- * "Inicio") nunca vuelve a re-derivar la sesión desde `localStorage` ni dispara un
- * login espurio.
+ * Carga la sesión UNA sola vez al arrancar (con respaldo en cookie + validación)
+ * y la mantiene en memoria por encima del router. Así, navegar entre rutas
+ * nunca vuelve a re-derivar la sesión desde `localStorage` ni dispara un login espurio.
  *
- * Además, en escritorio con Freighter, vigila la cuenta activa de la extensión:
- * si el usuario cambia de cuenta, expone `walletMismatch` para avisarle (sin
- * borrar la sesión) que regrese a la wallet original.
+ * Incluye saneamiento de sesiones inválidas/expiradas, reconexión declarativa,
+ * y vigilancia de cambio de cuenta en Freighter para desktop.
  */
 
 import React, {
@@ -21,17 +19,18 @@ import React, {
 import * as FreighterAPI from "@stellar/freighter-api";
 import { usePrivy } from "@privy-io/react-auth";
 import * as sessionStore from "@/lib/sessionStore";
-import { isMobileBrowser } from "@/lib/mobileWalletConnectors";
+import { isMobileBrowser, isFreighterAvailable, connectWallet } from "@/lib/mobileWalletConnectors";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
+import { isValidStellarAddress, getFriendlyWalletMessage } from "@/lib/walletErrors";
 
-export const WALLET_KEY = "vinculo_wallet";
-export const ONBOARDED_KEY = "vinculo_onboarded";
-export const PROVIDER_KEY = "vinculo_wallet_provider";
+export const WALLET_KEY = sessionStore.WALLET_KEY;
+export const ONBOARDED_KEY = sessionStore.ONBOARDED_KEY;
+export const PROVIDER_KEY = sessionStore.PROVIDER_KEY;
 
 /** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
 export type WalletProvider = string;
 
-interface WalletSessionValue {
+export interface WalletSessionValue {
   /** Dirección de la sesión (la wallet con la que se inició sesión). */
   address: string | null;
   provider: WalletProvider | null;
@@ -42,9 +41,15 @@ interface WalletSessionValue {
   walletMismatch: boolean;
   /** Cuenta actualmente seleccionada en Freighter cuando hay mismatch. */
   activeAddress: string | null;
+  /** Error de sesión o reconexión accionable para la UI. */
+  sessionError: string | null;
+  /** Indica si la sesión fue invalidada por expiración de tiempo (TTL). */
+  isExpired: boolean;
   setSession: (address: string, provider: WalletProvider) => void;
   completeOnboarding: () => void;
   disconnect: () => void;
+  reconnect: () => Promise<{ ok: boolean; error?: string }>;
+  clearSessionError: () => void;
 }
 
 const Ctx = createContext<WalletSessionValue | null>(null);
@@ -56,9 +61,6 @@ export const useWalletSession = (): WalletSessionValue => {
   return ctx;
 };
 
-const normalizeProvider = (v: string | null): WalletProvider | null =>
-  v && v.trim() ? v : null;
-
 export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -68,30 +70,48 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   const [ready, setReady] = useState(false);
   const [walletMismatch, setWalletMismatch] = useState(false);
   const [activeAddress, setActiveAddress] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
 
   // Sesión de Privy (login con correo/Google/Apple). La necesitamos para poder
   // cerrarla en `disconnect`: si no, Privy sigue `authenticated` y vuelve a
-  // re-crear la sesión (deja el botón de Login cargando y te re-entra solo).
+  // re-crear la sesión.
   const { authenticated: privyAuthenticated, logout: privyLogout } = usePrivy();
 
-  // Cargar la sesión UNA vez (con respaldo en cookie + rehidratación de localStorage).
+  // Cargar y validar la sesión UNA vez al inicio (con respaldo en cookie + TTL).
   useEffect(() => {
-    setAddress(sessionStore.getItem(WALLET_KEY));
-    setProvider(normalizeProvider(sessionStore.getItem(PROVIDER_KEY)));
-    setOnboarded(sessionStore.getItem(ONBOARDED_KEY) === "1");
+    const restored = sessionStore.restoreSession();
+    setAddress(restored.address);
+    setProvider(restored.provider);
+    setOnboarded(restored.onboarded);
+    setIsExpired(restored.isExpired);
+
+    if (restored.isExpired) {
+      setSessionError("Tu sesión ha expirado. Por favor reconecta tu wallet.");
+    } else if (restored.isCorrupted) {
+      setSessionError("Sesión inválida detectada y restablecida.");
+    }
+
     setReady(true);
   }, []);
 
   const setSession = useCallback(
     (addr: string, prov: WalletProvider) => {
-      sessionStore.setItem(WALLET_KEY, addr);
-      sessionStore.setItem(PROVIDER_KEY, prov);
-      sessionStore.setItem(ONBOARDED_KEY, "1");
-      setAddress(addr);
+      const trimmed = addr?.trim();
+      if (!trimmed || !isValidStellarAddress(trimmed)) {
+        console.error("Dirección Stellar no válida para la sesión:", addr);
+        setSessionError("Formato de wallet inválido.");
+        return;
+      }
+
+      sessionStore.saveSession(trimmed, prov, true);
+      setAddress(trimmed);
       setProvider(prov);
       setOnboarded(true);
       setWalletMismatch(false);
       setActiveAddress(null);
+      setIsExpired(false);
+      setSessionError(null);
     },
     []
   );
@@ -101,26 +121,74 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     setOnboarded(true);
   }, []);
 
+  const clearSessionError = useCallback(() => {
+    setSessionError(null);
+  }, []);
+
   const disconnect = useCallback(() => {
-    sessionStore.removeItem(WALLET_KEY);
-    sessionStore.removeItem(ONBOARDED_KEY);
-    sessionStore.removeItem(PROVIDER_KEY);
+    sessionStore.clearSession();
     setAddress(null);
     setProvider(null);
     setOnboarded(false);
     setWalletMismatch(false);
     setActiveAddress(null);
-    // Cierra también la sesión de Privy. Sin esto, tras hacer logout Privy seguiría
-    // autenticado y volvería a entrar solo / dejaría el botón de Login cargando.
-    // Es no-op si la sesión no es de Privy (p. ej. Freighter), así que da igual el provider.
+    setIsExpired(false);
+    setSessionError(null);
+
+    // Cierra también la sesión de Privy si aplica
     if (privyAuthenticated) {
       void Promise.resolve(privyLogout()).catch(() => {});
     }
   }, [privyAuthenticated, privyLogout]);
 
+  // Reconexión unificada accionable
+  const reconnect = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      setSessionError(null);
+      const targetProvider = provider ?? sessionStore.getItem(PROVIDER_KEY) ?? FREIGHTER_ID;
+
+      // Si es Freighter en desktop, intentar conectar directamente con la extensión
+      if (targetProvider === FREIGHTER_ID && !isMobileBrowser()) {
+        const isAvail = await isFreighterAvailable();
+        if (!isAvail) {
+          const err = "Freighter no está disponible. Verifica que la extensión esté instalada y desbloqueada.";
+          setSessionError(err);
+          return { ok: false, error: err };
+        }
+        const access = await FreighterAPI.requestAccess();
+        if (access?.error) {
+          const err = getFriendlyWalletMessage(access.error);
+          setSessionError(err);
+          return { ok: false, error: err };
+        }
+        if (!access?.address) {
+          const err = "No se obtuvo la dirección de la wallet.";
+          setSessionError(err);
+          return { ok: false, error: err };
+        }
+        setSession(access.address, FREIGHTER_ID);
+        return { ok: true };
+      }
+
+      // Otras wallets o entorno móvil: abrir modal de conexión
+      const result = await connectWallet();
+      if (!result.ok) {
+        if (!result.cancelled) {
+          setSessionError(result.error);
+        }
+        return { ok: false, error: result.error };
+      }
+
+      setSession(result.address, result.provider);
+      return { ok: true };
+    } catch (err: unknown) {
+      const friendly = getFriendlyWalletMessage(err);
+      setSessionError(friendly);
+      return { ok: false, error: friendly };
+    }
+  }, [provider, setSession]);
+
   // Desktop + Freighter: detectar cambio de cuenta en la extensión.
-  // Sólo Freighter expone lectura silenciosa de la cuenta activa; para otras
-  // wallets del kit no hacemos polling de mismatch (igual que antes).
   useEffect(() => {
     if (!ready || !address) return;
     if (provider !== FREIGHTER_ID) return;
@@ -130,11 +198,9 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const check = async () => {
       try {
-        const res = await FreighterAPI.getAddress(); // no abre prompt si ya hay acceso
+        const res = await FreighterAPI.getAddress();
         if (cancelled) return;
         const active = res?.address || null;
-        // Sin cuenta activa (bloqueada / acceso revocado): lo maneja useWallet
-        // como "disconnected"; aquí no lo tratamos como mismatch.
         if (!active || active === address) {
           setWalletMismatch(false);
           setActiveAddress(null);
@@ -167,9 +233,13 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
         ready,
         walletMismatch,
         activeAddress,
+        sessionError,
+        isExpired,
         setSession,
         completeOnboarding,
         disconnect,
+        reconnect,
+        clearSessionError,
       }}
     >
       {children}

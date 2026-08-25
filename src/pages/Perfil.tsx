@@ -18,6 +18,7 @@ import { PRIVY_PROVIDER } from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 const Perfil = () => {
   const navigate = useNavigate();
@@ -176,7 +177,7 @@ const Perfil = () => {
           ? t("profile.usdc_popup_blocked")
           : isNotFound
             ? t("profile.usdc_account_not_funded")
-            : raw,
+            : getFriendlyWalletMessage(e, t),
         variant: "destructive",
       });
     } finally {
