@@ -1,6 +1,6 @@
 # Project Vyn
 
-Project Vyn is a Vite + React application backed by Stellar/Soroban contract calls. Authentication is wallet-based (Freighter/Albedo) — there is no separate auth backend.
+Project Vyn is a Vite + React application backed by Stellar/Soroban contract calls. Authentication is wallet-based (Freighter, Albedo, xBull, Lobstr, Hana, Rabet, or Privy) — there is no separate auth backend.
 
 ## Getting Started
 
@@ -23,7 +23,7 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 
 ### What you need to replicate
 
-- A Stellar wallet (Freighter extension on desktop, or Albedo on mobile) to log in.
+- A Stellar wallet to log in. Supported wallets include **Freighter** (desktop browser extension), **Albedo** (mobile/web), **xBull**, **Lobstr**, **Hana**, **Rabet**, and **Privy** (email/Google/Apple login). See [Wallet providers & fallback routing](docs/wallets.md) for the full compatibility matrix.
 - A Stellar testnet admin account for `SECRET_KEY_ADMIN` and `PUBLIC_KEY_ADMIN`.
 - The deployed Soroban contract IDs for `NFT_CONTRACT_ID`, `VITE_LENDING_CONTRACT_ID`, and the staking_pool (`VITE_STAKING_CONTRACT_ID` / `STAKING_CONTRACT_ID`).
 
@@ -76,6 +76,7 @@ Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless AP
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.
 - [Deployment guide](docs/deployment.md) — local setup, Vercel deploy, rollback steps, and contract redeployment.
 - [API reference](docs/api.md) — all endpoint contracts with request/response shapes and error codes.
+- [Wallet providers & fallback routing](docs/wallets.md) — supported wallets, compatibility matrix, fallback order, and environment detection.
 - [Contract migration & upgrade guide](docs/contracts/migration.md) — reproducible deploy, upgrade, and rollback steps for all three Soroban contracts.
 
 ## Notes For Collaborators
