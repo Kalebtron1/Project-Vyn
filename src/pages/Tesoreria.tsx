@@ -7,6 +7,9 @@ import confetti from "canvas-confetti";
 import BottomNav from "@/components/BottomNav";
 import logoVin from "@/assets/logo-vin.png";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { useWallet } from "@/hooks/useWallet";
+import * as sessionStore from "@/lib/sessionStore";
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { LENDING_CONTRACT_ID, TREASURY_ADDRESS, RPC_URL } from "@/stellar/contracts";
@@ -29,8 +32,9 @@ const ACTION_META: Record<TreasuryAction, { title: string; fn: string; cta: stri
 // `treasury.require_auth()` en withdraw_interest / withdraw_pool. Textos en español.
 const Tesoreria = () => {
   const { isMobile, provider, connect, sign } = useMobileWallet();
+  const { wallet: sessionWallet } = useWallet();
 
-  const savedWallet = (localStorage.getItem("vinculo_wallet") || "").trim();
+  const savedWallet = (sessionWallet || sessionStore.getItem(sessionStore.WALLET_KEY) || "").trim();
   const isTreasury = !!TREASURY_ADDRESS && savedWallet === TREASURY_ADDRESS.trim();
 
   const [accrued, setAccrued] = useState<number>(0);
@@ -131,7 +135,7 @@ const Tesoreria = () => {
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setErrorMsg(getFriendlyWalletMessage(err));
       setStep("error");
     }
   };

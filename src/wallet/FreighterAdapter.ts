@@ -1,7 +1,9 @@
 import * as FreighterAPI from "@stellar/freighter-api";
 import type { WalletAdapter } from "./WalletAdapter";
+import * as sessionStore from "@/lib/sessionStore";
+import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 
-const STORAGE_KEY = "vinculo_wallet";
+const STORAGE_KEY = sessionStore.WALLET_KEY;
 
 /**
  * FreighterAdapter — WalletAdapter implementation backed by the
@@ -22,7 +24,7 @@ export class FreighterAdapter implements WalletAdapter {
     const response = await FreighterAPI.requestAccess();
     if (response.error) throw new Error(response.error);
     if (!response.address) throw new Error("No se obtuvo la dirección de la wallet.");
-    localStorage.setItem(STORAGE_KEY, response.address);
+    sessionStore.saveSession(response.address, FREIGHTER_ID);
     return response.address;
   }
 
@@ -35,12 +37,11 @@ export class FreighterAdapter implements WalletAdapter {
   }
 
   disconnect(): void {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem("vinculo_onboarded");
+    sessionStore.clearSession();
     window.location.href = "/login";
   }
 
   getAddress(): string | null {
-    return localStorage.getItem(STORAGE_KEY);
+    return sessionStore.getItem(STORAGE_KEY);
   }
 }

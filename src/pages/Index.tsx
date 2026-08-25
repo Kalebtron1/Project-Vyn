@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, AlertTriangle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import AppShell from "@/components/AppShell";
 import BalanceCard from "@/components/BalanceCard";
@@ -11,26 +11,50 @@ import YieldCard from "@/components/dashboard/YieldCard";
 import NftLevelCard from "@/components/dashboard/NftLevelCard";
 import PeriodSummaryCard from "@/components/dashboard/PeriodSummaryCard";
 import { useWallet } from "@/hooks/useWallet";
+import { toast } from "@/hooks/use-toast";
 
 const Index = () => {
-  const { walletStatus } = useWallet();
+  const { walletStatus, reconnect, isExpired, sessionError } = useWallet();
   const [depositOpen, setDepositOpen] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const { t } = useTranslation();
+
+  const handleReconnect = async () => {
+    setReconnecting(true);
+    try {
+      const res = await reconnect();
+      if (!res.ok && res.error) {
+        toast({
+          title: t("common.error"),
+          description: res.error,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setReconnecting(false);
+    }
+  };
 
   return (
     <AppShell title={t("home.welcome_title")} subtitle={t("home.dashboard_subtitle")}>
-      {/* Banner de wallet desconectada */}
+      {/* Banner de wallet desconectada / sesión expirada */}
       {walletStatus === "disconnected" && (
         <div className="max-w-[1400px] mx-auto mb-4 flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
           <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-amber-700">{t("home.wallet_disconnected_title")}</p>
-            <p className="text-[11px] text-amber-800/70">{t("home.wallet_disconnected_description")}</p>
+            <p className="text-xs font-bold text-amber-700">
+              {isExpired ? t("wallet_errors.session_expired") : t("home.wallet_disconnected_title")}
+            </p>
+            <p className="text-[11px] text-amber-800/70">
+              {sessionError || t("home.wallet_disconnected_description")}
+            </p>
           </div>
           <button
-            onClick={() => window.location.reload()}
-            className="text-[11px] font-bold text-amber-700 hover:underline flex-shrink-0"
+            onClick={handleReconnect}
+            disabled={reconnecting}
+            className="text-[11px] font-bold text-amber-700 hover:underline flex-shrink-0 flex items-center gap-1 disabled:opacity-50"
           >
+            {reconnecting && <Loader2 className="w-3 h-3 animate-spin" />}
             {t("home.reconnect")}
           </button>
         </div>

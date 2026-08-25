@@ -1,17 +1,12 @@
 /**
  * Conectores de wallet — capa de abstracción sobre Stellar Wallets Kit.
  *
- * Antes esta capa elegía manualmente entre Freighter (escritorio) y Albedo
- * (móvil). Ahora delega en Stellar Wallets Kit (ver `stellarWalletsKit.ts`),
- * que muestra un modal donde el usuario escoge su wallet (Freighter, Albedo,
- * xBull, Lobstr, Hana, Rabet…) y unifica conexión y firma.
+ * Delega en Stellar Wallets Kit (ver `stellarWalletsKit.ts`), que muestra un modal
+ * donde el usuario escoge su wallet (Freighter, Albedo, xBull, Lobstr, Hana, Rabet…)
+ * y unifica conexión y firma.
  *
- * La API pública (`connectWallet`, `signTransactionXdr`, `ConnectResult`,
- * `SignResult`, `getSavedProvider`, `saveProvider`) se mantiene estable para no
- * tocar los puntos de firma (DepositModal, CreditSection, Tesoreria, Retiros).
- *
- * Cambio de tipo: `provider` deja de ser `"freighter" | "albedo"` y pasa a ser
- * el id de wallet del kit (string), ya que ahora puede ser cualquiera.
+ * Utiliza el módulo centralizado `walletErrors` para detección robusta de cancelaciones
+ * y mensajes amigables y consistentes.
  */
 
 import * as FreighterAPI from "@stellar/freighter-api";
@@ -23,6 +18,7 @@ import {
 } from "@/lib/stellarWalletsKit";
 import * as sessionStore from "@/lib/sessionStore";
 import { PRIVY_PROVIDER, privySign } from "@/lib/privyBridge";
+import { isUserCancellation, getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 /** Id de wallet de Stellar Wallets Kit (p. ej. "freighter", "albedo", "xbull"). */
 export type WalletId = string;
@@ -56,42 +52,27 @@ export type SignResult =
   | { ok: true; signedXdr: string }
   | { ok: false; cancelled: boolean; error: string };
 
-function isCancellation(msg: string): boolean {
-  const lower = msg.toLowerCase();
-  return (
-    lower.includes("reject") ||
-    lower.includes("declined") ||
-    lower.includes("cancel") ||
-    lower.includes("closed") ||
-    lower.includes("dismiss")
-  );
-}
-
 // ─── Connect (open modal + get public key) ────────────────────────────────────
 
 export async function connectWallet(): Promise<ConnectResult> {
   try {
     const { address, walletId } = await openWalletModal();
     if (!address) {
-      return { ok: false, cancelled: false, error: "No se obtuvo la dirección pública." };
+      return { ok: false, cancelled: false, error: "No se obtuvo la dirección pública de la wallet." };
     }
     return { ok: true, address, provider: walletId };
-  } catch (err: any) {
-    const msg: string = err?.message ?? String(err);
-    const cancelled = isCancellation(msg);
+  } catch (err: unknown) {
+    const cancelled = isUserCancellation(err);
+    const error = getFriendlyWalletMessage(err);
     return {
       ok: false,
       cancelled,
-      error: cancelled
-        ? "Conexión cancelada. Puedes intentarlo de nuevo."
-        : `Error al conectar la wallet: ${msg}`,
+      error,
     };
   }
 }
 
 // ─── Sign transaction XDR ─────────────────────────────────────────────────────
-
-const WALLET_KEY = "vinculo_wallet";
 
 export async function signTransactionXdr(
   xdr: string,
@@ -107,7 +88,7 @@ export async function signTransactionXdr(
 
     const kit = getKit();
     kit.setWallet(provider);
-    const address = sessionStore.getItem(WALLET_KEY) ?? undefined;
+    const address = sessionStore.getItem(sessionStore.WALLET_KEY) ?? undefined;
     const { signedTxXdr } = await kit.signTransaction(xdr, {
       networkPassphrase: NETWORK_PASSPHRASE,
       address,
@@ -116,27 +97,23 @@ export async function signTransactionXdr(
       return { ok: false, cancelled: false, error: "La wallet no devolvió la transacción firmada." };
     }
     return { ok: true, signedXdr: signedTxXdr };
-  } catch (err: any) {
-    const msg: string = err?.message ?? String(err);
-    const cancelled = isCancellation(msg);
+  } catch (err: unknown) {
+    const cancelled = isUserCancellation(err);
+    const error = getFriendlyWalletMessage(err);
     return {
       ok: false,
       cancelled,
-      error: cancelled
-        ? "Firma cancelada. Puedes intentarlo de nuevo."
-        : `Error al firmar la transacción: ${msg}`,
+      error,
     };
   }
 }
 
 // ─── Persist / retrieve provider choice ──────────────────────────────────────
 
-const PROVIDER_KEY = "vinculo_wallet_provider";
-
 export function saveProvider(provider: WalletId): void {
-  sessionStore.setItem(PROVIDER_KEY, provider);
+  sessionStore.setItem(sessionStore.PROVIDER_KEY, provider);
 }
 
 export function getSavedProvider(): WalletId {
-  return sessionStore.getItem(PROVIDER_KEY) ?? FREIGHTER_ID;
+  return sessionStore.getItem(sessionStore.PROVIDER_KEY) ?? FREIGHTER_ID;
 }

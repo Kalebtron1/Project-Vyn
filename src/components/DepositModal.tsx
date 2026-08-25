@@ -16,24 +16,11 @@ import {
 } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
 import { getUsdcBalance } from "@/stellar/trustline";
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-}
-
-// Map raw errors to user-friendly messages
-function friendlyDepositError(msg: string, cancelled: boolean): string {
-  if (cancelled) return "Firma cancelada. Puedes intentarlo de nuevo.";
-  if (msg.includes("Cuenta incorrecta")) return msg; // already friendly
-  if (msg.includes("popup")) return "El popup fue bloqueado. Permite ventanas emergentes e intenta de nuevo.";
-  if (msg.includes("Instala") || msg.includes("not installed")) return "Wallet no disponible. Conecta tu wallet primero.";
-  if (msg.includes("Acceso denegado") || msg.includes("rejected")) return "Acceso denegado. Aprueba la solicitud en tu wallet.";
-  if (msg.includes("insufficient")) return "Saldo insuficiente para cubrir la transacción y las comisiones.";
-  // Token Soroban: balance fuera de rango = no alcanza el USDC para ese depósito.
-  if (msg.includes("#10") || msg.includes("not within the allowed range") || msg.includes("balance is not within"))
-    return "Saldo USDC insuficiente para ese depósito. Revisa tu saldo disponible.";
-  return msg || "Error al procesar el depósito. Intenta de nuevo.";
 }
 
 const DepositModal = ({ open, onClose }: Props) => {
@@ -152,9 +139,8 @@ const DepositModal = ({ open, onClose }: Props) => {
         setTimeout(() => setShowUnlockCelebration(true), 800);
       }
     } catch (err) {
-      const e = err as { message?: string; cancelled?: boolean };
-      console.error("Deposit error:", e);
-      setErrorMsg(friendlyDepositError(e.message ?? "", !!e.cancelled));
+      console.error("Deposit error:", err);
+      setErrorMsg(getFriendlyWalletMessage(err, t));
       setStep("error");
     }
   };

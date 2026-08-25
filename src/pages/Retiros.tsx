@@ -10,6 +10,9 @@ import { useApp } from "@/context/AppContext";
 import confetti from "canvas-confetti";
 import AppShell from "@/components/AppShell";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { useWallet } from "@/hooks/useWallet";
+import * as sessionStore from "@/lib/sessionStore";
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
@@ -18,12 +21,15 @@ import { fetchContractBalance, fetchTotalDeposited, fetchTotalWithdrawn } from "
 const Retiros = () => {
   const { addWithdrawal } = useApp();
   const { isMobile, provider, connect, sign } = useMobileWallet();
+  const { wallet: sessionWallet } = useWallet();
   const { t } = useTranslation();
 
   // Posición real en vivo (depósito + rendimiento del vault DeFindex).
   const [realBalance, setRealBalance] = useState<number>(0);
   const [netPrincipal, setNetPrincipal] = useState<number>(0);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(
+    () => sessionWallet || sessionStore.getItem(sessionStore.WALLET_KEY)
+  );
 
   // Modal de Retiro
   const [modalOpen, setModalOpen] = useState(false);
@@ -50,21 +56,10 @@ const Retiros = () => {
   const kycTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    const initWallet = async () => {
-      try {
-        // Prefer saved wallet from localStorage to avoid prompting on page load
-        const saved = localStorage.getItem("vinculo_wallet");
-        if (saved) {
-          setWalletAddress(saved);
-        } else {
-          const result = await connect();
-          if (result.ok) setWalletAddress(result.address);
-        }
-      } catch (error) { console.error("Error inicializando wallet:", error); }
-    };
-    initWallet();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (sessionWallet) {
+      setWalletAddress(sessionWallet);
+    }
+  }, [sessionWallet]);
 
   const loadData = useCallback(async (address: string) => {
     try {
@@ -144,7 +139,7 @@ const Retiros = () => {
       return { ok: false, error: "Transacción fallida en el contrato." };
     } catch (err) {
       console.error(err);
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: getFriendlyWalletMessage(err, t) };
     }
   };
 

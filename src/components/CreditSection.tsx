@@ -15,6 +15,7 @@ import {
   TransactionBuilder 
 } from "@stellar/stellar-sdk";
 import { walletAdapter } from "@/wallet";
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 const getLendingContractId = () => {
   const contractId = import.meta.env.VITE_LENDING_CONTRACT_ID?.trim();
@@ -58,32 +59,8 @@ const CreditSection = () => {
     isUnlocked: false
   });
 
-  const toFriendlyWithdrawError = (error: any) => {
-    const raw = String(error?.message || "").toLowerCase();
-
-    // El contrato llega a consultar balance() y luego revierte en request_loan.
-    // Eso normalmente significa falta de liquidez en el pool de préstamos.
-    if (
-      raw.includes("request_loan") &&
-      raw.includes("balance") &&
-      (raw.includes("hosterror") || raw.includes("invalidaction") || raw.includes("unreachablecodereached"))
-    ) {
-      return t("credit.errors.no_liquidity");
-    }
-
-    if (raw.includes("active loan") || raw.includes("no active loan")) {
-      return t("credit.errors.active_loan");
-    }
-
-    if (raw.includes("tier") || raw.includes("sbt")) {
-      return t("credit.errors.tier_insufficient");
-    }
-
-    if (raw.includes("cancelada") || raw.includes("cancelled")) {
-      return t("credit.errors.cancelled");
-    }
-
-    return t("credit.errors.generic");
+  const toFriendlyWithdrawError = (error: unknown) => {
+    return getFriendlyWalletMessage(error, t);
   };
 
   // Nombre del nivel traducido (cae al nombre del backend si falta la clave).
@@ -207,7 +184,7 @@ const CreditSection = () => {
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error al retirar:", error);
       setErrorMsg(toFriendlyWithdrawError(error));
     } finally {
@@ -258,9 +235,9 @@ const CreditSection = () => {
       
       window.location.reload(); 
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error al pagar:", error);
-      setErrorMsg(error?.message || t("credit.errors.repay_generic"));
+      setErrorMsg(getFriendlyWalletMessage(error, t));
     } finally {
       setLoadingTx(false);
     }

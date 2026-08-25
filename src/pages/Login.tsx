@@ -7,31 +7,16 @@ import logoVin from "@/assets/logo-vin.png";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER, onPrivyConnected, type PrivyConnectedWallet } from "@/lib/privyBridge";
-
-// Human-readable error messages resolved through i18n
-function friendlyError(
-  raw: string,
-  cancelled: boolean,
-  t: (key: string) => string
-): string {
-  if (cancelled) return t("login.errors.cancelled");
-  const lower = raw.toLowerCase();
-  if (lower.includes("popup")) return t("login.errors.popup_blocked");
-  if (lower.includes("locked") || lower.includes("bloqueada"))
-    return t("login.errors.wallet_locked");
-  if (lower.includes("network") || lower.includes("fetch"))
-    return t("login.errors.no_network");
-  return t("login.errors.generic");
-}
+import { getFriendlyWalletMessage } from "@/lib/walletErrors";
 
 const Login = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { connect } = useMobileWallet();
   const { login, authenticated } = usePrivy();
-  const { address, onboarded, ready, setSession } = useWalletSession();
+  const { address, onboarded, ready, setSession, sessionError } = useWalletSession();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(sessionError);
   // true mientras el usuario está completando el login con correo (Privy).
   const [privyPending, setPrivyPending] = useState(false);
 
@@ -41,6 +26,13 @@ const Login = () => {
       navigate("/", { replace: true });
     }
   }, [ready, address, onboarded, navigate]);
+
+  // Si hay un error de sesión al cargar (ej. sesión expirada o corrupta), mostrarlo al usuario
+  useEffect(() => {
+    if (sessionError) {
+      setError(sessionError);
+    }
+  }, [sessionError]);
 
   // Entrar a la app cuando Privy entrega la wallet Stellar. `PrivyBridge` (en el root)
   // asegura/crea la wallet tras autenticar y publica el evento; aquí lo escuchamos.
@@ -70,8 +62,8 @@ const Login = () => {
     setPrivyPending(true);
     try {
       login();
-    } catch (err: any) {
-      setError(err?.message ?? t("login.errors.generic"));
+    } catch (err: unknown) {
+      setError(getFriendlyWalletMessage(err, t));
       setPrivyPending(false);
     }
   };
@@ -87,7 +79,7 @@ const Login = () => {
 
     if (!result.ok) {
       setLoading(false);
-      setError(friendlyError(result.error, result.cancelled, t));
+      setError(getFriendlyWalletMessage(result.error, t));
       return;
     }
 

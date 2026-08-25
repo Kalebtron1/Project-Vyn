@@ -9,9 +9,9 @@ export type WalletStatus = "loading" | "connected" | "disconnected" | "missing";
  * useWallet — vista de la sesión para la UI.
  *
  * La fuente de verdad es WalletSessionContext (cargado una vez por encima del
- * router). Este hook solo deriva el estado de presentación y, en escritorio con
- * Freighter, marca "disconnected" si la extensión deja de estar disponible.
- * Mantiene su API pública previa para no romper a los consumidores.
+ * router). Este hook deriva el estado de presentación, maneja reconexión,
+ * supervisa la disponibilidad de extensiones en desktop, y expone errores
+ * accionables de sesión.
  */
 export const useWallet = () => {
   const {
@@ -20,7 +20,11 @@ export const useWallet = () => {
     ready,
     walletMismatch,
     activeAddress,
+    sessionError,
+    isExpired,
     disconnect: ctxDisconnect,
+    reconnect: ctxReconnect,
+    clearSessionError,
     setSession,
   } = useWalletSession();
 
@@ -49,7 +53,7 @@ export const useWallet = () => {
     ? "loading"
     : !address
     ? "missing"
-    : freighterGone
+    : freighterGone || isExpired
     ? "disconnected"
     : "connected";
 
@@ -64,13 +68,18 @@ export const useWallet = () => {
 
   return {
     wallet: address,
+    provider,
     loading: !ready,
     walletStatus,
     shortWallet,
     disconnect: ctxDisconnect,
+    reconnect: ctxReconnect,
     setWalletAddress,
     // Aviso de cambio de cuenta en Freighter (desktop).
     walletMismatch,
     activeAddress,
+    sessionError,
+    isExpired,
+    clearSessionError,
   };
 };

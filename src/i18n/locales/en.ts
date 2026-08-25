@@ -97,11 +97,34 @@ const en = {
         "The popup was blocked. Allow pop-ups for this site and try again.",
       wallet_locked:
         "Your wallet is locked. Unlock it and try again.",
+      wallet_missing:
+        "Wallet not available or not installed. Connect your wallet to continue.",
+      session_expired:
+        "Your wallet session has expired or is invalid. Please reconnect.",
       no_network:
         "No network connection. Check your internet and try again.",
       generic:
         "Connection error. Make sure your wallet is unlocked and try again.",
     },
+  },
+
+  // ─── Standardized Wallet Errors ──────────────────────────────────────────────
+  wallet_errors: {
+    cancelled: "Operation cancelled. You can try again whenever you're ready.",
+    popup_blocked: "The popup was blocked. Allow pop-ups for this site and try again.",
+    wallet_locked: "Your wallet is locked. Unlock it in the extension and try again.",
+    wallet_missing: "Wallet not available or not installed. Connect your wallet to continue.",
+    session_expired: "Your wallet session has expired or is invalid. Please reconnect.",
+    account_mismatch: "Wrong account. Please switch to {{expected}} in your wallet.",
+    account_not_found: "Account not found on the Stellar network. Make sure it is funded with XLM.",
+    insufficient_balance: "Insufficient balance to cover the transaction and network fees.",
+    insufficient_usdc: "Insufficient USDC balance. You have {{balance}} USDC available.",
+    no_liquidity: "There is not enough liquidity in the pool to disburse this amount right now. Try later or withdraw a smaller amount.",
+    active_loan: "You already have an active loan. You must pay it off before requesting a new one.",
+    tier_insufficient: "Your current NFT tier does not enable this credit yet. Upgrade your level and try again.",
+    network_error: "No network connection. Check your internet and try again.",
+    contract_error: "Smart contract execution failed. Please try again.",
+    generic: "Error processing the wallet operation. Please try again.",
   },
 
   onboarding: {

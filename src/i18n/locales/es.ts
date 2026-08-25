@@ -107,11 +107,34 @@ const es = {
         "El popup fue bloqueado. Permite ventanas emergentes para este sitio e intenta de nuevo.",
       wallet_locked:
         "Tu wallet está bloqueada. Desbloquéala e intenta de nuevo.",
+      wallet_missing:
+        "Wallet no disponible o no instalada. Conecta tu wallet para continuar.",
+      session_expired:
+        "Tu sesión de wallet ha expirado o es inválida. Por favor reconecta tu wallet.",
       no_network:
         "Sin conexión a la red. Verifica tu internet e intenta de nuevo.",
       generic:
         "Error de conexión. Verifica que tu wallet esté desbloqueada e intenta de nuevo.",
     },
+  },
+
+  // ─── Errores de Wallet Estandarizados ───────────────────────────────────────
+  wallet_errors: {
+    cancelled: "Operación cancelada. Puedes intentarlo de nuevo cuando quieras.",
+    popup_blocked: "El popup fue bloqueado. Permite ventanas emergentes para este sitio e intenta de nuevo.",
+    wallet_locked: "Tu wallet está bloqueada. Desbloquéala en la extensión e intenta de nuevo.",
+    wallet_missing: "Wallet no disponible o no instalada. Conecta tu wallet para continuar.",
+    session_expired: "Tu sesión ha expirado o es inválida. Por favor reconecta tu wallet.",
+    account_mismatch: "Cuenta incorrecta. Por favor cambia a la cuenta {{expected}} en tu wallet.",
+    account_not_found: "La cuenta no existe en la red Stellar. Asegúrate de que esté fondeada con XLM.",
+    insufficient_balance: "Saldo insuficiente para cubrir la transacción y las comisiones de red.",
+    insufficient_usdc: "Saldo USDC insuficiente. Tienes {{balance}} USDC disponibles.",
+    no_liquidity: "No hay liquidez suficiente en el pool en este momento. Intenta más tarde o con un monto menor.",
+    active_loan: "Ya tienes un préstamo activo. Debes pagarlo antes de solicitar uno nuevo.",
+    tier_insufficient: "Tu nivel actual no habilita este crédito todavía. Sube de nivel e intenta de nuevo.",
+    network_error: "Sin conexión a la red. Verifica tu internet e intenta de nuevo.",
+    contract_error: "Error al ejecutar el contrato inteligente. Intenta de nuevo.",
+    generic: "Error al procesar la operación con la wallet. Intenta de nuevo.",
   },
 
   // ─── Onboarding ──────────────────────────────────────────────────────────────
