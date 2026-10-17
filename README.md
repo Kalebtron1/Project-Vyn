@@ -75,6 +75,7 @@ Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless AP
 - [Architecture overview](docs/architecture.md) — layers, components, contracts, and where to make common changes.
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.
 - [Deployment guide](docs/deployment.md) — local setup, Vercel deploy, rollback steps, and contract redeployment.
+- [Incident runbook](docs/runbook.md) — deploy path, post-deploy checks, rollback steps, and common failure scenarios.
 - [API reference](docs/api.md) — all endpoint contracts with request/response shapes and error codes.
 - [Contract migration & upgrade guide](docs/contracts/migration.md) — reproducible deploy, upgrade, and rollback steps for all three Soroban contracts.
 
