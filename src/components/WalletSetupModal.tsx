@@ -111,7 +111,7 @@ export function WalletSetupModal({ open, onClose }: WalletSetupModalProps) {
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("wallet_setup.title", "Supported Wallets")}</DialogTitle>
+          <DialogTitle>{t("wallet_setup.supported_title")}</DialogTitle>
           <DialogDescription>
             {t(
               "wallet_setup.description",
@@ -138,7 +138,7 @@ export function WalletSetupModal({ open, onClose }: WalletSetupModalProps) {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    {wallet.description}
+                    {t(`wallet_setup.wallets.${wallet.id}.description`)}
                   </p>
                 </div>
                 <a
@@ -160,7 +160,7 @@ export function WalletSetupModal({ open, onClose }: WalletSetupModalProps) {
                     <span className="font-bold">
                       {t("wallet_setup.limitation_label", "Note: ")}
                     </span>
-                    {wallet.limitation}
+                    {t(`wallet_setup.wallets.${wallet.id}.limitation`)}
                   </p>
                 </div>
               )}

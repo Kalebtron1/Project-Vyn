@@ -91,6 +91,7 @@ const es = {
 
   // ─── Login / Auth ────────────────────────────────────────────────────────────
   login: {
+    wallet_setup_link: "Freighter · LOBSTR · Albedo · xBull — ¿cuál usar?",
     title: "Vínculo",
     accesly_cta: "Entrar con correo",
     accesly_creating: "Creando tu cuenta…",
@@ -261,6 +262,17 @@ const es = {
 
   // ─── Wallet setup modal ──────────────────────────────────────────────────────
   wallet_setup: {
+    supported_title: "Wallets compatibles",
+    footer: "Todas las wallets se conectan a Stellar Testnet. Cambia la red de tu wallet a Testnet antes de conectarte.",
+    wallets: {
+      freighter: { description: "Extensión oficial de navegador de la Stellar Development Foundation." },
+      lobstr: { description: "Wallet de Stellar popular, con extensión de navegador y app móvil. En escritorio, conéctate con la extensión.", limitation: "La firma dentro de la app solo funciona con la extensión de navegador. La app móvil de LOBSTR no admite firma por deep link en este flujo. Instala la extensión de LOBSTR en Chrome o Brave para usarla aquí." },
+      albedo: { description: "Firmador web de Stellar: no requiere instalación y funciona en cualquier navegador, incluso en móvil." },
+      xbull: { description: "Wallet de Stellar con muchas funciones, disponible como extensión de navegador." },
+    },
+    description: "Elige cualquiera de estas wallets y luego toca Conectar wallet en la pantalla de inicio para abrir el selector.",
+    get_wallet: "Obtener",
+    limitation_label: "Nota: ",
     title: "Conecta tu wallet",
     subtitle_albedo: "Vía Albedo (web wallet)",
     subtitle_freighter: "Vía Freighter",
