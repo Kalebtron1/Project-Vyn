@@ -15,7 +15,14 @@
 //   → la respuesta trae la `clabe`; el usuario paga por SPEI y, en dev, BlindPay auto-acredita
 //   el USDB a la wallet ~30s después. La UI habla en MXN (sender) / USDC (receiver).
 
-import { getOnrampUserByWallet, upsertOnrampUser, hasSettledPayin, recordSettlement } from "./_supabase.mjs";
+import {
+  getOnrampUserByWallet,
+  upsertOnrampUser,
+  hasSettledPayin,
+  reservePayinSettlement,
+  recordSettlement,
+  releasePayinSettlement,
+} from "./_supabase.mjs";
 import { sendUsdcFromAdmin } from "./_usdc.mjs";
 
 const BASE_URL = process.env.BLINDPAY_BASE_URL || "https://api.blindpay.com/v1";
@@ -152,7 +159,13 @@ export async function getPayin(payinId) {
 // usuario no confía), la tesorería/admin envía el USDC equivalente directo a su wallet —
 // misma idea que el off-ramp (el USDB es un artefacto invisible). Idempotente por payin.
 // El frontend luego deposita ese USDC al vault (lo firma la wallet del usuario con Privy).
-export async function settlePayin({ payinId, simulate = false }) {
+export function isSimulateAllowed(env = process.env) {
+  const flagEnabled = String(env?.BLINDPAY_ALLOW_SIMULATE || "").trim().toLowerCase() === "true";
+  const isTestnet = ONRAMP_TOKEN === "USDB" || ONRAMP_NETWORK.includes("testnet");
+  return flagEnabled && isTestnet;
+}
+
+export async function settlePayin({ payinId, simulate = false, env = process.env }) {
   if (!payinId) throw new Error("settlePayin: falta payinId");
   const payin = await getPayin(payinId);
 
@@ -161,23 +174,46 @@ export async function settlePayin({ payinId, simulate = false }) {
     payin?.tracking_payment?.step === "completed" ||
     payin?.tracking_transaction?.step === "completed";
 
-  // Modo simulación (solo sandbox/testnet): BlindPay no expone un endpoint para "forzar"
-  // la confirmación del SPEI en dev (auto-acredita ~30s después de iniciar el payin), así
-  // que para demos permitimos liquidar sin esperar esa confirmación. Esto ejercita la pata
-  // on-chain real (tesorería/admin → wallet del usuario → vault), que es lo verificable.
-  const canSimulate = ONRAMP_TOKEN === "USDB" || ONRAMP_NETWORK.includes("testnet");
-  const forced = simulate && canSimulate && !paid;
-  if (!paid && !forced) return { settled: false, reason: "not_paid", status: payin?.status || null };
-
-  if (await hasSettledPayin(payinId)) return { settled: false, reason: "already_settled" };
+  // Modo simulación: requiere que BLINDPAY_ALLOW_SIMULATE="true" esté habilitado
+  // explícitamente en el servidor además de estar en testnet/USDB.
+  const canSimulate = isSimulateAllowed(env);
+  const forced = Boolean(simulate) && canSimulate && !paid;
+  if (!paid && !forced) {
+    return { settled: false, reason: "not_paid", status: payin?.status || null };
+  }
 
   const to = payin.address; // wallet del usuario (la registrada como blockchain wallet)
   const amountUsd = (payin.receiver_amount || 0) / 100;
-  if (!to || !(amountUsd > 0)) throw new Error("Payin sin dirección/monto válidos para liquidar");
+  if (!to || !(amountUsd > 0)) {
+    throw new Error("Payin sin dirección/monto válidos para liquidar");
+  }
 
-  const hash = await sendUsdcFromAdmin({ to, amount: amountUsd.toFixed(7) });
-  await recordSettlement(payinId, { walletAddress: to, amountUsd, hash });
-  return { settled: true, to, amountUsd, hash, simulated: forced };
+  // Paso 1: Reservar atómicamente el payinId antes de transferir USDC.
+  const reservation = await reservePayinSettlement(payinId, {
+    walletAddress: to,
+    amountUsd,
+  });
+
+  if (!reservation.reserved) {
+    if (reservation.status === "pending") {
+      return { settled: false, reason: "settlement_in_progress" };
+    }
+    return {
+      settled: false,
+      reason: "already_settled",
+      ...(reservation.hash ? { hash: reservation.hash } : {}),
+    };
+  }
+
+  // Paso 2: Transferir USDC desde admin y marcar reserva como completada.
+  try {
+    const hash = await sendUsdcFromAdmin({ to, amount: amountUsd.toFixed(7) });
+    await recordSettlement(payinId, { walletAddress: to, amountUsd, hash });
+    return { settled: true, to, amountUsd, hash, simulated: forced };
+  } catch (error) {
+    await releasePayinSettlement(payinId).catch(() => {});
+    throw error;
+  }
 }
 
 // Recorta un payin-quote a lo que la UI necesita. Para on-ramp el SENDER es MXN y el

@@ -69,6 +69,7 @@ Set these in **Vercel Dashboard → Project → Settings → Environment Variabl
 | `STAKING_CONTRACT_ID` | Production, Preview |
 | `VITE_STAKING_CONTRACT_ID` | Production, Preview |
 | `VITE_LENDING_CONTRACT_ID` | Production, Preview |
+| `BLINDPAY_ALLOW_SIMULATE` | Preview only (`false` in Production) — gates `simulate: true` on `/api/onramp?action=settle` |
 
 > ⚠️ `STAKING_CONTRACT_ID` y `VITE_STAKING_CONTRACT_ID` son **obligatorias**: si faltan,
 > `calculate-score`, `get-user-data` y `evaluate-and-mint` responden `500` y el minteo del

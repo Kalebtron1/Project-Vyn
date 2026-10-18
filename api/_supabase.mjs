@@ -91,29 +91,132 @@ export async function recordFaucetClaim(walletAddress) {
   });
 }
 
-// ── Liquidación on-ramp: una USDC por payin (idempotencia) ──────────────────
-const settlementMemory = new Set();
+// ── Liquidación on-ramp: reserva atómica por payin (idempotencia) ───────────
+const settlementMemory = new Map(); // payin_id -> { status: "pending" | "completed", walletAddress, amountUsd, hash }
 
-/** ¿Este payin ya fue liquidado (USDC enviado al usuario)? */
+export function resetSettlementMemoryForTests() {
+  settlementMemory.clear();
+}
+
+/** ¿Este payin ya fue liquidado o está en proceso de liquidación? */
 export async function hasSettledPayin(payinId) {
-  if (!isSupabaseConfigured()) return settlementMemory.has(payinId);
+  if (settlementMemory.has(payinId)) return true;
+  if (!isSupabaseConfigured()) return false;
   const rows = await sbFetch(
-    `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id&limit=1`
+    `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id,hash&limit=1`
   );
   return Array.isArray(rows) && rows.length > 0;
 }
 
-/** Registra la liquidación de un payin (idempotente). */
-export async function recordSettlement(payinId, { walletAddress, amountUsd, hash }) {
+/**
+ * Reserva atómicamente un payin_id antes de transferir USDC.
+ * Devuelve:
+ *   - { reserved: true, status: "pending" } si esta llamada ganó la reserva
+ *   - { reserved: false, status: "pending" | "completed", hash: string | null } si ya existía
+ */
+export async function reservePayinSettlement(payinId, { walletAddress, amountUsd }) {
+  if (settlementMemory.has(payinId)) {
+    const existing = settlementMemory.get(payinId);
+    return {
+      reserved: false,
+      status: existing.status,
+      hash: existing.hash || null,
+    };
+  }
+
   if (!isSupabaseConfigured()) {
-    settlementMemory.add(payinId);
+    settlementMemory.set(payinId, {
+      status: "pending",
+      walletAddress,
+      amountUsd,
+      hash: null,
+    });
+    return { reserved: true, status: "pending" };
+  }
+
+  // Reserva local inmediata para peticiones concurrentes en la misma instancia
+  settlementMemory.set(payinId, {
+    status: "pending",
+    walletAddress,
+    amountUsd,
+    hash: null,
+  });
+
+  try {
+    const inserted = await sbFetch(`onramp_settlements?on_conflict=payin_id`, {
+      method: "POST",
+      body: [
+        {
+          payin_id: payinId,
+          wallet_address: walletAddress,
+          amount_usd: amountUsd,
+          hash: null,
+        },
+      ],
+      headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    });
+
+    if (Array.isArray(inserted) && inserted.length > 0) {
+      return { reserved: true, status: "pending" };
+    }
+
+    const existingRows = await sbFetch(
+      `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id,hash&limit=1`
+    );
+    const row = Array.isArray(existingRows) && existingRows.length ? existingRows[0] : null;
+    const status = row?.hash ? "completed" : "pending";
+    settlementMemory.set(payinId, {
+      status,
+      walletAddress,
+      amountUsd,
+      hash: row?.hash || null,
+    });
+    return {
+      reserved: false,
+      status,
+      hash: row?.hash || null,
+    };
+  } catch (err) {
+    settlementMemory.delete(payinId);
+    throw err;
+  }
+}
+
+/** Marca una reserva como completada guardando el hash de la transacción Stellar. */
+export async function recordSettlement(payinId, { walletAddress, amountUsd, hash }) {
+  settlementMemory.set(payinId, {
+    status: "completed",
+    walletAddress,
+    amountUsd,
+    hash,
+  });
+
+  if (!isSupabaseConfigured()) {
     return;
   }
-  await sbFetch(`onramp_settlements?on_conflict=payin_id`, {
-    method: "POST",
-    body: [{ payin_id: payinId, wallet_address: walletAddress, amount_usd: amountUsd, hash }],
-    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+  await sbFetch(`onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}`, {
+    method: "PATCH",
+    body: { wallet_address: walletAddress, amount_usd: amountUsd, hash },
+    headers: { Prefer: "return=minimal" },
   });
+}
+
+/** Libera una reserva pendiente si la transferencia on-chain falló antes de completarse. */
+export async function releasePayinSettlement(payinId) {
+  const entry = settlementMemory.get(payinId);
+  if (entry && entry.status === "completed") return;
+  settlementMemory.delete(payinId);
+
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+  await sbFetch(
+    `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&hash=is.null`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    }
+  );
 }
 
 /** Inserta/actualiza el mapping (upsert por wallet_address). */

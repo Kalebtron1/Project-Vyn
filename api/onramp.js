@@ -50,14 +50,23 @@ export default async function handler(req, res) {
   if (action === "settle") {
     if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
     const payinId = req.body?.payinId;
-    const simulate = req.body?.simulate === true;
+    const requestedSimulate = req.body?.simulate === true;
+    const allowSimulate =
+      String(process.env.BLINDPAY_ALLOW_SIMULATE || "").trim().toLowerCase() === "true";
+    const simulate = requestedSimulate && allowSimulate;
     if (!payinId || typeof payinId !== "string") {
       return res.status(400).json({ error: "payinId requerido" });
     }
     try {
       const result = await settlePayin({ payinId, simulate });
-      log.info("onramp_settle.done", { payinId, simulate, ...result });
-      return res.status(200).json(result);
+      log.info("onramp_settle.done", {
+        payinId,
+        requestedSimulate,
+        simulate,
+        ...result,
+      });
+      const statusCode = result.reason === "settlement_in_progress" ? 409 : 200;
+      return res.status(statusCode).json(result);
     } catch (error) {
       log.error("onramp_settle.error", { err: error.message });
       return res.status(502).json({ error: error.message || "Error al liquidar el depósito" });
