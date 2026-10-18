@@ -2,6 +2,7 @@ import { Lock, Sparkles, ArrowDownToLine, Loader2, Activity, ArrowUpFromLine, Ca
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { useTranslation } from "react-i18next";
+import { useFormatters } from "@/lib/format";
 import { useState, useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 
@@ -34,6 +35,7 @@ const getLendingContractId = () => {
 
 const CreditSection = () => {
   const { t } = useTranslation();
+  const { formatAmount } = useFormatters();
   const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
@@ -327,7 +329,7 @@ const CreditSection = () => {
                 </div>
                 <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
                 <p className="text-xs text-red-400 mt-2">
-                  {t("credit.frozen_description")} <strong>{totalToPay.toFixed(2)} XLM</strong>.
+                  {t("credit.frozen_description")} <strong>{formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM</strong>.
                 </p>
               </div>
               <button
@@ -346,7 +348,7 @@ const CreditSection = () => {
                 <div className="flex items-center justify-center gap-2 mt-1">
                   <TrendingUp className="w-5 h-5 text-amber-500" />
                   <span className="text-4xl font-extrabold text-amber-500 tabular-nums">
-                    {totalToPay.toFixed(2)}
+                    {formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-lg font-bold text-amber-500/70">XLM</span>
                 </div>
@@ -379,7 +381,7 @@ const CreditSection = () => {
                   </>
                 ) : (
                   <>
-                    <ArrowUpFromLine className="w-4 h-4" /> {t("credit.pay_button", { amount: totalToPay.toFixed(2) })}
+                    <ArrowUpFromLine className="w-4 h-4" /> {t("credit.pay_button", { amount: formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
                   </>
                 )}
               </button>
@@ -390,7 +392,7 @@ const CreditSection = () => {
           <div className="py-2 flex flex-col items-center justify-center">
             <div className="flex items-baseline gap-1 mt-1 mb-1">
               <span className="text-4xl font-extrabold text-foreground tabular-nums tracking-tight">
-                {creditData.limit}
+                {formatAmount(creditData.limit)}
               </span>
               <span className="text-lg font-bold text-muted-foreground">XLM</span>
             </div>
@@ -422,7 +424,7 @@ const CreditSection = () => {
             <div className="text-[10px] text-center text-muted-foreground mt-4 space-y-1">
               <p>{t("credit.footer_network")}</p>
               <p className="font-semibold text-amber-500/80">
-                {t("credit.footer_interest", { amount: totalToPay.toFixed(2) })}
+                {t("credit.footer_interest", { amount: formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
               </p>
             </div>
           </div>
