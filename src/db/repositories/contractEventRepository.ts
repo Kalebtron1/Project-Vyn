@@ -13,9 +13,33 @@
  * testable without a real database connection.
  */
 
+export const CONTRACT_EVENT_TOPICS = {
+  STAKING_DEPOSIT: "deposit",
+  STAKING_WITHDRAW: "withdraw",
+  STAKING_SET_VAULT: "set_vault",
+  LENDING_FUND_POOL: "fund_pool",
+  LENDING_LOAN_REQUEST: "loan_req",
+  LENDING_REPAY: "repay",
+  LENDING_WITHDRAW_INTEREST: "w_int",
+  LENDING_WITHDRAW_POOL: "w_pool",
+  SBT_MINT: "mint",
+  SBT_REVOKE: "revoke",
+} as const;
+
+export type ContractEventTopic =
+  (typeof CONTRACT_EVENT_TOPICS)[keyof typeof CONTRACT_EVENT_TOPICS];
+
+export interface SorobanContractEventPayload {
+  contract?: "staking_pool" | "vinculo_lending" | "vinculo_sbt" | string;
+  topic?: ContractEventTopic | string;
+  actor?: string;
+  data?: unknown;
+  [key: string]: unknown;
+}
+
 export interface ContractEvent {
   event_id: number;
-  payload: Record<string, unknown>;
+  payload: SorobanContractEventPayload;
   created_at: string;
 }
 
@@ -47,3 +71,4 @@ export async function getEventsSince(
   );
   return rows;
 }
+

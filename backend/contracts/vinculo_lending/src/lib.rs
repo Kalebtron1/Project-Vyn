@@ -7,7 +7,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env};
 use vinculo_sbt::VinculoSBTClient;
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -71,6 +71,9 @@ impl VinculoLending {
             .expect("init not called");
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, &env.current_contract_address(), &amount);
+
+        env.events()
+            .publish((symbol_short!("fund_pool"), from), amount);
     }
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
@@ -114,14 +117,20 @@ impl VinculoLending {
 
         token_client.transfer(&this, &user, &amount);
 
+        let due_timestamp = env.ledger().timestamp() + months * 60;
         let loan = Loan {
             principal: amount,
             total_owed,
-            due_timestamp: env.ledger().timestamp() + months * 60,
+            due_timestamp,
             months,
             apy_bps: 500,
         };
         env.storage().persistent().set(&loan_key, &loan);
+
+        env.events().publish(
+            (symbol_short!("loan_req"), user),
+            (amount, total_owed, months, due_timestamp),
+        );
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -149,6 +158,7 @@ impl VinculoLending {
         token_client.transfer(&user, &env.current_contract_address(), &pay);
 
         loan.total_owed -= pay;
+        let remaining_owed = loan.total_owed;
         if loan.total_owed == 0 {
             // Préstamo saldado: el interés (principal·5/100, igual que en
             // `request_loan`) pasa a ganancia retirable por la tesorería. El
@@ -160,6 +170,9 @@ impl VinculoLending {
             loan = Loan::default();
         }
         env.storage().persistent().set(&loan_key, &loan);
+
+        env.events()
+            .publish((symbol_short!("repay"), user), (pay, remaining_owed));
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -188,6 +201,10 @@ impl VinculoLending {
 
         token_client.transfer(&this, &treasury, &withdrawable);
         storage.set(&DataKey::AccruedInterest, &(accrued - withdrawable));
+
+        env.events()
+            .publish((symbol_short!("w_int"), treasury), withdrawable);
+
         withdrawable
     }
 
@@ -218,6 +235,10 @@ impl VinculoLending {
         assert!(withdrawable > 0, "nothing to withdraw");
 
         token_client.transfer(&this, &treasury, &withdrawable);
+
+        env.events()
+            .publish((symbol_short!("w_pool"), treasury), withdrawable);
+
         withdrawable
     }
 
@@ -258,10 +279,100 @@ impl VinculoLending {
 
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
-        1 => 300_000_0000,   // Plata
-        2 => 600_000_0000,   // Oro
-        3 => 1_500_000_0000, // Diamante
-        4 => 5_000_000_0000, // Platino
+        1 => 3_000_000_000,  // Plata
+        2 => 6_000_000_000,  // Oro
+        3 => 15_000_000_000, // Diamante
+        4 => 50_000_000_000, // Platino
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::{
+        testutils::{Address as _, Events, Ledger},
+        token::StellarAssetClient,
+        IntoVal, Symbol,
+    };
+    use vinculo_sbt::VinculoSBT;
+
+    #[test]
+    fn test_vinculo_lending_emits_events() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().with_mut(|li| {
+            li.timestamp = 500;
+        });
+
+        let issuer = Address::generate(&env);
+        let sac = env.register_stellar_asset_contract_v2(issuer);
+        let token_addr = sac.address();
+        let token_admin = StellarAssetClient::new(&env, &token_addr);
+
+        let sbt_admin = Address::generate(&env);
+        let sbt_addr = env.register_contract(None, VinculoSBT);
+        let sbt = VinculoSBTClient::new(&env, &sbt_addr);
+        sbt.init(&sbt_admin);
+
+        let treasury = Address::generate(&env);
+        let lending_addr = env.register_contract(None, VinculoLending);
+        let lending = VinculoLendingClient::new(&env, &lending_addr);
+        lending.init_lending(&token_addr, &sbt_addr, &treasury);
+
+        let funder = Address::generate(&env);
+        token_admin.mint(&funder, &10_000_000_000);
+        lending.fund_pool(&funder, &10_000_000_000);
+        let fund_evt = env.events().all().last().unwrap();
+        assert_eq!(fund_evt.0, lending_addr);
+        assert_eq!(
+            fund_evt.1,
+            (Symbol::new(&env, "fund_pool"), funder.clone()).into_val(&env)
+        );
+        let fund_amt: i128 = fund_evt.2.into_val(&env);
+        assert_eq!(fund_amt, 10_000_000_000);
+
+        let user = Address::generate(&env);
+        sbt.mint(&sbt_admin, &user, &1);
+        lending.request_loan(&user, &1_000_000_000, &1);
+        let loan_evt = env.events().all().last().unwrap();
+        assert_eq!(loan_evt.0, lending_addr);
+        assert_eq!(
+            loan_evt.1,
+            (Symbol::new(&env, "loan_req"), user.clone()).into_val(&env)
+        );
+        let loan_data: (i128, i128, u64, u64) = loan_evt.2.into_val(&env);
+        assert_eq!(loan_data, (1_000_000_000, 1_050_000_000, 1, 560));
+
+        token_admin.mint(&user, &50_000_000);
+        lending.repay(&user, &1_050_000_000);
+        let repay_evt = env.events().all().last().unwrap();
+        assert_eq!(repay_evt.0, lending_addr);
+        assert_eq!(
+            repay_evt.1,
+            (Symbol::new(&env, "repay"), user.clone()).into_val(&env)
+        );
+        let repay_data: (i128, i128) = repay_evt.2.into_val(&env);
+        assert_eq!(repay_data, (1_050_000_000, 0));
+
+        lending.withdraw_interest(&50_000_000);
+        let wint_evt = env.events().all().last().unwrap();
+        assert_eq!(wint_evt.0, lending_addr);
+        assert_eq!(
+            wint_evt.1,
+            (Symbol::new(&env, "w_int"), treasury.clone()).into_val(&env)
+        );
+        let wint_amt: i128 = wint_evt.2.into_val(&env);
+        assert_eq!(wint_amt, 50_000_000);
+
+        lending.withdraw_pool(&2_000_000_000);
+        let wpool_evt = env.events().all().last().unwrap();
+        assert_eq!(wpool_evt.0, lending_addr);
+        assert_eq!(
+            wpool_evt.1,
+            (Symbol::new(&env, "w_pool"), treasury.clone()).into_val(&env)
+        );
+        let wpool_amt: i128 = wpool_evt.2.into_val(&env);
+        assert_eq!(wpool_amt, 2_000_000_000);
     }
 }

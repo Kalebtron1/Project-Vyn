@@ -3,7 +3,9 @@ extern crate std;
 
 use crate::{Error, StakingContract, StakingContractClient};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, token, vec, Address, Env, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{Address as _, Events},
+    token, vec, Address, Env, IntoVal, Symbol, Vec,
 };
 
 // ─── Mock vault DeFindex ───────────────────────────────────────────────────────
@@ -275,4 +277,43 @@ fn test_get_position_zero_for_new_user() {
     let user = Address::generate(&s.env);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_staking_pool_emits_events() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+
+    s.staking.deposit(&user, &1_000);
+    let deposit_evt = s.env.events().all().last().unwrap();
+    assert_eq!(deposit_evt.0, s.staking.address);
+    assert_eq!(
+        deposit_evt.1,
+        (Symbol::new(&s.env, "deposit"), user.clone()).into_val(&s.env)
+    );
+    let deposit_data: (i128, i128) = deposit_evt.2.into_val(&s.env);
+    assert_eq!(deposit_data, (1_000, 1_000));
+
+    s.staking.withdraw(&user, &400);
+    let withdraw_evt = s.env.events().all().last().unwrap();
+    assert_eq!(withdraw_evt.0, s.staking.address);
+    assert_eq!(
+        withdraw_evt.1,
+        (Symbol::new(&s.env, "withdraw"), user.clone()).into_val(&s.env)
+    );
+    let withdraw_data: (i128, i128) = withdraw_evt.2.into_val(&s.env);
+    assert_eq!(withdraw_data, (400, 400));
+
+    let new_vault = s.env.register(MockVault, ());
+    MockVaultClient::new(&s.env, &new_vault).init(&s.token_addr);
+    s.staking.set_vault(&new_vault);
+    let set_vault_evt = s.env.events().all().last().unwrap();
+    assert_eq!(set_vault_evt.0, s.staking.address);
+    assert_eq!(
+        set_vault_evt.1,
+        (Symbol::new(&s.env, "set_vault"), s.admin.clone()).into_val(&s.env)
+    );
+    let set_vault_data: Address = set_vault_evt.2.into_val(&s.env);
+    assert_eq!(set_vault_data, new_vault);
 }

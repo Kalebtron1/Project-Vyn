@@ -16,8 +16,8 @@
 
 use soroban_sdk::auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, token, vec, Address, Env,
-    IntoVal, Symbol, Val, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token, vec,
+    Address, Env, IntoVal, Symbol, Val, Vec,
 };
 
 // ─── Cliente del vault DeFindex ────────────────────────────────────────────────
@@ -108,6 +108,8 @@ impl StakingContract {
         let admin = Self::read_admin(&env)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Vault, &new_vault);
+        env.events()
+            .publish((symbol_short!("set_vault"), admin), new_vault);
         Ok(())
     }
 
@@ -174,6 +176,9 @@ impl StakingContract {
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
 
+        env.events()
+            .publish((symbol_short!("deposit"), user), (amount, minted));
+
         Ok(minted)
     }
 
@@ -231,6 +236,11 @@ impl StakingContract {
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
+
+        env.events().publish(
+            (symbol_short!("withdraw"), user),
+            (received, shares_to_burn),
+        );
 
         Ok(received)
     }

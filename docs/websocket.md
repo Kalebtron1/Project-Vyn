@@ -107,6 +107,23 @@ Set `MAX_REPLAY_EVENTS` in your `.env` / deployment config to tune the replay wi
 - **Replay cap** — `MAX_REPLAY_EVENTS` prevents unbounded database reads from a malicious or misconfigured client supplying `last_event_id=0` on a large dataset.
 - **No event filtering** — All events in the replay window are sent to the connected client. If events contain sensitive data, add row-level filtering in `getEventsSince` based on the authenticated user's identity.
 
+## Soroban contract event schemas
+
+All three Soroban contracts emit structured events via `env.events().publish(topics, data)` for off-chain indexing and WebSocket streaming:
+
+| Contract | Topic tuple | Data payload |
+|----------|-------------|--------------|
+| `staking_pool` | `("deposit", user)` | `(amount: i128, minted_shares: i128)` |
+| `staking_pool` | `("withdraw", user)` | `(received: i128, burned_shares: i128)` |
+| `staking_pool` | `("set_vault", admin)` | `new_vault: Address` |
+| `vinculo_lending` | `("fund_pool", from)` | `amount: i128` |
+| `vinculo_lending` | `("loan_req", user)` | `(principal: i128, total_owed: i128, months: u64, due_timestamp: u64)` |
+| `vinculo_lending` | `("repay", user)` | `(paid: i128, remaining_owed: i128)` |
+| `vinculo_lending` | `("w_int", treasury)` | `withdrawn: i128` |
+| `vinculo_lending` | `("w_pool", treasury)` | `withdrawn: i128` |
+| `vinculo_sbt` | `("mint", user)` | `(prev_tier: u32, new_tier: u32)` |
+| `vinculo_sbt` | `("revoke", user)` | `prev_tier: u32` |
+
 ---
 
 ## Source files
@@ -114,5 +131,6 @@ Set `MAX_REPLAY_EVENTS` in your `.env` / deployment config to tune the replay wi
 | File | Purpose |
 |------|---------|
 | `src/ws/hub.ts` | WebSocket hub — `attachHub`, `handleConnection`, `broadcast` |
-| `src/db/repositories/contractEventRepository.ts` | `getEventsSince` DB query |
+| `src/db/repositories/contractEventRepository.ts` | `getEventsSince` DB query and event topic definitions |
 | `src/ws/hub.replay.test.ts` | Unit tests |
+
