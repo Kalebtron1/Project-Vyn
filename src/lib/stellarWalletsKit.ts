@@ -22,6 +22,10 @@ import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
 import { LOBSTR_ID, LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
 import { HanaModule } from "@creit.tech/stellar-wallets-kit/modules/hana";
 import { RabetModule } from "@creit.tech/stellar-wallets-kit/modules/rabet";
+import {
+  WalletConnectModule,
+  WalletConnectTargetChain,
+} from "@creit.tech/stellar-wallets-kit/modules/wallet-connect";
 import { Networks as SdkNetworks } from "@stellar/stellar-sdk";
 import * as sessionStore from "@/lib/sessionStore";
 
@@ -32,6 +36,27 @@ export { FREIGHTER_ID, ALBEDO_ID, LOBSTR_ID };
 
 // Debe coincidir con PROVIDER_KEY en WalletSessionContext / mobileWalletConnectors.
 const PROVIDER_KEY = "vinculo_wallet_provider";
+
+// WalletConnect (wallets móviles vía QR / deep link). Requiere un Project ID de
+// Reown Cloud (cloud.reown.com); sin él el módulo no se registra y el modal queda
+// igual que antes.
+const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined;
+
+function walletConnectModule(): WalletConnectModule[] {
+  if (!WALLETCONNECT_PROJECT_ID) return [];
+  return [
+    new WalletConnectModule({
+      projectId: WALLETCONNECT_PROJECT_ID,
+      metadata: {
+        name: "Vyn",
+        description: "Stellar Microcredits",
+        url: window.location.origin,
+        icons: [`${window.location.origin}/favicon-192x192.png`],
+      },
+      allowedChains: [WalletConnectTargetChain.TESTNET],
+    }),
+  ];
+}
 
 let initialized = false;
 
@@ -49,6 +74,7 @@ export function getKit(): typeof StellarWalletsKit {
         new LobstrModule(),
         new HanaModule(),
         new RabetModule(),
+        ...walletConnectModule(),
       ],
     });
     initialized = true;
