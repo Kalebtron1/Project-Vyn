@@ -1,24 +1,34 @@
 // /api/blindpay?action=quote|payout|status — off-ramp USDC→SPEI (BlindPay sandbox).
 // Consolidado en un solo Serverless Function para respetar el límite del plan Hobby (≤12).
-//   POST /api/blindpay?action=quote   Body: { amount }            → cotiza (no mueve fondos)
-//   POST /api/blindpay?action=payout  Body: { amount }            → cotiza fresco + dispara payout
-//   GET  /api/blindpay?action=status&id=po_…                      → estado del payout (polling)
-// La pata on-chain de USDC del usuario (withdraw del vault) ocurre en el frontend ANTES del payout.
-import { createQuote, quoteAndPayout, getPayout, summarizeQuote } from "./_blindpay-core.mjs";
+//   POST /api/blindpay?action=quote   Body: { amount }                                           → cotiza (no mueve fondos)
+//   POST /api/blindpay?action=payout  Body: { amount, walletAddress, withdrawalTxHash }          → verifica retiro on-chain + cotiza + dispara payout
+//   GET  /api/blindpay?action=status&id=po_…                                                     → estado del payout (polling)
+import {
+  createQuote,
+  quoteAndPayout,
+  getPayout,
+  summarizeQuote,
+  verifyVaultWithdrawalTx,
+} from "./_blindpay-core.mjs";
+import {
+  reservePayoutWithdrawalTx,
+  recordPayoutWithdrawalTx,
+  releasePayoutWithdrawalTx,
+} from "./_supabase.mjs";
 import { createLogger } from "./_logger.mjs";
 import {
   validateBody,
   validateQuery,
   blindpayQuoteBodySchema,
+  blindpayPayoutBodySchema,
   blindpayStatusQuerySchema,
   reportValidationError,
 } from "./validation.mjs";
 
-const DEMO_BANK_ACCOUNT_ID = process.env.BLINDPAY_DEMO_BANK_ACCOUNT_ID;
-
 export default async function handler(req, res) {
   const log = createLogger(req);
   const action = String(req.query?.action || "");
+  const demoBankAccountId = process.env.BLINDPAY_DEMO_BANK_ACCOUNT_ID;
 
   if (action === "status") {
     if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" });
@@ -49,23 +59,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Método no permitido" });
   }
 
-  let amount;
-  try {
-    ({ amount } = validateBody(blindpayQuoteBodySchema, req.body || {}));
-  } catch (error) {
-    return reportValidationError(res, error);
-  }
-
-  if (!DEMO_BANK_ACCOUNT_ID) {
-    log.error(`blindpay_${action}.misconfigured`, { reason: "BLINDPAY_DEMO_BANK_ACCOUNT_ID no configurado" });
-    return res.status(500).json({ error: "BlindPay demo no configurado" });
-  }
-
-  const amountCents = Math.round(amount * 100);
-
   if (action === "quote") {
+    let amount;
     try {
-      const quote = await createQuote({ amountCents, bankAccountId: DEMO_BANK_ACCOUNT_ID });
+      ({ amount } = validateBody(blindpayQuoteBodySchema, req.body || {}));
+    } catch (error) {
+      return reportValidationError(res, error);
+    }
+
+    if (!demoBankAccountId) {
+      log.error("blindpay_quote.misconfigured", {
+        reason: "BLINDPAY_DEMO_BANK_ACCOUNT_ID no configurado",
+      });
+      return res.status(500).json({ error: "BlindPay demo no configurado" });
+    }
+
+    const amountCents = Math.round(amount * 100);
+    try {
+      const quote = await createQuote({ amountCents, bankAccountId: demoBankAccountId });
       const summary = summarizeQuote(quote);
       log.info("blindpay_quote.done", {
         quoteId: summary.quoteId,
@@ -80,12 +91,82 @@ export default async function handler(req, res) {
   }
 
   // action === "payout"
+  let amount;
+  let walletAddress;
+  let withdrawalTxHash;
   try {
-    const { quote, payout } = await quoteAndPayout({ amountCents, bankAccountId: DEMO_BANK_ACCOUNT_ID });
+    ({ amount, walletAddress, withdrawalTxHash } = validateBody(
+      blindpayPayoutBodySchema,
+      req.body || {}
+    ));
+  } catch (error) {
+    return reportValidationError(res, error);
+  }
+
+  if (!demoBankAccountId) {
+    log.error("blindpay_payout.misconfigured", {
+      reason: "BLINDPAY_DEMO_BANK_ACCOUNT_ID no configurado",
+    });
+    return res.status(500).json({ error: "BlindPay demo no configurado" });
+  }
+
+  // 1. Verificar on-chain que la transacción de retiro del vault sea válida, exitosa y cubra el monto.
+  try {
+    await verifyVaultWithdrawalTx({
+      txHash: withdrawalTxHash,
+      walletAddress,
+      amountUsd: amount,
+    });
+  } catch (verifyError) {
+    log.warn("blindpay_payout.invalid_withdrawal_tx", {
+      walletAddress,
+      withdrawalTxHash,
+      err: verifyError.message,
+    });
+    return res.status(400).json({
+      error: verifyError.message || "No se pudo verificar el retiro on-chain",
+    });
+  }
+
+  // 2. Reservar atómicamente el hash de retiro para impedir que financie más de un payout.
+  let reservation;
+  try {
+    reservation = await reservePayoutWithdrawalTx(withdrawalTxHash, {
+      walletAddress,
+      amountUsd: amount,
+    });
+  } catch (storeError) {
+    log.error("blindpay_payout.dedup_error", {
+      walletAddress,
+      withdrawalTxHash,
+      err: storeError.message,
+    });
+    return res.status(503).json({
+      error: "No se pudo registrar la verificación del retiro. Intenta nuevamente.",
+    });
+  }
+
+  if (!reservation.reserved) {
+    log.warn("blindpay_payout.reused_tx_hash", { walletAddress, withdrawalTxHash });
+    return res.status(409).json({
+      error: "Esta transacción de retiro ya fue utilizada para un payout",
+    });
+  }
+
+  const amountCents = Math.round(amount * 100);
+
+  try {
+    const { quote, payout } = await quoteAndPayout({
+      amountCents,
+      bankAccountId: demoBankAccountId,
+    });
+    await recordPayoutWithdrawalTx(withdrawalTxHash, { payoutId: payout.id });
     const summary = summarizeQuote(quote);
     log.info("blindpay_payout.done", {
       payoutId: payout.id,
       status: payout.status,
+      walletAddress,
+      withdrawalTxHash,
       receiverMxn: summary.receiverMxn,
     });
     return res.status(200).json({
@@ -96,7 +177,13 @@ export default async function handler(req, res) {
       payment: payout.tracking_payment || null,
     });
   } catch (error) {
-    log.error("blindpay_payout.error", { err: error.message, status: error.status });
+    await releasePayoutWithdrawalTx(withdrawalTxHash).catch(() => {});
+    log.error("blindpay_payout.error", {
+      walletAddress,
+      withdrawalTxHash,
+      err: error.message,
+      status: error.status,
+    });
     return res.status(502).json({ error: error.message || "Error al ejecutar el retiro a SPEI" });
   }
 }

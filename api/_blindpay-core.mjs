@@ -14,9 +14,18 @@
 //   El XDR trae timebounds atados a la expiración del quote, así que authorize→firma→
 //   submit DEBE correr de corrido (este módulo lo hace en un solo paso).
 
-import { TransactionBuilder, Keypair, Networks } from "@stellar/stellar-sdk";
+import {
+  TransactionBuilder,
+  Keypair,
+  Networks,
+  rpc,
+  scValToNative,
+  StrKey,
+} from "@stellar/stellar-sdk";
 
 const BASE_URL = process.env.BLINDPAY_BASE_URL || "https://api.blindpay.com/v1";
+const SOROBAN_RPC_URL =
+  process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 
 // Defaults de testnet/sandbox. En mainnet: network "stellar", token "USDC".
 export const OFFRAMP_NETWORK = process.env.BLINDPAY_NETWORK || "stellar_testnet";
@@ -139,3 +148,97 @@ export function summarizeQuote(q) {
     expiresAt: q.expires_at,
   };
 }
+
+/**
+ * Verifica on-chain vía Soroban RPC que `txHash` sea un retiro exitoso del vault
+ * ejecutado por `walletAddress` por un monto >= `amountUsd`.
+ */
+export async function verifyVaultWithdrawalTx({
+  txHash,
+  walletAddress,
+  amountUsd,
+  rpcUrl = SOROBAN_RPC_URL,
+  expectedContractId = process.env.STAKING_CONTRACT_ID || process.env.VITE_STAKING_CONTRACT_ID,
+}) {
+  if (!txHash || !/^[0-9a-fA-F]{64}$/.test(String(txHash).trim())) {
+    throw new Error("Hash de transacción de retiro inválido");
+  }
+  if (!walletAddress || !/^G[A-Z2-7]{55}$/.test(String(walletAddress).trim())) {
+    throw new Error("Dirección de wallet inválida");
+  }
+
+  const server = new rpc.Server(rpcUrl);
+  const tx = await server.getTransaction(String(txHash).trim());
+
+  if (!tx || String(tx.status || "").toUpperCase() !== "SUCCESS") {
+    throw new Error(
+      `La transacción de retiro no está confirmada en la red (estado: ${tx?.status || "NOT_FOUND"})`
+    );
+  }
+
+  const requiredStroops = BigInt(Math.floor(Number(amountUsd) * 10_000_000));
+  let verifiedSource = false;
+  let verifiedAmount = false;
+
+  // 1. Verificar el sobre XDR de la transacción si está disponible.
+  if (tx.envelopeXdr) {
+    const parsedTx =
+      typeof tx.envelopeXdr === "string"
+        ? TransactionBuilder.fromXDR(tx.envelopeXdr, Networks.TESTNET)
+        : null;
+
+    if (parsedTx) {
+      if (parsedTx.source !== walletAddress) {
+        throw new Error("La transacción de retiro no pertenece a la wallet indicada");
+      }
+      verifiedSource = true;
+
+      for (const op of parsedTx.operations || []) {
+        if (op.type === "invokeHostFunction" && op.func?.switch()?.name === "hostFunctionTypeInvokeContract") {
+          const invokeArgs = op.func.invokeContract();
+          const contractAddress = invokeArgs.contractAddress();
+          if (expectedContractId && contractAddress?.switch()?.name === "scAddressTypeContract") {
+            const actualContractId = StrKey.encodeContract(contractAddress.contractId());
+            if (actualContractId !== expectedContractId) {
+              throw new Error("La transacción no corresponde al contrato del vault");
+            }
+          }
+          const fnName = invokeArgs.functionName().toString();
+          if (fnName !== "withdraw") {
+            throw new Error(`Operación de contrato inválida: se esperaba withdraw, se recibió ${fnName}`);
+          }
+          const scArgs = invokeArgs.args() || [];
+          if (scArgs.length >= 2) {
+            const argUser = String(scValToNative(scArgs[0]));
+            const argAmount = BigInt(scValToNative(scArgs[1]));
+            if (argUser !== walletAddress) {
+              throw new Error("El usuario del retiro no coincide con la wallet solicitante");
+            }
+            if (argAmount < requiredStroops) {
+              throw new Error("El monto retirado on-chain es menor al solicitado para el payout");
+            }
+            verifiedAmount = true;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Verificar returnValue (monto USDC devuelto por staking_pool.withdraw) si está presente.
+  if (tx.returnValue) {
+    const returnedRaw = scValToNative(tx.returnValue);
+    if (typeof returnedRaw === "bigint" || typeof returnedRaw === "number") {
+      if (BigInt(returnedRaw) < requiredStroops) {
+        throw new Error("El monto de USDC retirado en el contrato es menor al solicitado");
+      }
+      verifiedAmount = true;
+    }
+  }
+
+  if (!verifiedSource && !verifiedAmount) {
+    throw new Error("No se pudo verificar los detalles de la transacción de retiro on-chain");
+  }
+
+  return { verified: true, txHash, walletAddress, amountUsd };
+}
+

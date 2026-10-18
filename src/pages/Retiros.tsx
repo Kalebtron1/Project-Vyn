@@ -220,7 +220,11 @@ const Retiros = () => {
       const r = await fetch("/api/blindpay?action=payout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: val }),
+        body: JSON.stringify({
+          amount: val,
+          walletAddress,
+          withdrawalTxHash: res.hash,
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Error al enviar el SPEI");

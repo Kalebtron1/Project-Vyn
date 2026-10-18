@@ -59,6 +59,20 @@ export const blindpayQuoteBodySchema = z.object({
   amount: usdAmount,
 });
 
+export const blindpayPayoutBodySchema = z.object({
+  amount: usdAmount,
+  walletAddress: z
+    .string()
+    .trim()
+    .regex(/^G[A-Z2-7]{55}$/, { message: "walletAddress inválida" }),
+  withdrawalTxHash: z
+    .string()
+    .trim()
+    .regex(/^[0-9a-fA-F]{64}$/, {
+      message: "withdrawalTxHash inválido (se requiere hash hex de 64 caracteres)",
+    }),
+});
+
 export const blindpayStatusQuerySchema = z.object({
   id: nonEmptyString.describe("id del payout es requerido"),
 });

@@ -131,3 +131,92 @@ export async function upsertOnrampUser(row) {
   });
   return Array.isArray(rows) && rows.length ? rows[0] : row;
 }
+
+// ── Off-ramp SPEI: vinculación 1:1 entre tx de retiro on-chain y payout ──────
+// Tabla esperada en Supabase:
+//   create table if not exists blindpay_payout_withdrawals (
+//     tx_hash text primary key,
+//     wallet_address text not null,
+//     amount_usd numeric not null,
+//     payout_id text,
+//     created_at timestamptz default now()
+//   );
+const payoutTxMemory = new Map(); // tx_hash -> { walletAddress, amountUsd, payoutId }
+
+export function resetPayoutTxMemoryForTests() {
+  payoutTxMemory.clear();
+}
+
+export async function reservePayoutWithdrawalTx(txHash, { walletAddress, amountUsd }) {
+  const normalizedHash = String(txHash || "").trim().toLowerCase();
+  if (payoutTxMemory.has(normalizedHash)) {
+    return { reserved: false };
+  }
+
+  payoutTxMemory.set(normalizedHash, {
+    walletAddress,
+    amountUsd,
+    payoutId: null,
+  });
+
+  if (!isSupabaseConfigured()) {
+    return { reserved: true };
+  }
+
+  try {
+    const inserted = await sbFetch(`blindpay_payout_withdrawals?on_conflict=tx_hash`, {
+      method: "POST",
+      body: [
+        {
+          tx_hash: normalizedHash,
+          wallet_address: walletAddress,
+          amount_usd: amountUsd,
+          payout_id: null,
+        },
+      ],
+      headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    });
+
+    if (Array.isArray(inserted) && inserted.length > 0) {
+      return { reserved: true };
+    }
+    return { reserved: false };
+  } catch (err) {
+    payoutTxMemory.delete(normalizedHash);
+    throw err;
+  }
+}
+
+export async function recordPayoutWithdrawalTx(txHash, { payoutId }) {
+  const normalizedHash = String(txHash || "").trim().toLowerCase();
+  const existing = payoutTxMemory.get(normalizedHash) || {};
+  payoutTxMemory.set(normalizedHash, { ...existing, payoutId });
+
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+  await sbFetch(`blindpay_payout_withdrawals?tx_hash=eq.${encodeURIComponent(normalizedHash)}`, {
+    method: "PATCH",
+    body: { payout_id: payoutId },
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+export async function releasePayoutWithdrawalTx(txHash) {
+  const normalizedHash = String(txHash || "").trim().toLowerCase();
+  const existing = payoutTxMemory.get(normalizedHash);
+  if (existing && existing.payoutId) return;
+  payoutTxMemory.delete(normalizedHash);
+
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+  await sbFetch(
+    `blindpay_payout_withdrawals?tx_hash=eq.${encodeURIComponent(normalizedHash)}&payout_id=is.null`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    }
+  );
+}
+
