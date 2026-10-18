@@ -253,27 +253,29 @@ app.post("/api/calculate-score", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// ENDPOINT: NONCE (DEV) — para evitar 404 desde frontend en dev
+// ENDPOINT: NONCE (DEV) — comparte store con api/nonce.js (Supabase / fallback)
 // ─────────────────────────────────────────────
-app.post('/api/nonce', (req, res) => {
-  const { address } = req.body || {};
-  if (!address) return res.status(400).json({ error: 'address required' });
-  const nonce = generateNonce();
-  const expires = Date.now() + 5 * 60 * 1000; // 5 minutos
-  nonces.set(address, { nonce, expires });
-  return res.json({ success: true, nonce, expires });
+let nonceModulePromise;
+function loadNonceModule() {
+  if (!nonceModulePromise) {
+    nonceModulePromise = import("../api/nonce.js");
+  }
+  return nonceModulePromise;
+}
+
+app.post('/api/nonce', async (req, res) => {
+  try {
+    const mod = await loadNonceModule();
+    return await mod.default(req, res);
+  } catch (error) {
+    console.error("[DEBUG] 💥 /api/nonce:", error.message);
+    return res.status(503).json({ error: error.message || "Error generando nonce" });
+  }
 });
 
-function consumeNonce(address, nonce) {
-  const entry = nonces.get(address);
-  if (!entry) return false;
-  if (entry.expires < Date.now()) {
-    nonces.delete(address);
-    return false;
-  }
-  if (entry.nonce !== nonce) return false;
-  nonces.delete(address);
-  return true;
+async function consumeNonce(address, nonce) {
+  const mod = await loadNonceModule();
+  return mod.consumeNonce(address, nonce);
 }
 
 // ─────────────────────────────────────────────

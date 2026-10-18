@@ -1,40 +1,43 @@
 import crypto from "crypto";
+import { createLogger } from "./_logger.mjs";
+import { storeAuthNonce, consumeAuthNonce } from "./_supabase.mjs";
 
-// Simple store en memoria de nonces: address -> { nonce, expires }
-const nonces = new Map();
+const NONCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-function generateNonce() {
+export function generateNonce() {
   return crypto.randomBytes(16).toString("hex");
 }
 
-export default function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default async function handler(req, res) {
+  const log = createLogger(req);
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  res.setHeader("Access-Control-Allow-Credentials", true);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { address } = req.body || {};
-  if (!address) return res.status(400).json({ error: 'address required' });
+  if (!address) return res.status(400).json({ error: "address required" });
 
   const nonce = generateNonce();
-  const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
-  nonces.set(address, { nonce, expires });
+  const expires = Date.now() + NONCE_TTL_MS;
 
-  return res.json({ success: true, nonce, expires });
+  try {
+    await storeAuthNonce(address, nonce, expires);
+    log.info("nonce.issued", { address, expires });
+    return res.status(200).json({ success: true, nonce, expires });
+  } catch (error) {
+    log.error("nonce.store_error", { address, err: error.message });
+    return res.status(503).json({
+      error: "No se pudo persistir el nonce de autenticación",
+    });
+  }
 }
 
-// Helper for other modules
-export function consumeNonce(address, nonce) {
-  const entry = nonces.get(address);
-  if (!entry) return false;
-  if (entry.expires < Date.now()) {
-    nonces.delete(address);
-    return false;
-  }
-  if (entry.nonce !== nonce) return false;
-  nonces.delete(address);
-  return true;
+// Helper for other modules — consumes a nonce atomically (single-use)
+export async function consumeNonce(address, nonce) {
+  return consumeAuthNonce(address, nonce);
 }

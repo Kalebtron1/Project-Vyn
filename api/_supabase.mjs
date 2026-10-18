@@ -131,3 +131,93 @@ export async function upsertOnrampUser(row) {
   });
   return Array.isArray(rows) && rows.length ? rows[0] : row;
 }
+
+// ── Auth nonces: persistencia fuera de memoria serverless ───────────────────
+// Tabla esperada en Supabase:
+//   create table if not exists auth_nonces (
+//     nonce text primary key,
+//     wallet_address text not null,
+//     expires_at timestamptz not null,
+//     consumed boolean not null default false,
+//     created_at timestamptz default now()
+//   );
+//   create index if not exists idx_auth_nonces_wallet on auth_nonces (wallet_address);
+const nonceMemory = new Map(); // wallet_address -> { nonce, expiresAt, consumed }
+
+export function resetNonceMemoryForTests() {
+  nonceMemory.clear();
+}
+
+/**
+ * Guarda un nonce para `walletAddress` con vencimiento `expiresMs` (epoch ms).
+ * Falla cerrado (lanza error) si Supabase está configurado pero no responde.
+ */
+export async function storeAuthNonce(walletAddress, nonce, expiresMs) {
+  const address = String(walletAddress || "").trim();
+  const token = String(nonce || "").trim();
+  const expiresAtIso = new Date(expiresMs).toISOString();
+
+  if (!isSupabaseConfigured()) {
+    nonceMemory.set(address, {
+      nonce: token,
+      expiresAt: expiresMs,
+      consumed: false,
+    });
+    return { nonce: token, expires: expiresMs };
+  }
+
+  await sbFetch(`auth_nonces`, {
+    method: "POST",
+    body: [
+      {
+        nonce: token,
+        wallet_address: address,
+        expires_at: expiresAtIso,
+        consumed: false,
+      },
+    ],
+    headers: { Prefer: "return=minimal" },
+  });
+
+  return { nonce: token, expires: expiresMs };
+}
+
+/**
+ * Consume atómicamente un nonce válido y no expirado para `walletAddress`.
+ * Devuelve `true` solo para la primera llamada que logre marcarlo como consumido.
+ * Falla cerrado (`false`) si el nonce no existe, expiró, ya fue usado o si la tienda falla.
+ */
+export async function consumeAuthNonce(walletAddress, nonce, now = Date.now()) {
+  const address = String(walletAddress || "").trim();
+  const token = String(nonce || "").trim();
+  if (!address || !token) return false;
+
+  if (!isSupabaseConfigured()) {
+    const entry = nonceMemory.get(address);
+    if (!entry) return false;
+    if (entry.consumed || entry.expiresAt <= now) {
+      nonceMemory.delete(address);
+      return false;
+    }
+    if (entry.nonce !== token) return false;
+    entry.consumed = true;
+    nonceMemory.delete(address);
+    return true;
+  }
+
+  try {
+    const nowIso = new Date(now).toISOString();
+    const updated = await sbFetch(
+      `auth_nonces?nonce=eq.${encodeURIComponent(token)}&wallet_address=eq.${encodeURIComponent(address)}&consumed=is.false&expires_at=gt.${encodeURIComponent(nowIso)}`,
+      {
+        method: "PATCH",
+        body: { consumed: true },
+        headers: { Prefer: "return=representation" },
+      }
+    );
+    return Array.isArray(updated) && updated.length === 1;
+  } catch {
+    return false;
+  }
+}
+

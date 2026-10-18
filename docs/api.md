@@ -8,7 +8,20 @@ All endpoints accept and return `application/json`. All `POST` endpoints handle 
 
 ## POST /api/nonce
 
-Issues a one-time nonce for a wallet address. The nonce must be included in the subsequent `/api/evaluate-and-mint` call and expires after 5 minutes.
+Issues a one-time nonce for a wallet address. The nonce is persisted in Supabase (`auth_nonces`) so it survives across stateless serverless invocations and expires after 5 minutes. Consumption (`consumeNonce`) is atomic (`consumed = false -> true`) and fails closed if the store is unavailable.
+
+**Supabase schema (`auth_nonces`)**
+
+```sql
+create table if not exists auth_nonces (
+  nonce text primary key,
+  wallet_address text not null,
+  expires_at timestamptz not null,
+  consumed boolean not null default false,
+  created_at timestamptz default now()
+);
+create index if not exists idx_auth_nonces_wallet on auth_nonces (wallet_address);
+```
 
 **Request**
 
@@ -32,6 +45,7 @@ Issues a one-time nonce for a wallet address. The nonce must be included in the 
 |---|---|---|
 | 400 | `{ "error": "address required" }` | Missing `address` |
 | 405 | `{ "error": "Method not allowed" }` | Non-POST request |
+| 503 | `{ "error": "No se pudo persistir el nonce de autenticación" }` | Nonce persistence store unavailable |
 
 ---
 
