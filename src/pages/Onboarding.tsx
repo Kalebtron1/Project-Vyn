@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import LanguageToggle from "@/components/LanguageToggle";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import onboardingSave from "@/assets/onboarding-save.png";
 import onboardingReputation from "@/assets/onboarding-reputation.png";
@@ -53,33 +54,34 @@ const Onboarding = () => {
 
   return (
     <div className={`min-h-screen bg-gradient-to-b ${step.bg} flex flex-col`}>
-      {/* Skip button */}
-      <div className="flex justify-end px-6 pt-[max(1rem,env(safe-area-inset-top))]">
+      {/* Skip + language */}
+      <div className="flex items-center justify-between gap-3 px-6 pt-[max(1rem,env(safe-area-inset-top))]">
+        <LanguageToggle />
         <button
           onClick={skip}
-          className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5"
+          className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 shrink-0"
         >
           {t("onboarding.cta_skip")}
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center min-w-0">
         <img
           key={current}
           src={step.image}
           alt={step.title}
-          className="w-64 h-64 object-contain mb-8 animate-in fade-in zoom-in duration-500"
+          className="w-64 h-64 max-w-full object-contain mb-8 animate-in fade-in zoom-in duration-500"
         />
         <h2
           key={`title-${current}`}
-          className="text-2xl font-extrabold text-foreground mb-3 animate-in fade-in slide-in-from-bottom-4 duration-400"
+          className="text-2xl font-extrabold text-foreground mb-3 animate-in fade-in slide-in-from-bottom-4 duration-400 break-words hyphens-auto"
         >
           {step.title}
         </h2>
         <p
           key={`desc-${current}`}
-          className="text-sm text-muted-foreground leading-relaxed max-w-xs animate-in fade-in slide-in-from-bottom-4 duration-500"
+          className="text-sm text-muted-foreground leading-relaxed max-w-xs break-words animate-in fade-in slide-in-from-bottom-4 duration-500"
         >
           {step.description}
         </p>
@@ -101,7 +103,8 @@ const Onboarding = () => {
       <div className="px-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <button
           onClick={next}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-4 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all"
+          data-testid="onboarding-cta"
+          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-4 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all text-center whitespace-normal"
         >
           {isLast ? (
             <>
