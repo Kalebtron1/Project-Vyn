@@ -34,6 +34,21 @@ export default defineConfig(({ mode }) => ({
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vendor pesados en chunks propios: cacheables y fuera del bundle de entrada.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@stellar/") || id.includes("stellar-base")) return "vendor-stellar";
+          if (id.includes("@privy-io/") || id.includes("@walletconnect/")) return "vendor-privy";
+          if (id.includes("@creit.tech/")) return "vendor-wallet-kit";
+          if (id.includes("recharts") || id.includes("/d3-")) return "vendor-charts";
+          return undefined;
+        },
+      },
+    },
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
