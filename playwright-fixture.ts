@@ -1,3 +1,5 @@
-// Re-export the base fixture from the package
-// Override or extend test/expect here if needed
-export { test, expect } from "lovable-agent-playwright-config/fixture";
+/**
+ * Shared Playwright fixtures for Project Vyn.
+ * Re-export the base test/expect API; extend here if a suite needs custom fixtures.
+ */
+export { test, expect } from "@playwright/test";

@@ -2,6 +2,7 @@ import { Lock, Sparkles, ArrowDownToLine, Loader2, Activity, ArrowUpFromLine, Ca
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { useTranslation } from "react-i18next";
+import { useFormatters } from "@/lib/format";
 import { useState, useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 
@@ -34,6 +35,7 @@ const getLendingContractId = () => {
 
 const CreditSection = () => {
   const { t } = useTranslation();
+  const { formatAmount } = useFormatters();
   const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
@@ -284,8 +286,8 @@ const CreditSection = () => {
           <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3 border border-border">
             <Lock className="w-5 h-5 text-muted-foreground" />
           </div>
-          <p className="text-sm font-bold text-foreground mb-1">{t("credit.locked_title")}</p>
-          <p className="text-sm text-muted-foreground max-w-[260px]">
+          <p className="text-sm font-bold text-foreground mb-1 break-words">{t("credit.locked_title")}</p>
+          <p className="text-sm text-muted-foreground max-w-[260px] break-words">
             {t("credit.locked_description", { tier: tierLabel })}
           </p>
         </div>
@@ -296,15 +298,15 @@ const CreditSection = () => {
   // ✅ ESTADO DESBLOQUEADO
   return (
     <div className="card-elevated p-6 border-2 border-primary/20 bg-gradient-to-br from-card to-primary/5 transition-all duration-700 min-h-[220px] flex flex-col">
-      <div className="flex justify-between items-start mb-1">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-xs font-bold tracking-wide uppercase text-primary">
+      <div className="flex justify-between items-start gap-2 mb-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-xs font-bold tracking-wide uppercase text-primary break-words">
             {t("credit.title", { tier: tierLabel })}
           </span>
         </div>
-        <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-          <Activity className="w-3 h-3 animate-pulse" />
+        <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+          <Activity className="w-3 h-3 animate-pulse shrink-0" />
           {t("credit.badge_onchain")}
         </div>
       </div>
@@ -327,7 +329,7 @@ const CreditSection = () => {
                 </div>
                 <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
                 <p className="text-xs text-red-400 mt-2">
-                  {t("credit.frozen_description")} <strong>{totalToPay.toFixed(2)} XLM</strong>.
+                  {t("credit.frozen_description")} <strong>{formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM</strong>.
                 </p>
               </div>
               <button
@@ -346,7 +348,7 @@ const CreditSection = () => {
                 <div className="flex items-center justify-center gap-2 mt-1">
                   <TrendingUp className="w-5 h-5 text-amber-500" />
                   <span className="text-4xl font-extrabold text-amber-500 tabular-nums">
-                    {totalToPay.toFixed(2)}
+                    {formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-lg font-bold text-amber-500/70">XLM</span>
                 </div>
@@ -371,15 +373,15 @@ const CreditSection = () => {
               <button
                 onClick={handleRepay}
                 disabled={loadingTx}
-                className="w-full flex items-center justify-center gap-3 py-3 text-sm font-bold rounded-xl border-2 border-primary text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-3 py-3 px-3 text-sm font-bold rounded-xl border-2 border-primary text-primary hover:bg-primary/10 transition-all disabled:opacity-50 whitespace-normal text-center"
               >
                 {loadingTx ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> {t("credit.processing")}
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" /> <span className="min-w-0 break-words">{t("credit.processing")}</span>
                   </>
                 ) : (
                   <>
-                    <ArrowUpFromLine className="w-4 h-4" /> {t("credit.pay_button", { amount: totalToPay.toFixed(2) })}
+                    <ArrowUpFromLine className="w-4 h-4 shrink-0" /> <span className="min-w-0 break-words">{t("credit.pay_button", { amount: formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}</span>
                   </>
                 )}
               </button>
@@ -390,7 +392,7 @@ const CreditSection = () => {
           <div className="py-2 flex flex-col items-center justify-center">
             <div className="flex items-baseline gap-1 mt-1 mb-1">
               <span className="text-4xl font-extrabold text-foreground tabular-nums tracking-tight">
-                {creditData.limit}
+                {formatAmount(creditData.limit)}
               </span>
               <span className="text-lg font-bold text-muted-foreground">XLM</span>
             </div>
@@ -407,22 +409,22 @@ const CreditSection = () => {
             <button
               onClick={handleWithdraw}
               disabled={loadingTx}
-              className="btn-emerald w-full flex items-center justify-center gap-3 py-4 text-base font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+              className="btn-emerald w-full flex items-center justify-center gap-3 py-4 px-3 text-base font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50 whitespace-normal text-center"
             >
               {loadingTx ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> {t("credit.authorizing")}
+                  <Loader2 className="w-5 h-5 animate-spin shrink-0" /> <span className="min-w-0 break-words">{t("credit.authorizing")}</span>
                 </>
               ) : (
                 <>
-                  <ArrowDownToLine className="w-5 h-5" /> {t("credit.withdraw_button")}
+                  <ArrowDownToLine className="w-5 h-5 shrink-0" /> <span className="min-w-0 break-words">{t("credit.withdraw_button")}</span>
                 </>
               )}
             </button>
-            <div className="text-[10px] text-center text-muted-foreground mt-4 space-y-1">
+            <div className="text-[10px] text-center text-muted-foreground mt-4 space-y-1 break-words px-1">
               <p>{t("credit.footer_network")}</p>
               <p className="font-semibold text-amber-500/80">
-                {t("credit.footer_interest", { amount: totalToPay.toFixed(2) })}
+                {t("credit.footer_interest", { amount: formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
               </p>
             </div>
           </div>

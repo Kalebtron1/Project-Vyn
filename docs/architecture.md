@@ -11,9 +11,11 @@ Browser (React)
     └── Stellar Testnet   — three Soroban smart contracts
 ```
 
-Authentication is **wallet-based** (Freighter/Albedo): the connected Stellar address is
-stored in `localStorage.vinculo_wallet` and gates the routes. There is no separate auth
-backend or user database.
+Authentication is **wallet-based**: the connected Stellar address is stored in
+`localStorage.vinculo_wallet` and gates the routes. There is no separate auth backend or
+user database. Connection and signing go through Stellar Wallets Kit (see
+[Wallet providers](#wallet-providers) below), which supports Freighter, xBull, Lobstr,
+Hana and Rabet on desktop, and Albedo on mobile.
 
 ---
 
@@ -72,6 +74,29 @@ In-memory React context. Tracks deposits, withdrawals, stakes, and credit state 
 | Hook | Purpose |
 |---|---|
 | `useWallet` | Reads `vinculo_wallet` from localStorage, provides `shortWallet`, `walletMismatch` and `disconnect` |
+
+### Wallet providers (`src/lib/stellarWalletsKit.ts`, `src/wallet/`)
+
+Connect and sign both go through **Stellar Wallets Kit**, which owns its own
+provider-selection modal (`kit.authModal()`). App code never branches on which wallet was
+chosen — `connectWallet()` / `signTransactionXdr()` in `mobileWalletConnectors.ts` are
+provider-agnostic, and `StellarWalletAdapter` (the `WalletAdapter` implementation used
+throughout the app) simply delegates to them. Adding a new provider is a matter of
+registering its module in `stellarWalletsKit.ts` — no other files need to change.
+
+Registered modules: `FreighterModule`, `AlbedoModule`, `xBullModule`, `LobstrModule`,
+`HanaModule`, `RabetModule`.
+
+| Environment | Providers | Notes |
+|---|---|---|
+| Desktop | Freighter, xBull, Lobstr, Hana, Rabet | User picks one from the kit's modal; the choice is persisted (`vinculo_wallet_provider`) and restored on reload. |
+| Mobile | Albedo | Selected automatically; also reachable via Privy for email login (see `privyBridge.ts`). |
+
+**xBull on desktop:** connect and sign follow the same path as every other desktop
+provider above — no xBull-specific code exists or is needed. `useWallet`'s Freighter
+"extension gone" polling (`src/hooks/useWallet.tsx`) only applies when `provider ===
+FREIGHTER_ID`; other providers, including xBull, are not polled for availability and rely
+on the kit surfacing connection/signing errors directly.
 
 ---
 
