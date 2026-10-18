@@ -258,10 +258,13 @@ impl VinculoLending {
 
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
-        1 => 300_000_0000,   // Plata
-        2 => 600_000_0000,   // Oro
-        3 => 1_500_000_0000, // Diamante
-        4 => 5_000_000_0000, // Platino
+        1 => 3_000_000_000,  // Plata
+        2 => 6_000_000_000,  // Oro
+        3 => 15_000_000_000, // Diamante
+        4 => 50_000_000_000, // Platino
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod test;
