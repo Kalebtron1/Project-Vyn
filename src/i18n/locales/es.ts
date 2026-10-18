@@ -187,21 +187,21 @@ const es = {
     locked_description:
       "Tu nivel actual es {{tier}}. Reclama tu NFT para desbloquear.",
     anomaly:
-      "Score anómalo detectado. Los datos serán revisados antes de habilitar operaciones.",
-    debt_label: "Deuda Total a Pagar",
+      "Puntaje anómalo detectado. Los datos serán revisados antes de habilitar operaciones.",
+    debt_label: "Deuda total a pagar",
     expires_in: "Vence en: {{time}}",
-    limit_label: "Límite de crédito disponible según tu SBT",
-    withdraw_button: "Retirar a mi Wallet",
+    limit_label: "Límite de crédito disponible según tu NFT",
+    withdraw_button: "Retirar a mi wallet",
     pay_button: "Pagar {{amount}} XLM",
     authorizing: "Autorizando...",
     processing: "Procesando...",
-    frozen_title: "¡CUENTA CONGELADA!",
-    frozen_description: "Tu plazo de pago ha expirado. Deuda pendiente:",
-    contact_support: "Contactar a Soporte",
+    frozen_title: "¡Cuenta congelada!",
+    frozen_description: "Tu plazo de pago venció. Deuda pendiente:",
+    contact_support: "Contactar a soporte",
     footer_network:
-      "El retiro genera una transacción en la red Testnet de Stellar.",
+      "El retiro genera una transacción en la red de Stellar.",
     footer_interest:
-      "Total a pagar al vencer (1 mes): {{amount}} XLM (Incluye 5% interés)",
+      "Total a pagar al vencer (1 mes): {{amount}} XLM (incluye 5% interés)",
     tiers: {
       "0": "Bronce",
       "1": "Plata",
@@ -219,8 +219,8 @@ const es = {
       cancelled: "Cancelaste la firma. No se realizó el retiro.",
       generic:
         "No pudimos procesar el retiro ahora. Intenta nuevamente en unos segundos.",
-      connect_wallet: "Debes conectar tu billetera primero",
-      wrong_account: "Cuenta incorrecta. Cambia en Freighter a: {{wallet}}",
+      connect_wallet: "Conecta tu wallet primero",
+      wrong_account: "Cuenta incorrecta. Cambia a {{wallet}} en Freighter",
       repay_generic: "No se pudo realizar el pago. Revisa tus fondos.",
     },
   },
@@ -256,7 +256,7 @@ const es = {
     tx_loan: "Préstamo recibido",
     tx_repay: "Pago de préstamo",
     tx_mint: "SBT Nivel {{level}}",
-    tx_withdrawal: "Retiro de Crédito",
+    tx_withdrawal: "Retiro de crédito",
   },
 
   // ─── Wallet setup modal ──────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ const es = {
     connect_freighter: "Conectar con Freighter",
     freighter_not_detected: "Freighter no detectado",
     freighter_not_detected_description:
-      "Instala la extensión o continúa con Albedo, una wallet web que no requiere instalación.",
+      "Instala la extensión o usa Albedo, una wallet web sin instalación.",
     install_freighter_alt: "Instalar Freighter en su lugar",
     install_freighter_link: "¿No tienes Freighter? Descárgala aquí",
     error_cancelled: "Conexión cancelada. Puedes intentarlo de nuevo cuando quieras.",
@@ -410,10 +410,10 @@ const es = {
     saved_addr_title: "Direcciones guardadas",
     saved_addr_soon: "Próximamente…",
     saved_addr_empty: "Guarda direcciones frecuentes para retiros más rápidos.",
-    modal_confirm_button: "Confirmar Retiro",
+    modal_confirm_button: "Confirmar retiro",
     modal_all_button: "TODO",
     modal_signing: "Procesando...",
-    modal_success_title: "Retiro Exitoso",
+    modal_success_title: "¡Retiro exitoso!",
     modal_error_title: "No se pudo completar",
     error_insufficient: "Saldo insuficiente",
     min_hint_wallet: "Mínimo: 1 USDC ($1 USD)",
