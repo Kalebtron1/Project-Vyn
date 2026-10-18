@@ -23,3 +23,42 @@ export const LENDING_CONTRACT_ID = import.meta.env.VITE_LENDING_CONTRACT_ID;
 // (`withdraw_interest` exige `treasury.require_auth()`).
 export const TREASURY_ADDRESS = import.meta.env.VITE_TREASURY_ADDRESS;
 export const RPC_URL = "https://soroban-testnet.stellar.org";
+
+export const LENDING_APY_BPS = 500;
+const MONTHS_PER_YEAR = 12n;
+const BPS_DENOMINATOR = 10_000n;
+const STROOPS_PER_UNIT = 10_000_000n;
+
+/**
+ * Calcula el interés en stroops igual que `vinculo_lending::compute_interest`:
+ * `(principal * apy_bps * months).div_ceil(12 * 10_000)`
+ */
+export function computeLoanInterestStroops(
+  principalStroops: bigint,
+  months: number,
+  apyBps: number = LENDING_APY_BPS
+): bigint {
+  if (principalStroops <= 0n || months <= 0 || apyBps <= 0) return 0n;
+  const num = principalStroops * BigInt(apyBps) * BigInt(months);
+  const den = MONTHS_PER_YEAR * BPS_DENOMINATOR;
+  return (num + den - 1n) / den;
+}
+
+export function computeLoanTotalOwedStroops(
+  principalStroops: bigint,
+  months: number,
+  apyBps: number = LENDING_APY_BPS
+): bigint {
+  return principalStroops + computeLoanInterestStroops(principalStroops, months, apyBps);
+}
+
+export function computeLoanTotalOwed(
+  principal: number,
+  months: number,
+  apyBps: number = LENDING_APY_BPS
+): number {
+  if (principal <= 0 || months <= 0) return 0;
+  const principalStroops = BigInt(Math.round(principal * Number(STROOPS_PER_UNIT)));
+  const totalStroops = computeLoanTotalOwedStroops(principalStroops, months, apyBps);
+  return Number(totalStroops) / Number(STROOPS_PER_UNIT);
+}

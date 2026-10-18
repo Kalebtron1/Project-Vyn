@@ -90,22 +90,23 @@ CreditSection mounts (and every 8 seconds)
 ## 5. Loan request and repayment
 
 ```
-User taps "Retirar a mi Wallet" in CreditSection
+User selects term (1, 3, 6, or 12 months) and taps "Retirar a mi Wallet" in CreditSection
   └─ requestAccess() → Freighter address
        └─ validate address === localStorage.vinculo_wallet
-            └─ Build vinculo_lending.request_loan(address, amountInStroops, months=1)
+            └─ Build vinculo_lending.request_loan(address, amountInStroops, months)
                  └─ server.prepareTransaction → signTransaction → sendTransaction
                       └─ AppContext.withdrawCredit()
-                           └─ 60-second repayment countdown starts
+                           └─ repayment countdown (months × 60s) starts
 
 User taps "Pagar X XLM"
-  └─ Build vinculo_lending.repay(address, principal × 1.05 in stroops)
+  └─ Build vinculo_lending.repay(address, principal + termInterest in stroops)
        └─ server.prepareTransaction → signTransaction → sendTransaction
             └─ window.location.reload()
 ```
 
-**Interest rate:** 5% flat, applied at repayment time in the UI.  
-**Key files:** `src/components/CreditSection.tsx`
+**Interest rate:** 5% APY (`apy_bps = 500`), pro-rated by term (`ceil(principal * apy_bps * months / (12 * 10_000))`) and credited to `AccruedInterest` when the loan is fully repaid. Overdue status is exposed via `vinculo_lending.is_overdue(user)` and `get_loan(user).overdue` once `ledger.timestamp() > due_timestamp`.  
+**Key files:** `backend/contracts/vinculo_lending/src/lib.rs`, `src/components/CreditSection.tsx`, `src/stellar/contracts.ts`
+
 
 ---
 

@@ -16,6 +16,7 @@ import {
   TransactionBuilder 
 } from "@stellar/stellar-sdk";
 import { walletAdapter } from "@/wallet";
+import { computeLoanTotalOwed, computeLoanTotalOwedStroops } from "@/stellar/contracts";
 
 const getLendingContractId = () => {
   const contractId = import.meta.env.VITE_LENDING_CONTRACT_ID?.trim();
@@ -50,6 +51,7 @@ const CreditSection = () => {
   const [registeredWallet, setRegisteredWallet] = useState<string | null>(null);
 
   // ⏱️ ESTADOS PARA LA SIMULACIÓN DE MOROSIDAD (1 Mes = 60 Segundos)
+  const [loanTermMonths, setLoanTermMonths] = useState<1 | 3 | 6 | 12>(1);
   const [timeLeft, setTimeLeft] = useState(60);
   const [isDefaulted, setIsDefaulted] = useState(false);
   
@@ -91,8 +93,8 @@ const CreditSection = () => {
   // Nombre del nivel traducido (cae al nombre del backend si falta la clave).
   const tierLabel = t(`credit.tiers.${creditData.tier}`, { defaultValue: creditData.tierName });
 
-  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
-  const totalToPay = creditData.limit * 1.05;
+  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + interés proporcional al plazo a 5% APY)
+  const totalToPay = computeLoanTotalOwed(creditData.limit, loanTermMonths);
 
   // 📡 Sincronización con el Backend/Soroban usando wallet de localStorage
   useEffect(() => {
@@ -181,7 +183,7 @@ const CreditSection = () => {
       const lendingContractId = getLendingContractId();
 
       const amountInStroops = BigInt(creditData.limit) * BigInt(10_000_000);
-      const months = 1; 
+      const months = loanTermMonths; 
 
       const contract = new Contract(lendingContractId);
       const operation = contract.call(
@@ -203,8 +205,8 @@ const CreditSection = () => {
       const signedTx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
       await server.sendTransaction(signedTx);
       
-      // Reiniciamos los estados del timer
-      setTimeLeft(60);
+      // Reiniciamos los estados del timer según el plazo seleccionado (1 mes = 60s)
+      setTimeLeft(months * 60);
       setIsDefaulted(false);
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
@@ -236,8 +238,9 @@ const CreditSection = () => {
       const networkPassphrase = Networks.TESTNET;
       const lendingContractId = getLendingContractId();
 
-      // Usamos el totalToPay para cubrir el principal + 5%
-      const amountToRepay = BigInt(Math.ceil(totalToPay * 10_000_000));
+      // Calculamos el monto exacto en stroops según la fórmula del contrato (principal + interés por plazo)
+      const principalStroops = BigInt(creditData.limit) * BigInt(10_000_000);
+      const amountToRepay = computeLoanTotalOwedStroops(principalStroops, loanTermMonths);
 
       const contract = new Contract(lendingContractId);
       const operation = contract.call(
@@ -396,7 +399,24 @@ const CreditSection = () => {
               </span>
               <span className="text-lg font-bold text-muted-foreground">XLM</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">{t("credit.limit_label")}</p>
+            <p className="text-sm text-muted-foreground mb-3">{t("credit.limit_label")}</p>
+
+            <div className="grid grid-cols-4 gap-1.5 w-full mb-4">
+              {([1, 3, 6, 12] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setLoanTermMonths(m)}
+                  className={`py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    loanTermMonths === m
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m}M
+                </button>
+              ))}
+            </div>
             
             {/* 🛑 BANNER DE ERROR AMIGABLE */}
             {errorMsg && (
