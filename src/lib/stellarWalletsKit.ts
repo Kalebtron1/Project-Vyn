@@ -19,7 +19,7 @@ import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
 import { FREIGHTER_ID, FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
 import { ALBEDO_ID, AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
 import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
-import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
+import { LOBSTR_ID, LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
 import { HanaModule } from "@creit.tech/stellar-wallets-kit/modules/hana";
 import { RabetModule } from "@creit.tech/stellar-wallets-kit/modules/rabet";
 import { Networks as SdkNetworks } from "@stellar/stellar-sdk";
@@ -28,7 +28,7 @@ import * as sessionStore from "@/lib/sessionStore";
 /** Passphrase de la red activa. Centralizado para conexión + firma. */
 export const NETWORK_PASSPHRASE = SdkNetworks.TESTNET;
 
-export { FREIGHTER_ID, ALBEDO_ID };
+export { FREIGHTER_ID, ALBEDO_ID, LOBSTR_ID };
 
 // Debe coincidir con PROVIDER_KEY en WalletSessionContext / mobileWalletConnectors.
 const PROVIDER_KEY = "vinculo_wallet_provider";
