@@ -151,11 +151,6 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (!STAKING_CONTRACT_ID) {
-    log.error("evaluate_and_mint.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
-    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
-  }
-
   let userAddress;
   let nonce;
   let signature;
@@ -191,6 +186,12 @@ export default async function handler(req, res) {
     });
   }
 
+  const stakingContractId = process.env.STAKING_CONTRACT_ID || STAKING_CONTRACT_ID;
+  if (!stakingContractId) {
+    log.error("evaluate_and_mint.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
+    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
+  }
+
   log.info("evaluate_and_mint.start", { userAddress });
 
   const fallbackVolumeFromDeposits = Array.isArray(deposits)
@@ -210,7 +211,7 @@ export default async function handler(req, res) {
       })
         .addOperation(
           Operation.invokeContractFunction({
-            contract: STAKING_CONTRACT_ID,
+            contract: stakingContractId,
             function: "get_position",
             args: [nativeToScVal(userAddress, { type: "address" })],
           })
