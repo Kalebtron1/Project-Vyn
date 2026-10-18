@@ -11,6 +11,7 @@ import {
 import dotenv from "dotenv";
 import { createLogger } from "./_logger.mjs";
 import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.mjs";
+import { verifySignedChallenge } from "./nonce.js";
 
 dotenv.config();
 
@@ -156,16 +157,38 @@ export default async function handler(req, res) {
   }
 
   let userAddress;
+  let nonce;
+  let signature;
   let deposits;
   let totalVolume;
 
   try {
     const validated = validateBody(evaluateAndMintBodySchema, req.body || {});
     userAddress = validated.userAddress;
+    nonce = validated.nonce;
+    signature = validated.signature;
     deposits = validated.deposits;
     totalVolume = validated.totalVolume;
   } catch (error) {
     return reportValidationError(res, error);
+  }
+
+  const challengeCheck = verifySignedChallenge({
+    address: userAddress,
+    nonce,
+    signature,
+  });
+  if (!challengeCheck.ok) {
+    log.warn("evaluate_and_mint.unauthorized", {
+      userAddress,
+      reason: challengeCheck.error,
+    });
+    return res.status(401).json({
+      success: false,
+      status: "error",
+      error: challengeCheck.error,
+      message: challengeCheck.error,
+    });
   }
 
   log.info("evaluate_and_mint.start", { userAddress });

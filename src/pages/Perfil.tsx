@@ -18,6 +18,7 @@ import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER } from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { walletAdapter } from "@/wallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
 
 const Perfil = () => {
@@ -399,11 +400,26 @@ const Perfil = () => {
         if (!access?.address || access.address !== walletAddress) throw new Error("Conecta la misma wallet en Freighter");
       }
 
+      // 2) Solicitar nonce de reto y firmarlo con la wallet conectada para demostrar titularidad.
+      const nonceRes = await fetch(`/api/nonce`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: walletAddress }),
+      });
+      const nonceData = await nonceRes.json().catch(() => ({}));
+      if (!nonceRes.ok || !nonceData?.nonce) {
+        throw new Error(nonceData?.error || "No se pudo obtener el reto de autenticación");
+      }
+
+      const signature = await walletAdapter.signChallenge(nonceData.nonce, walletAddress);
+
       const response = await fetch(`/api/evaluate-and-mint`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           userAddress: walletAddress, 
+          nonce: nonceData.nonce,
+          signature,
           totalVolume: Number(onChainUsdc),
           depositCount: Number(onChainUsdc) > 0 ? 1 : 0,
           deposits: [{ amount: Number(onChainUsdc), daysAgo: 0 }]

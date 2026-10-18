@@ -1,5 +1,12 @@
 import type { WalletAdapter } from "./WalletAdapter";
 import {
+  Account,
+  Networks,
+  Operation,
+  TransactionBuilder,
+  BASE_FEE,
+} from "@stellar/stellar-sdk";
+import {
   connectWallet,
   signTransactionXdr,
   getSavedProvider,
@@ -43,6 +50,28 @@ export class StellarWalletAdapter implements WalletAdapter {
       throw new Error(result.error);
     }
     return result.signedXdr;
+  }
+
+  async signChallenge(nonce: string, address?: string): Promise<string> {
+    const signerAddress = address || this.getAddress();
+    if (!signerAddress) {
+      throw new Error("Conecta tu wallet primero para firmar el reto de autenticación");
+    }
+    const account = new Account(signerAddress, "0");
+    const challengeTx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.manageData({
+          name: "vyn_auth_nonce",
+          value: nonce,
+        })
+      )
+      .setTimeout(300)
+      .build();
+
+    return this.sign(challengeTx.toXDR(), Networks.TESTNET);
   }
 
   disconnect(): void {

@@ -34,6 +34,8 @@ export const depositSchema = z.object({
 
 export const evaluateAndMintBodySchema = z.object({
   userAddress: nonEmptyString.describe("userAddress es requerido"),
+  nonce: z.string().trim().optional(),
+  signature: z.string().trim().optional(),
   totalVolume: nonNegativeNumber.optional(),
   deposits: z.array(depositSchema).optional(),
 });

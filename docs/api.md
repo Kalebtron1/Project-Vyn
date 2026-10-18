@@ -136,7 +136,7 @@ On contract or RPC errors the endpoint returns tier 0 / 0 XLM rather than a 5xx,
 
 ## POST /api/evaluate-and-mint
 
-Validates eligibility, computes the tier via `/api/calculate-score`, and mints an SBT NFT on the `vinculo_sbt` contract using the admin keypair. Requires a valid nonce from `/api/nonce`.
+Validates wallet ownership via a signed nonce challenge, computes the tier via `/api/calculate-score`, and mints an SBT NFT on the `vinculo_sbt` contract using the admin keypair. Requires a valid `nonce` from `/api/nonce` and a matching `signature` produced by `userAddress`.
 
 **Request**
 
@@ -144,6 +144,7 @@ Validates eligibility, computes the tier via `/api/calculate-score`, and mints a
 {
   "userAddress": "G...",
   "nonce": "a3f8c2...",
+  "signature": "AAAAAgAAA...",
   "totalVolume": 1500.0,
   "deposits": [
     { "amount": 500.0 },
@@ -152,8 +153,9 @@ Validates eligibility, computes the tier via `/api/calculate-score`, and mints a
 }
 ```
 
-- `nonce` — required. Must match the value returned by `/api/nonce` for this address and must not be expired.
-- `totalVolume` — optional. Falls back to the sum of `deposits[].amount`, then to the live Horizon balance.
+- `nonce` — required. Must match the active single-use value returned by `/api/nonce` for `userAddress` and must not be expired.
+- `signature` — required. Signed SEP-10 challenge transaction XDR (`walletAdapter.signChallenge(nonce, userAddress)`) or detached Ed25519 signature over the nonce.
+- `totalVolume` — optional. Falls back to the sum of `deposits[].amount`, then to the live on-chain position.
 - `deposits` — optional array used only as a fallback for `totalVolume`.
 
 **Response 200 — minted**
@@ -182,11 +184,11 @@ Validates eligibility, computes the tier via `/api/calculate-score`, and mints a
 
 | Status | Body | Reason |
 |---|---|---|
-| 400 | `{ "success": false, "error": "address required" }` | Missing `userAddress` |
-| 400 | `{ "success": false, "error": "Invalid or expired nonce" }` | Bad or expired nonce |
-| 400 | `{ "success": false, "error": "Not eligible by history", "eligibility": {...} }` | Fewer than 3 on-chain interactions |
-| 400 | `{ "success": false, "message": "Usuario ya posee este nivel exacto", ... }` | On-chain tier already matches computed tier |
-| 500 | `{ "success": false, "error": "<message>" }` | Mint or RPC failure |
+| 400 | `{ "error": "userAddress: es requerido", "status": "error" }` | Missing `userAddress` |
+| 401 | `{ "success": false, "status": "error", "error": "Falta nonce o firma de verificación de la wallet" }` | Missing `nonce` or `signature` |
+| 401 | `{ "success": false, "status": "error", "error": "Firma de wallet inválida para el reto solicitado" }` | Signature does not match `userAddress` / `nonce` |
+| 401 | `{ "success": false, "status": "error", "error": "Invalid or expired nonce" }` | Expired, unknown, or reused `nonce` |
+| 500 | `{ "status": "error", "message": "<message>" }` | Mint or RPC failure |
 
 ---
 

@@ -18,6 +18,7 @@
 export interface WalletAdapter {
   connect(): Promise<string>;
   sign(xdr: string, networkPassphrase: string): Promise<string>;
+  signChallenge(nonce: string, address?: string): Promise<string>;
   disconnect(): void;
   getAddress(): string | null;
   isConnected(): Promise<boolean>;
