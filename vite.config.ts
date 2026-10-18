@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+const e2e = process.env.VITE_E2E === "1";
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -36,6 +38,16 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Playwright boots without a real Privy app id — stub the SDK.
+      ...(e2e
+        ? {
+            "@privy-io/react-auth/extended-chains": path.resolve(
+              __dirname,
+              "e2e/mocks/privy-extended.ts"
+            ),
+            "@privy-io/react-auth": path.resolve(__dirname, "e2e/mocks/privy.tsx"),
+          }
+        : {}),
     },
   },
 }));
