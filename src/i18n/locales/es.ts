@@ -190,7 +190,10 @@ const es = {
     anomaly:
       "Puntaje anómalo detectado. Los datos serán revisados antes de habilitar operaciones.",
     debt_label: "Deuda total a pagar",
+    due_date: "Fecha límite: {{date}}",
     expires_in: "Vence en: {{time}}",
+    overdue_warning: "Préstamo vencido — liquida ahora para proteger tu reputación.",
+    repay_full_button: "Liquidar total ({{amount}} XLM)",
     limit_label: "Límite de crédito disponible según tu NFT",
     withdraw_button: "Retirar a mi wallet",
     pay_button: "Pagar {{amount}} XLM",

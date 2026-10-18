@@ -176,7 +176,10 @@ const en = {
     anomaly:
       "Anomalous score detected. The data will be reviewed before enabling operations.",
     debt_label: "Total Debt to Pay",
+    due_date: "Due date: {{date}}",
     expires_in: "Expires in: {{time}}",
+    overdue_warning: "Overdue loan — repay now to protect your reputation.",
+    repay_full_button: "Repay full amount ({{amount}} XLM)",
     limit_label: "Available credit limit based on your SBT",
     withdraw_button: "Withdraw to my Wallet",
     pay_button: "Pay {{amount}} XLM",

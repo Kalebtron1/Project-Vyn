@@ -16,6 +16,7 @@ import {
   TransactionBuilder 
 } from "@stellar/stellar-sdk";
 import { walletAdapter } from "@/wallet";
+import { fetchOnChainLoan } from "@/stellar/contracts";
 
 const getLendingContractId = () => {
   const contractId = import.meta.env.VITE_LENDING_CONTRACT_ID?.trim();
@@ -35,7 +36,7 @@ const getLendingContractId = () => {
 
 const CreditSection = () => {
   const { t } = useTranslation();
-  const { formatAmount } = useFormatters();
+  const { formatAmount, formatDate } = useFormatters();
   const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
@@ -51,6 +52,8 @@ const CreditSection = () => {
 
   // ⏱️ ESTADOS PARA LA SIMULACIÓN DE MOROSIDAD (1 Mes = 60 Segundos)
   const [timeLeft, setTimeLeft] = useState(60);
+  const [dueTimestamp, setDueTimestamp] = useState<number | null>(null);
+  const [onChainOwed, setOnChainOwed] = useState<number | null>(null);
   const [isDefaulted, setIsDefaulted] = useState(false);
   
   const [creditData, setCreditData] = useState({
@@ -91,8 +94,11 @@ const CreditSection = () => {
   // Nombre del nivel traducido (cae al nombre del backend si falta la clave).
   const tierLabel = t(`credit.tiers.${creditData.tier}`, { defaultValue: creditData.tierName });
 
-  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
-  const totalToPay = creditData.limit * 1.05;
+  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés o valor on-chain)
+  const totalToPay = onChainOwed ?? creditData.limit * 1.05;
+  const dueDateFormatted = dueTimestamp
+    ? formatDate(dueTimestamp * 1000, { dateStyle: "medium", timeStyle: "short" })
+    : null;
 
   // 📡 Sincronización con el Backend/Soroban usando wallet de localStorage
   useEffect(() => {
@@ -111,11 +117,14 @@ const CreditSection = () => {
         // Guardamos la wallet real del usuario
         setRegisteredWallet(wallet);
 
-        const response = await fetch(`/api/get-available-credit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userAddress: wallet })
-        });
+        const [response, loan] = await Promise.all([
+          fetch(`/api/get-available-credit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userAddress: wallet })
+          }),
+          fetchOnChainLoan(wallet),
+        ]);
 
         const data = await response.json();
 
@@ -127,6 +136,19 @@ const CreditSection = () => {
             isUnlocked: data.tier >= 1
           });
           if (data.anomaly) setScoreAnomaly(true);
+        }
+
+        if (loan && isMounted) {
+          setOnChainOwed(loan.totalOwed);
+          if (loan.dueTimestamp > 0) {
+            setDueTimestamp(loan.dueTimestamp);
+            const remaining = Math.max(0, loan.dueTimestamp - Math.floor(Date.now() / 1000));
+            setTimeLeft(remaining);
+            setIsDefaulted(loan.isOverdue || remaining <= 0);
+          }
+          if (!creditWithdrawn) {
+            withdrawCredit();
+          }
         }
 
       } catch (error) {
@@ -144,7 +166,7 @@ const CreditSection = () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [wallet, deposits, setScoreAnomaly]);
+  }, [wallet, deposits, setScoreAnomaly, creditWithdrawn, withdrawCredit]);
 
   // ⏳ TEMPORIZADOR DE COBRO (Se activa solo si hay un préstamo activo)
   useEffect(() => {
@@ -152,14 +174,19 @@ const CreditSection = () => {
     
     if (creditWithdrawn && timeLeft > 0 && !isDefaulted) {
       timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setTimeLeft((prev) => {
+          if (dueTimestamp) {
+            return Math.max(0, dueTimestamp - Math.floor(Date.now() / 1000));
+          }
+          return prev - 1;
+        });
       }, 1000);
     } else if (creditWithdrawn && timeLeft <= 0) {
       setIsDefaulted(true); // ¡Cae en mora!
     }
 
     return () => clearInterval(timer);
-  }, [creditWithdrawn, timeLeft, isDefaulted]);
+  }, [creditWithdrawn, timeLeft, isDefaulted, dueTimestamp]);
 
   // 📥 FUNCION: RETIRAR CRÉDITO
   const handleWithdraw = async () => {
@@ -203,8 +230,10 @@ const CreditSection = () => {
       const signedTx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
       await server.sendTransaction(signedTx);
       
-      // Reiniciamos los estados del timer
-      setTimeLeft(60);
+      // Reiniciamos los estados del timer (1 mes = 60 s en modo demo)
+      const nextDue = Math.floor(Date.now() / 1000) + months * 60;
+      setDueTimestamp(nextDue);
+      setTimeLeft(months * 60);
       setIsDefaulted(false);
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
@@ -328,15 +357,32 @@ const CreditSection = () => {
                   <Lock className="w-6 h-6 text-red-500" />
                 </div>
                 <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
+                <p className="text-xs font-semibold text-red-500 mt-1">
+                  {t("credit.overdue_warning")}
+                </p>
+                {dueDateFormatted && (
+                  <p className="text-[11px] text-red-400/90 mt-1">
+                    {t("credit.due_date", { date: dueDateFormatted })}
+                  </p>
+                )}
                 <p className="text-xs text-red-400 mt-2">
                   {t("credit.frozen_description")} <strong>{formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM</strong>.
                 </p>
               </div>
               <button
-                disabled
-                className="w-full mt-4 flex items-center justify-center gap-3 py-3 text-sm font-bold rounded-xl bg-secondary text-muted-foreground cursor-not-allowed opacity-50"
+                onClick={handleRepay}
+                disabled={loadingTx}
+                className="w-full mt-4 flex items-center justify-center gap-3 py-3 px-3 text-sm font-bold rounded-xl border-2 border-red-500 text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 whitespace-normal text-center"
               >
-                {t("credit.contact_support")}
+                {loadingTx ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" /> <span className="min-w-0 break-words">{t("credit.processing")}</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpFromLine className="w-4 h-4 shrink-0" /> <span className="min-w-0 break-words">{t("credit.repay_full_button", { amount: formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}</span>
+                  </>
+                )}
               </button>
             </div>
           ) : (
@@ -352,9 +398,15 @@ const CreditSection = () => {
                   </span>
                   <span className="text-lg font-bold text-amber-500/70">XLM</span>
                 </div>
+
+                {dueDateFormatted && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {t("credit.due_date", { date: dueDateFormatted })}
+                  </p>
+                )}
                 
                 {/* ⏱️ UI DEL TEMPORIZADOR */}
-                <div className={`flex items-center justify-center gap-2 mt-4 mb-4 text-sm py-2 px-3 rounded-lg font-bold transition-colors ${
+                <div className={`flex items-center justify-center gap-2 mt-3 mb-4 text-sm py-2 px-3 rounded-lg font-bold transition-colors ${
                   timeLeft <= 15 ? "text-red-500 bg-red-500/10 animate-pulse" : "text-amber-600 bg-amber-500/10"
                 }`}>
                   <CalendarClock className="w-4 h-4" />
