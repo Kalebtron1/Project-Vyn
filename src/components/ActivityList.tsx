@@ -5,6 +5,7 @@ import {
   PiggyBank, Loader2, ExternalLink,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useFormatters } from "@/lib/format";
 import { fetchActivity, type ActivityItem, type ActivityKind } from "@/stellar/activity";
 
 // Estética por tipo de acción. Depósito/retiro de ahorro = USDC; préstamo/pago = XLM;
@@ -25,6 +26,7 @@ const ActivityList = () => {
   const [movements, setMovements] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useTranslation();
+  const { formatAmount, formatDate } = useFormatters();
 
   useEffect(() => {
     if (!walletAddress) {
@@ -100,7 +102,7 @@ const ActivityList = () => {
                 {d.kind === "mint" ? t("activity.tx_mint", { level: d.level }) : t(meta.labelKey)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {d.date.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                {formatDate(d.date, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
 
@@ -109,7 +111,7 @@ const ActivityList = () => {
                 <span className="text-sm font-bold text-primary">{d.level}</span>
               ) : (
                 <span className={`text-sm font-bold tabular-nums ${meta.amountColor}`}>
-                  {d.sign}{d.amount.toFixed(2)} {d.currency}
+                  {d.sign}{formatAmount(d.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {d.currency}
                 </span>
               )}
               <a

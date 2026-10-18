@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import AppShell from "@/components/AppShell";
+import { useFormatters } from "@/lib/format";
 import { fetchActivity, type ActivityItem, type ActivityKind } from "@/stellar/activity";
 
 // Misma estética por tipo que ActivityList: ahorro USDC, crédito XLM, mint = nivel.
@@ -32,6 +33,7 @@ const TABS: { id: TabId; labelKey: string }[] = [
 const Historial = () => {
   const { wallet: walletAddress } = useWallet();
   const { t } = useTranslation();
+  const { formatAmount, formatDate } = useFormatters();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [sbtLevel, setSbtLevel] = useState<string | null>(null);
@@ -92,7 +94,7 @@ const Historial = () => {
 
   // Agrupación por mes (sobre el filtrado).
   const grouped = filtered.reduce<Record<string, ActivityItem[]>>((acc, tx) => {
-    const key = tx.date.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    const key = formatDate(tx.date, { month: "long", year: "numeric" });
     if (!acc[key]) acc[key] = [];
     acc[key].push(tx);
     return acc;
@@ -222,7 +224,7 @@ const Historial = () => {
                               {tx.kind === "mint" ? t("activity.tx_mint", { level: tx.level }) : t(meta.labelKey)}
                             </p>
                             <p className="text-xs font-medium text-muted-foreground mt-0.5">
-                              {tx.date.toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                              {formatDate(tx.date, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
 
@@ -231,7 +233,7 @@ const Historial = () => {
                               <span className="block text-sm font-bold text-primary">{tx.level}</span>
                             ) : (
                               <span className={`block text-sm font-bold tabular-nums ${meta.amountColor}`}>
-                                {tx.sign}{tx.amount.toFixed(2)} {tx.currency}
+                                {tx.sign}{formatAmount(tx.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tx.currency}
                               </span>
                             )}
                             <a
@@ -267,7 +269,7 @@ const Historial = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-extrabold tabular-nums text-white mb-1">
-                        {totalSavedVolume.toFixed(0)} <span className="text-sm font-medium opacity-60 ml-0.5">USDC</span>
+                        {formatAmount(totalSavedVolume, { maximumFractionDigits: 0 })} <span className="text-sm font-medium opacity-60 ml-0.5">USDC</span>
                       </p>
                       <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_volume_in")}</p>
                     </div>
@@ -280,7 +282,7 @@ const Historial = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-extrabold tabular-nums text-emerald-400 mb-1">
-                        {totalWithdrawnVolume.toFixed(0)} <span className="text-sm font-medium opacity-60 ml-0.5 text-white">USDC</span>
+                        {formatAmount(totalWithdrawnVolume, { maximumFractionDigits: 0 })} <span className="text-sm font-medium opacity-60 ml-0.5 text-white">USDC</span>
                       </p>
                       <p className="text-[10px] font-semibold opacity-60 uppercase tracking-wide">{t("history.summary_volume_out")}</p>
                     </div>
