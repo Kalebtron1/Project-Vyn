@@ -36,6 +36,14 @@ pub struct Loan {
     pub apy_bps: u64,
 }
 
+// ─── TTL de almacenamiento ───────────────────────────────────────────────────
+
+pub const DAY_IN_LEDGERS: u32 = 17_280;
+pub const INSTANCE_LIFETIME_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const INSTANCE_BUMP_AMOUNT: u32 = 60 * DAY_IN_LEDGERS;
+pub const PERSISTENT_LIFETIME_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const PERSISTENT_BUMP_AMOUNT: u32 = 90 * DAY_IN_LEDGERS;
+
 #[contract]
 pub struct VinculoLending;
 
@@ -57,6 +65,7 @@ impl VinculoLending {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
+        Self::bump_instance(&env);
     }
 
     /// Aporta liquidez al pool de préstamos (el `from` transfiere al contrato).
@@ -69,6 +78,7 @@ impl VinculoLending {
             .instance()
             .get(&DataKey::Token)
             .expect("init not called");
+        Self::bump_instance(&env);
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, &env.current_contract_address(), &amount);
     }
@@ -87,6 +97,7 @@ impl VinculoLending {
         let storage = env.storage().instance();
         let token_addr: Address = storage.get(&DataKey::Token).expect("init not called");
         let sbt_addr: Address = storage.get(&DataKey::Sbt).expect("init not called");
+        Self::bump_instance(&env);
 
         let sbt_client = VinculoSBTClient::new(&env, &sbt_addr);
         let tier = sbt_client.get_tier(&user);
@@ -122,6 +133,7 @@ impl VinculoLending {
             apy_bps: 500,
         };
         env.storage().persistent().set(&loan_key, &loan);
+        Self::bump_persistent(&env, &loan_key);
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -134,6 +146,7 @@ impl VinculoLending {
             .instance()
             .get(&DataKey::Token)
             .expect("init not called");
+        Self::bump_instance(&env);
 
         // OPT: build loan key once — eliminates redundant user.clone()
         let loan_key = DataKey::Loan(user.clone());
@@ -160,6 +173,7 @@ impl VinculoLending {
             loan = Loan::default();
         }
         env.storage().persistent().set(&loan_key, &loan);
+        Self::bump_persistent(&env, &loan_key);
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -188,6 +202,7 @@ impl VinculoLending {
 
         token_client.transfer(&this, &treasury, &withdrawable);
         storage.set(&DataKey::AccruedInterest, &(accrued - withdrawable));
+        Self::bump_instance(&env);
         withdrawable
     }
 
@@ -211,6 +226,7 @@ impl VinculoLending {
         let this = env.current_contract_address();
         let balance = token_client.balance(&this);
         let accrued: i128 = storage.get(&DataKey::AccruedInterest).unwrap_or(0);
+        Self::bump_instance(&env);
 
         // Liquidez libre = balance − interés acumulado (el interés se retira aparte).
         let free = balance - accrued;
@@ -223,25 +239,36 @@ impl VinculoLending {
 
     /// Interés acumulado (ganancia) disponible para que la tesorería retire.
     pub fn get_accrued_interest(env: Env) -> i128 {
-        env.storage()
+        let val = env
+            .storage()
             .instance()
             .get(&DataKey::AccruedInterest)
-            .unwrap_or(0)
+            .unwrap_or(0);
+        if env.storage().instance().has(&DataKey::Token) {
+            Self::bump_instance(&env);
+        }
+        val
     }
 
     /// Wallet de tesorería configurada en el deploy.
     pub fn get_treasury(env: Env) -> Address {
-        env.storage()
+        let treasury = env
+            .storage()
             .instance()
             .get(&DataKey::Treasury)
-            .expect("init not called")
+            .expect("init not called");
+        Self::bump_instance(&env);
+        treasury
     }
 
     pub fn get_loan(env: Env, user: Address) -> Loan {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Loan(user))
-            .unwrap_or_default()
+        let key = DataKey::Loan(user);
+        let Some(loan) = env.storage().persistent().get(&key) else {
+            return Loan::default();
+        };
+        Self::bump_instance(&env);
+        Self::bump_persistent(&env, &key);
+        loan
     }
 
     /// Saldo del token en custodia del contrato (liquidez disponible para desembolsos).
@@ -251,17 +278,98 @@ impl VinculoLending {
             .instance()
             .get(&DataKey::Token)
             .expect("init not called");
+        Self::bump_instance(&env);
         let token_client = token::Client::new(&env, &token_addr);
         token_client.balance(&env.current_contract_address())
+    }
+
+    fn bump_instance(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    }
+
+    fn bump_persistent(env: &Env, key: &DataKey) {
+        env.storage().persistent().extend_ttl(
+            key,
+            PERSISTENT_LIFETIME_THRESHOLD,
+            PERSISTENT_BUMP_AMOUNT,
+        );
     }
 }
 
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
-        1 => 300_000_0000,   // Plata
-        2 => 600_000_0000,   // Oro
-        3 => 1_500_000_0000, // Diamante
-        4 => 5_000_000_0000, // Platino
+        1 => 3_000_000_000,  // Plata
+        2 => 6_000_000_000,  // Oro
+        3 => 15_000_000_000, // Diamante
+        4 => 50_000_000_000, // Platino
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::{
+        testutils::{storage::Instance as _, storage::Persistent as _, Address as _, Ledger},
+        token::StellarAssetClient,
+    };
+    use vinculo_sbt::VinculoSBT;
+
+    #[test]
+    fn test_vinculo_lending_extends_storage_ttl() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let issuer = Address::generate(&env);
+        let sac = env.register_stellar_asset_contract_v2(issuer);
+        let token_addr = sac.address();
+        let token_admin = StellarAssetClient::new(&env, &token_addr);
+
+        let sbt_admin = Address::generate(&env);
+        let sbt_addr = env.register_contract(None, VinculoSBT);
+        let sbt = VinculoSBTClient::new(&env, &sbt_addr);
+        sbt.init(&sbt_admin);
+
+        let treasury = Address::generate(&env);
+        let lending_addr = env.register_contract(None, VinculoLending);
+        let lending = VinculoLendingClient::new(&env, &lending_addr);
+        lending.init_lending(&token_addr, &sbt_addr, &treasury);
+
+        let funder = Address::generate(&env);
+        token_admin.mint(&funder, &10_000_000_000);
+        lending.fund_pool(&funder, &10_000_000_000);
+
+        let user = Address::generate(&env);
+        sbt.mint(&sbt_admin, &user, &1);
+        lending.request_loan(&user, &1_000_000_000, &1);
+
+        // Paso 1: avanza 35 días -> instance TTL cae a 25d (< 30d) y se renueva a 60d.
+        env.ledger().with_mut(|li| {
+            li.sequence_number += 35 * DAY_IN_LEDGERS;
+        });
+        assert_eq!(lending.get_treasury(), treasury);
+
+        // Paso 2: avanza otros 30 días (65d total) -> persistent TTL cae a 25d (< 30d)
+        // y ambos se renuevan al máximo configurado.
+        env.ledger().with_mut(|li| {
+            li.sequence_number += 30 * DAY_IN_LEDGERS;
+        });
+
+        let loan = lending.get_loan(&user);
+        assert_eq!(loan.principal, 1_000_000_000);
+        assert_eq!(lending.get_treasury(), treasury);
+
+        env.as_contract(&lending_addr, || {
+            let loan_ttl = env
+                .storage()
+                .persistent()
+                .get_ttl(&DataKey::Loan(user.clone()));
+            assert!(loan_ttl >= PERSISTENT_BUMP_AMOUNT);
+
+            let instance_ttl = env.storage().instance().get_ttl();
+            assert!(instance_ttl >= INSTANCE_BUMP_AMOUNT);
+        });
     }
 }

@@ -274,8 +274,28 @@ stellar contract info --id $CONTRACT_ID --network $NETWORK
 
 Store that hash so you can roll back by re-uploading the old wasm.
 
+## Storage TTL Policy
+
+All three Soroban contracts (`vinculo_sbt`, `staking_pool`, and `vinculo_lending`) actively extend storage Time-To-Live (TTL) on initialization, state mutations, and reads so active user positions, loans, and SBT tiers do not expire into archival storage:
+
+| Storage Type | Threshold (`*_LIFETIME_THRESHOLD`) | Extend To (`*_BUMP_AMOUNT`) | Entries Covered |
+|---|---|---|---|
+| `instance` | `518,400` ledgers (~30 days) | `1,036,800` ledgers (~60 days) | `Admin`, `Token`, `Vault`, `Sbt`, `Treasury`, `AccruedInterest`, `Name`, `Symbol` |
+| `persistent` | `518,400` ledgers (~30 days) | `1,555,200` ledgers (~90 days) | `Shares(user)`, `TotalDeposited(user)`, `TotalWithdrawn(user)`, `TxCount(user)`, `Loan(user)`, `Tier(user)` |
+
+If a contract instance or persistent key goes completely untouched for more than 60–90 days, restore or bump it via Stellar CLI:
+
+```bash
+stellar contract extend \
+  --id $CONTRACT_ID \
+  --source $ADMIN_SECRET \
+  --network $NETWORK \
+  --ledgers-to-expire 1555200
+```
+
 ---
 
 ## Automated Script
 
 See [`scripts/deploy_contracts.sh`](../../scripts/deploy_contracts.sh) for a single script that runs the full deploy + init sequence from a clean clone.
+

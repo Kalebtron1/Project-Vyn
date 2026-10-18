@@ -1,9 +1,14 @@
 #![cfg(test)]
 extern crate std;
 
-use crate::{Error, StakingContract, StakingContractClient};
+use crate::{
+    DataKey, Error, StakingContract, StakingContractClient, DAY_IN_LEDGERS, INSTANCE_BUMP_AMOUNT,
+    PERSISTENT_BUMP_AMOUNT,
+};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, token, vec, Address, Env, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{storage::Instance as _, storage::Persistent as _, Address as _, Ledger},
+    token, vec, Address, Env, Vec,
 };
 
 // ─── Mock vault DeFindex ───────────────────────────────────────────────────────
@@ -275,4 +280,38 @@ fn test_get_position_zero_for_new_user() {
     let user = Address::generate(&s.env);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_storage_ttl_extended_across_ledgers() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    // Paso 1: avanza 35 días -> instance TTL cae a 25 días (< umbral de 30d) y se renueva a 60d.
+    s.env.ledger().with_mut(|li| {
+        li.sequence_number += 35 * DAY_IN_LEDGERS;
+    });
+    assert_eq!(s.staking.get_vault(), s.vault_addr);
+
+    // Paso 2: avanza otros 30 días (65 días acumulados) -> persistent TTL cae a 25 días (< 30d)
+    // e instance TTL cae a 30 días (<= 30d); ambos se renuevan al máximo configurado.
+    s.env.ledger().with_mut(|li| {
+        li.sequence_number += 30 * DAY_IN_LEDGERS;
+    });
+    assert_eq!(s.staking.get_shares(&user), 1_000);
+    assert_eq!(s.staking.get_vault(), s.vault_addr);
+
+    s.env.as_contract(&s.staking.address, || {
+        let persistent_ttl = s
+            .env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Shares(user.clone()));
+        assert!(persistent_ttl >= PERSISTENT_BUMP_AMOUNT);
+
+        let instance_ttl = s.env.storage().instance().get_ttl();
+        assert!(instance_ttl >= INSTANCE_BUMP_AMOUNT);
+    });
 }

@@ -79,6 +79,14 @@ pub enum DataKey {
     TxCount(Address),
 }
 
+// ─── TTL de almacenamiento ─────────────────────────────────────────────────────
+
+pub const DAY_IN_LEDGERS: u32 = 17_280;
+pub const INSTANCE_LIFETIME_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const INSTANCE_BUMP_AMOUNT: u32 = 60 * DAY_IN_LEDGERS;
+pub const PERSISTENT_LIFETIME_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const PERSISTENT_BUMP_AMOUNT: u32 = 90 * DAY_IN_LEDGERS;
+
 #[contract]
 pub struct StakingContract;
 
@@ -93,6 +101,7 @@ impl StakingContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
+        Self::bump_instance(&env);
         Ok(())
     }
 
@@ -108,12 +117,15 @@ impl StakingContract {
         let admin = Self::read_admin(&env)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Vault, &new_vault);
+        Self::bump_instance(&env);
         Ok(())
     }
 
     /// Vault DeFindex actualmente configurado.
     pub fn get_vault(env: Env) -> Result<Address, Error> {
-        Self::read_vault(&env)
+        let vault = Self::read_vault(&env)?;
+        Self::bump_instance(&env);
+        Ok(vault)
     }
 
     /// Deposita `amount` del token en el vault y acredita las shares al usuario.
@@ -126,6 +138,7 @@ impl StakingContract {
 
         let token_addr = Self::read_token(&env)?;
         let vault_addr = Self::read_vault(&env)?;
+        Self::bump_instance(&env);
         let this = env.current_contract_address();
 
         // 1. El usuario transfiere el token al contrato.
@@ -170,6 +183,7 @@ impl StakingContract {
         env.storage()
             .persistent()
             .set(&shares_key, &(prev_shares + minted));
+        Self::bump_persistent(&env, &shares_key);
 
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
@@ -188,6 +202,7 @@ impl StakingContract {
 
         let token_addr = Self::read_token(&env)?;
         let vault_addr = Self::read_vault(&env)?;
+        Self::bump_instance(&env);
         let this = env.current_contract_address();
 
         let shares_key = DataKey::Shares(user.clone());
@@ -228,6 +243,7 @@ impl StakingContract {
         env.storage()
             .persistent()
             .set(&shares_key, &(user_shares - shares_to_burn));
+        Self::bump_persistent(&env, &shares_key);
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
@@ -238,17 +254,18 @@ impl StakingContract {
     /// Valor redimible en vivo (token subyacente) de la posición del usuario,
     /// incluyendo el rendimiento real acumulado. Reemplaza a `get_balance`.
     pub fn get_position(env: Env, user: Address) -> i128 {
-        let user_shares: i128 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Shares(user))
-            .unwrap_or(0);
+        let shares_key = DataKey::Shares(user);
+        let Some(user_shares) = env.storage().persistent().get::<DataKey, i128>(&shares_key) else {
+            return 0;
+        };
+        Self::bump_persistent(&env, &shares_key);
         if user_shares <= 0 {
             return 0;
         }
         let Ok(vault_addr) = Self::read_vault(&env) else {
             return 0;
         };
+        Self::bump_instance(&env);
         let vault = VaultClient::new(&env, &vault_addr);
         vault
             .get_asset_amounts_per_shares(&user_shares)
@@ -258,37 +275,63 @@ impl StakingContract {
 
     /// Shares (dfTokens) del usuario custodiadas por el contrato.
     pub fn get_shares(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Shares(user))
-            .unwrap_or(0)
+        let key = DataKey::Shares(user);
+        let Some(val) = env.storage().persistent().get(&key) else {
+            return 0;
+        };
+        Self::bump_instance(&env);
+        Self::bump_persistent(&env, &key);
+        val
     }
 
     /// Ingreso acumulado del usuario (para scoring).
     pub fn get_total_deposited(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TotalDeposited(user))
-            .unwrap_or(0)
+        let key = DataKey::TotalDeposited(user);
+        let Some(val) = env.storage().persistent().get(&key) else {
+            return 0;
+        };
+        Self::bump_instance(&env);
+        Self::bump_persistent(&env, &key);
+        val
     }
 
     /// Retiro acumulado del usuario (para scoring).
     pub fn get_total_withdrawn(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TotalWithdrawn(user))
-            .unwrap_or(0)
+        let key = DataKey::TotalWithdrawn(user);
+        let Some(val) = env.storage().persistent().get(&key) else {
+            return 0;
+        };
+        Self::bump_instance(&env);
+        Self::bump_persistent(&env, &key);
+        val
     }
 
     /// Conteo de operaciones del usuario (para scoring de actividad).
     pub fn get_tx_count(env: Env, user: Address) -> u32 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TxCount(user))
-            .unwrap_or(0)
+        let key = DataKey::TxCount(user);
+        let Some(val) = env.storage().persistent().get(&key) else {
+            return 0;
+        };
+        Self::bump_instance(&env);
+        Self::bump_persistent(&env, &key);
+        val
     }
 
     // ─── Helpers internos ──────────────────────────────────────────────────────
+
+    fn bump_instance(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    }
+
+    fn bump_persistent(env: &Env, key: &DataKey) {
+        env.storage().persistent().extend_ttl(
+            key,
+            PERSISTENT_LIFETIME_THRESHOLD,
+            PERSISTENT_BUMP_AMOUNT,
+        );
+    }
 
     fn read_admin(env: &Env) -> Result<Address, Error> {
         env.storage()
@@ -314,12 +357,14 @@ impl StakingContract {
     fn bump_counter(env: &Env, key: &DataKey, delta: i128) {
         let prev: i128 = env.storage().persistent().get(key).unwrap_or(0);
         env.storage().persistent().set(key, &(prev + delta));
+        Self::bump_persistent(env, key);
     }
 
     fn increment_tx(env: &Env, user: &Address) {
         let key = DataKey::TxCount(user.clone());
         let prev: u32 = env.storage().persistent().get(&key).unwrap_or(0);
         env.storage().persistent().set(&key, &(prev + 1));
+        Self::bump_persistent(env, &key);
     }
 }
 
