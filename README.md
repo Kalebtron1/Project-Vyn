@@ -40,6 +40,7 @@ The project uses the following variables:
 - `VITE_STAKING_CONTRACT_ID` — staking_pool (DeFindex-backed) contract ID, read by the frontend (`src/stellar/contracts.ts`).
 - `STAKING_CONTRACT_ID` — same staking_pool contract ID, read by the serverless API functions (`api/get-user-data.js`, `api/evaluate-and-mint.js`). These two must hold the **same** contract ID; there is no hardcoded fallback, so the API returns a clear error if it is missing.
 - `VITE_TREASURY_ADDRESS` — treasury wallet (`G…` address). The only wallet that can see and operate the treasury panel (loan-interest profit). UI gating is cosmetic; the real authorization is enforced on-chain by `vinculo_lending.withdraw_interest`.
+- `STELLAR_NETWORK` / `VITE_STELLAR_NETWORK` — target Stellar network (`testnet` or `mainnet`, defaults to `testnet`). Automatically selects the Soroban RPC URL, Horizon URL, network passphrase, and USDC issuer, with optional overrides via `SOROBAN_RPC_URL` / `VITE_SOROBAN_RPC_URL` and `HORIZON_URL` / `VITE_HORIZON_URL`.
 - `PORT`
 
 `VERCEL_OIDC_TOKEN` is created by Vercel for deployment workflows and is not required for normal local development.

@@ -1,4 +1,5 @@
 import { xdr, nativeToScVal } from "@stellar/stellar-sdk";
+import { STELLAR_NETWORK } from "./network";
 
 // staking_pool respaldado por DeFindex. Se configura vía VITE_STAKING_CONTRACT_ID
 // (sin hardcodear el id; cámbialo en .env.local tras cada redeploy de testnet).
@@ -22,4 +23,6 @@ export const LENDING_CONTRACT_ID = import.meta.env.VITE_LENDING_CONTRACT_ID;
 // El gating de UI es cosmético; la autorización real la impone el contrato
 // (`withdraw_interest` exige `treasury.require_auth()`).
 export const TREASURY_ADDRESS = import.meta.env.VITE_TREASURY_ADDRESS;
-export const RPC_URL = "https://soroban-testnet.stellar.org";
+export const RPC_URL = STELLAR_NETWORK.rpcUrl;
+export const HORIZON_URL = STELLAR_NETWORK.horizonUrl;
+export const NETWORK_PASSPHRASE = STELLAR_NETWORK.networkPassphrase;

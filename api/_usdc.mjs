@@ -2,12 +2,19 @@
 // Lo usan el faucet (api/_faucet-core.mjs) y la liquidación del on-ramp (settlePayin).
 // Pago CLÁSICO vía Horizon, firmado con SECRET_KEY_ADMIN.
 
-import { Horizon, TransactionBuilder, Operation, Asset, Keypair, BASE_FEE, Networks } from "@stellar/stellar-sdk";
+import { Horizon, TransactionBuilder, Operation, Asset, Keypair, BASE_FEE } from "@stellar/stellar-sdk";
+import { resolveStellarNetwork } from "./_network.mjs";
 
-export const HORIZON_URL = "https://horizon-testnet.stellar.org";
+const {
+  horizonUrl: HORIZON_URL_RESOLVED,
+  networkPassphrase: NETWORK_PASSPHRASE,
+  usdcIssuer: USDC_ISSUER,
+} = resolveStellarNetwork();
 
-// USDC del vault (testnet). Issuer del proyecto (el que tienen las wallets de prueba).
-export const USDC = new Asset("USDC", "GATALTGTWIOT6BUDBCZM3Q4OQ4BO2COLOAZ7IYSKPLC2PMSOPPGF5V56");
+export const HORIZON_URL = HORIZON_URL_RESOLVED;
+
+// USDC del vault (configurable por red o vía USDC_ISSUER).
+export const USDC = new Asset("USDC", USDC_ISSUER);
 
 /** Saldo USDC de una cuenta. null = sin trustline / cuenta inexistente. */
 export async function usdcBalance(server, address) {
@@ -30,7 +37,7 @@ export async function sendUsdcFromAdmin({ to, amount }) {
   const server = new Horizon.Server(HORIZON_URL);
   const kp = Keypair.fromSecret(secret);
   const source = await server.loadAccount(kp.publicKey());
-  const tx = new TransactionBuilder(source, { fee: BASE_FEE, networkPassphrase: Networks.TESTNET })
+  const tx = new TransactionBuilder(source, { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE })
     .addOperation(Operation.payment({ destination: to, asset: USDC, amount: String(amount) }))
     .setTimeout(120)
     .build();
@@ -43,3 +50,4 @@ export async function sendUsdcFromAdmin({ to, amount }) {
     throw new Error(codes ? `Horizon: ${JSON.stringify(codes)}` : (e?.message || "Error enviando USDC"));
   }
 }
+

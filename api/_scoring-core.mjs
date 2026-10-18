@@ -13,14 +13,13 @@
 import {
   rpc,
   TransactionBuilder,
-  Networks,
   Operation,
   BASE_FEE,
   nativeToScVal,
   scValToNative,
 } from "@stellar/stellar-sdk";
+import { resolveStellarNetwork } from "./_network.mjs";
 
-const DEFAULT_RPC_URL = "https://soroban-testnet.stellar.org";
 export const MIN_TX_REQUIRED = 3;
 
 /**
@@ -118,24 +117,29 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
 // api/get-user-data.js). Devuelve los agregados ya convertidos a unidades del token.
 // `contractId` es OBLIGATORIO: sin él no hay forma de saber qué contrato leer, y leer
 // uno equivocado (o ninguno) es justo lo que mostraba historial de un contrato viejo.
-export async function getOnChainAggregates(userAddress, { contractId, rpcUrl = DEFAULT_RPC_URL } = {}) {
+export async function getOnChainAggregates(
+  userAddress,
+  { contractId, rpcUrl, networkPassphrase } = {}
+) {
   if (!contractId) {
     throw new Error("STAKING_CONTRACT_ID no configurado");
   }
-  const server = new rpc.Server(rpcUrl);
+  const net = resolveStellarNetwork();
+  const server = new rpc.Server(rpcUrl || net.rpcUrl);
+  const passphrase = networkPassphrase || net.networkPassphrase;
 
   let account;
   try {
     account = await server.getAccount(userAddress);
   } catch (e) {
-    // Cuenta no fondeada en testnet → sin posición ni historial.
+    // Cuenta no fondeada en la red → sin posición ni historial.
     return { totalDeposited: 0, totalWithdrawn: 0, position: 0, txCount: 0 };
   }
 
   const readContract = async (fnName) => {
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
+      networkPassphrase: passphrase,
     })
       .addOperation(
         Operation.invokeContractFunction({

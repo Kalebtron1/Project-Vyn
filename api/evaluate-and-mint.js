@@ -2,7 +2,6 @@ import {
   Keypair,
   rpc,
   TransactionBuilder,
-  Networks,
   Operation,
   BASE_FEE,
   nativeToScVal,
@@ -10,6 +9,7 @@ import {
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
 import { createLogger } from "./_logger.mjs";
+import { resolveStellarNetwork } from "./_network.mjs";
 import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.mjs";
 
 dotenv.config();
@@ -18,7 +18,7 @@ dotenv.config();
 // el default de 10 s del plan hobby lo cortaba (504 → front colgado). 60 s es el máx en hobby.
 export const config = { maxDuration: 60 };
 
-const RPC_URL = "https://soroban-testnet.stellar.org";
+const { rpcUrl: RPC_URL, networkPassphrase: NETWORK_PASSPHRASE } = resolveStellarNetwork();
 const server = new rpc.Server(RPC_URL);
 // staking_pool respaldado por DeFindex. Se configura vía STAKING_CONTRACT_ID
 // (sin fallback hardcodeado; debe definirse en el entorno tras cada redeploy).
@@ -80,7 +80,7 @@ async function mintNftOnChain(log, userAddress, tier) {
     
     let transaction = new TransactionBuilder(account, { 
         fee: BASE_FEE, 
-        networkPassphrase: Networks.TESTNET 
+        networkPassphrase: NETWORK_PASSPHRASE 
     })
       .addOperation(
         Operation.invokeContractFunction({
@@ -183,7 +183,7 @@ export default async function handler(req, res) {
       const account = await server.getAccount(userAddress);
       const tx = new TransactionBuilder(account, {
         fee: BASE_FEE,
-        networkPassphrase: Networks.TESTNET,
+        networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(
           Operation.invokeContractFunction({

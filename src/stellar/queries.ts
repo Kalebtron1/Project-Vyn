@@ -1,5 +1,5 @@
-import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative, rpc } from "@stellar/stellar-sdk";
-import { CONTRACT_ID, RPC_URL } from "./contracts";
+import { TransactionBuilder, Operation, BASE_FEE, nativeToScVal, scValToNative, rpc } from "@stellar/stellar-sdk";
+import { CONTRACT_ID, NETWORK_PASSPHRASE, RPC_URL } from "./contracts";
 
 // Valor redimible en vivo de la posición del usuario (depósito + rendimiento real
 // del vault DeFindex), en unidades del token (USDC, 7 decimales como XLM).
@@ -12,13 +12,13 @@ export async function fetchContractBalance(userAddress: string): Promise<number>
     try {
       account = await server.getAccount(userAddress);
     } catch (e) {
-      console.warn("La cuenta no está fondeada en Testnet. Saldo 0 por defecto.");
+      console.warn("La cuenta no está fondeada en la red. Saldo 0 por defecto.");
       return 0;
     }
 
     const transaction = new TransactionBuilder(account, {
       fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(
         Operation.invokeContractFunction({
@@ -61,7 +61,7 @@ export async function fetchTotalDeposited(userAddress: string): Promise<number> 
 
     const transaction = new TransactionBuilder(account, {
       fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(
         Operation.invokeContractFunction({
@@ -100,7 +100,7 @@ export async function fetchTotalWithdrawn(userAddress: string): Promise<number> 
 
     const transaction = new TransactionBuilder(account, {
       fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(
         Operation.invokeContractFunction({
