@@ -1,5 +1,5 @@
 import { Keypair, rpc, TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
-import { createLogger } from "./_logger.mjs";
+import { createLogger, applyCors } from "./_logger.mjs";
 import { validateBody, getAvailableCreditBodySchema, reportValidationError } from "./validation.mjs";
 
 const CREDIT_LIMITS = {
@@ -15,12 +15,15 @@ const RPC_URL = "https://soroban-testnet.stellar.org";
 export default async function handler(req, res) {
   const log = createLogger(req);
 
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (
+    applyCors(req, res, {
+      methods: "POST,OPTIONS",
+      headers:
+        "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version",
+    })
+  ) {
+    return;
+  }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   let userAddress;
