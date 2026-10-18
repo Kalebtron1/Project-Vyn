@@ -34,16 +34,16 @@ export const MIN_TX_REQUIRED = 3;
  *
  *  retentionRate  — min(position / totalDeposited, 1). Capado a 1 para que el
  *                   rendimiento no infle el score por encima de retención plena.
- *  activityFactor — log10(txCount + 1). Premia la actividad sin que un montón de
- *                   micro-operaciones dispare el score.
- *  normalizedVolume — 1 cuando hay volumen depositado. El ponderado temporal por
- *                   depósito (decay de 30 días) no es derivable de los agregados
- *                   on-chain; se reintroducirá en el rediseño "hybrid scoring".
+ *  activityFactor — log10(txCount + 1). Premia la constancia sin que micro-operaciones
+ *                   disparen el score.
+ *  volumeFactor   — min(1 + sqrt(totalDeposited / 100), 10). Escala de forma acotada
+ *                   con el volumen depositado para que todos los niveles sean alcanzables
+ *                   con ahorros y actividad realistas.
  *
- *  Fórmula final  — (normalizedVolume * retentionRate * activityFactor) * SCALE.
+ *  Fórmula final  — (volumeFactor * retentionRate * activityFactor) * SCALE.
  *  Penalización por drenaje — si position < 10 % de totalDeposited, score *= 0.2.
  *
- * Umbrales de tier (sin cambios):
+ * Umbrales de tier:
  *   >= 1000 → Platino (4) · >= 500 → Diamante (3) · >= 150 → Oro (2)
  *   >= 50   → Plata (1)   · < 50  → Bronce (0)
  */
@@ -67,8 +67,8 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
     };
   }
 
-  // Consistencia de volumen — sin fechas por-tx on-chain, vale 1 si hubo depósitos.
-  const normalizedVolume = deposited > 0 ? 1 : 0;
+  // Factor de volumen acotado en [0, 10]: 1 + sqrt(deposited / 100) cuando hay depósitos.
+  const volumeFactor = deposited > 0 ? Math.min(1 + Math.sqrt(deposited / 100), 10) : 0;
 
   // Retención: posición viva vs. ingreso acumulado, capada a 1.
   const retentionRate = deposited > 0 ? Math.min(balance / deposited, 1) : 0;
@@ -76,9 +76,8 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
   // Actividad logarítmica.
   const activityFactor = Math.log10(count + 1);
 
-  // SCALE elegido para que un usuario consistente con ~10 tx y retención plena ronde ~100 pts.
   const SCALE = 100;
-  let score = normalizedVolume * retentionRate * activityFactor * SCALE;
+  let score = volumeFactor * retentionRate * activityFactor * SCALE;
 
   // Penalización por drenaje: balance por debajo del 10 % de lo depositado → -80 %.
   if (deposited > 0 && balance < deposited * 0.1) {
@@ -108,6 +107,7 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
     metrics: {
       retention: parseFloat(retentionRate.toFixed(2)),
       activity: parseFloat(activityFactor.toFixed(2)),
+      volumeFactor: parseFloat(volumeFactor.toFixed(2)),
       volumeIn: deposited,
       volumeOut: withdrawn,
     },

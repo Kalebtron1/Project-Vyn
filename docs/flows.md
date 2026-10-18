@@ -47,8 +47,8 @@ User opens /perfil and taps "Reclamar NFT"
               { address, totalDeposited }
                 └─ fetch Horizon /accounts/{address}/effects (last 120)
                      └─ filter: account_credited (deposit) / account_debited (withdrawal)
-                          └─ computeFinancialReputation(history, totalDeposited)
-                               └─ weightedVolume × retentionRate × activityFactor / 60
+                          └─ computeFinancialReputation({ totalDeposited, totalWithdrawn, position, txCount })
+                               └─ volumeFactor × retentionRate × activityFactor × 100
                                     └─ map score → tier (0–4)
          └─ tier >= 1?
               └─ yes: admin keypair signs vinculo_sbt.mint(admin, userAddress, tier)
@@ -58,15 +58,17 @@ User opens /perfil and taps "Reclamar NFT"
 
 **Score formula:**
 ```
-score = (weightedVolume × retentionRate × log10(txCount + 1)) / 60
-
-weightedVolume = Σ deposit.amount × (1 / (daysAgo + 1))
-retentionRate  = currentBalance / totalDeposited
+volumeFactor   = min(1 + sqrt(totalDeposited / 100), 10)
+retentionRate  = min(position / totalDeposited, 1)
+activityFactor = log10(txCount + 1)
+score          = min(volumeFactor × retentionRate × activityFactor × 100, 1000)
 ```
 
-If `currentBalance < 10% of totalDeposited`, score is penalized by 80%.
+- Requires `txCount >= 3` (`MIN_TX_REQUIRED`), otherwise `score = 0` (`Bronce`).
+- If `position < 10% of totalDeposited`, `score` is penalized by 80% (`score *= 0.2`).
+- Tier thresholds: `Bronce (< 50)`, `Plata (>= 50)`, `Oro (>= 150)`, `Diamante (>= 500)`, `Platino (1000)`.
 
-**Key files:** `api/evaluate-and-mint.js`, `api/calculate-score.js`
+**Key files:** `api/_scoring-core.mjs`, `api/evaluate-and-mint.js`, `api/calculate-score.js`
 
 ---
 

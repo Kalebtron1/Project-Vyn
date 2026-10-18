@@ -50,18 +50,21 @@ export default async function handler(req, res) {
     const result = computeFinancialReputation(aggregates);
 
     // --- ANOMALY DETECTION ---
-    // Bajo el scoring acotado (score <= 1000, retención <= 1) estos umbrales quedan
-    // latentes; se revisarán con la recalibración del scoring.
-    const SCORE_ANOMALY_THRESHOLD = 2000;
-    const RETENTION_ANOMALY_THRESHOLD = 5;
+    // Detecta ratios de posición/depósito anómalos (> 2x lo depositado) o scores fuera del rango [0, 1000].
+    const SCORE_ANOMALY_THRESHOLD = 1000;
+    const RAW_RETENTION_ANOMALY_THRESHOLD = 2;
+    const rawRetention =
+      aggregates.totalDeposited > 0
+        ? aggregates.position / aggregates.totalDeposited
+        : 0;
     if (
       result.score > SCORE_ANOMALY_THRESHOLD ||
-      (result.metrics && result.metrics.retention > RETENTION_ANOMALY_THRESHOLD)
+      rawRetention > RAW_RETENTION_ANOMALY_THRESHOLD
     ) {
       log.warn("calculate_score.anomaly", {
         address,
         score: result.score,
-        retention: result.metrics?.retention,
+        rawRetention,
       });
       result.anomaly = true;
     }
