@@ -66,27 +66,94 @@ export async function getOnrampUserByWallet(walletAddress) {
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
-// ── Faucet de USDC: una sola vez por wallet ─────────────────────────────────
-const faucetMemory = new Set(); // fallback dev: wallets que ya reclamaron
+// ── Faucet de USDC: una sola vez por wallet + rate limit diario ─────────────
+const faucetMemory = new Set(); // wallets que ya reclamaron
+const faucetClaimsLog = []; // [{ walletAddress, ip, ts }]
 
-/** ¿Esta wallet ya reclamó el faucet de USDC? */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function pruneClaimsLog(now = Date.now()) {
+  const cutoff = now - DAY_MS;
+  while (faucetClaimsLog.length > 0 && faucetClaimsLog[0].ts < cutoff) {
+    faucetClaimsLog.shift();
+  }
+}
+
+export function resetFaucetMemoryForTests() {
+  faucetMemory.clear();
+  faucetClaimsLog.length = 0;
+}
+
+/** ¿Esta wallet ya reclamó el faucet de USDC? (Fail-closed si Supabase falla). */
 export async function hasClaimedFaucet(walletAddress) {
-  if (!isSupabaseConfigured()) return faucetMemory.has(walletAddress);
+  if (faucetMemory.has(walletAddress)) return true;
+  if (!isSupabaseConfigured()) return false;
   const rows = await sbFetch(
     `faucet_claims?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=wallet_address&limit=1`
   );
-  return Array.isArray(rows) && rows.length > 0;
+  if (Array.isArray(rows) && rows.length > 0) {
+    faucetMemory.add(walletAddress);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Verifica límites diarios por IP y global en las últimas 24h.
+ * Devuelve { allowed: true } o { allowed: false, scope: "ip" | "global" }.
+ */
+export async function checkFaucetRateLimit({
+  ip = "unknown",
+  ipDailyLimit = 3,
+  globalDailyLimit = 50,
+  now = Date.now(),
+} = {}) {
+  pruneClaimsLog(now);
+  const normalizedIp = String(ip || "unknown").trim() || "unknown";
+
+  const memGlobalCount = faucetClaimsLog.length;
+  const memIpCount = faucetClaimsLog.filter((c) => c.ip === normalizedIp).length;
+
+  if (memIpCount >= ipDailyLimit) {
+    return { allowed: false, scope: "ip" };
+  }
+  if (memGlobalCount >= globalDailyLimit) {
+    return { allowed: false, scope: "global" };
+  }
+
+  if (!isSupabaseConfigured()) {
+    return { allowed: true };
+  }
+
+  const sinceIso = new Date(now - DAY_MS).toISOString();
+  const rows = await sbFetch(
+    `faucet_claims?created_at=gte.${encodeURIComponent(sinceIso)}&select=wallet_address,ip_address,created_at`
+  );
+  if (Array.isArray(rows)) {
+    if (rows.length >= globalDailyLimit) {
+      return { allowed: false, scope: "global" };
+    }
+    const ipCount = rows.filter((r) => r.ip_address === normalizedIp).length;
+    if (ipCount >= ipDailyLimit) {
+      return { allowed: false, scope: "ip" };
+    }
+  }
+  return { allowed: true };
 }
 
 /** Registra que esta wallet reclamó el faucet (idempotente). */
-export async function recordFaucetClaim(walletAddress) {
+export async function recordFaucetClaim(walletAddress, { ip = "unknown", now = Date.now() } = {}) {
+  const normalizedIp = String(ip || "unknown").trim() || "unknown";
+  faucetMemory.add(walletAddress);
+  pruneClaimsLog(now);
+  faucetClaimsLog.push({ walletAddress, ip: normalizedIp, ts: now });
+
   if (!isSupabaseConfigured()) {
-    faucetMemory.add(walletAddress);
     return;
   }
   await sbFetch(`faucet_claims?on_conflict=wallet_address`, {
     method: "POST",
-    body: [{ wallet_address: walletAddress }],
+    body: [{ wallet_address: walletAddress, ip_address: normalizedIp }],
     headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
   });
 }

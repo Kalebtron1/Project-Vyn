@@ -87,3 +87,28 @@ export async function submitClassicXdr(signedXdr: string): Promise<string> {
     throw e;
   }
 }
+
+export interface FaucetClaimResult {
+  sent: boolean;
+  hash?: string;
+  amount?: string;
+  reason?: "already_claimed" | "no_trustline" | "rate_limited" | "dedup_unavailable";
+  message?: string;
+}
+
+/** Solicita USDC de prueba del faucet e incluye un mensaje claro si es rechazado. */
+export async function requestFaucetUsdc(address: string): Promise<FaucetClaimResult> {
+  const res = await fetch("/api/faucet-usdc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      data?.message || data?.error || `Faucet respondió con estado ${res.status}`
+    );
+  }
+  return data as FaucetClaimResult;
+}
+
