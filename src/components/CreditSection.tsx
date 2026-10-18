@@ -40,6 +40,8 @@ const CreditSection = () => {
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
   const [loadingCredit, setLoadingCredit] = useState(true);
+  const [creditFetchError, setCreditFetchError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
   // Solo mostramos el spinner en la primera carga; los refrescos del polling son silenciosos.
   const hasLoadedRef = useRef(false);
   
@@ -57,6 +59,7 @@ const CreditSection = () => {
     limit: 0,
     tierName: "Bronce",
     tier: 0,
+    currency: "USDC",
     isUnlocked: false
   });
 
@@ -117,20 +120,29 @@ const CreditSection = () => {
           body: JSON.stringify({ userAddress: wallet })
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
-        if (data.success && isMounted) {
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || t("credit.sync_error_description"));
+        }
+
+        if (isMounted) {
+          setCreditFetchError(null);
           setCreditData({
             limit: data.availableCredit,
             tierName: data.tierName,
             tier: data.tier,
+            currency: data.currency || "USDC",
             isUnlocked: data.tier >= 1
           });
           if (data.anomaly) setScoreAnomaly(true);
         }
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error cargando crédito on-chain:", error);
+        if (isMounted) {
+          setCreditFetchError(error?.message || t("credit.sync_error_description"));
+        }
       } finally {
         hasLoadedRef.current = true;
         if (!silent && isMounted) setLoadingCredit(false);
@@ -144,7 +156,7 @@ const CreditSection = () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [wallet, deposits, setScoreAnomaly]);
+  }, [wallet, deposits, setScoreAnomaly, retryTrigger, t]);
 
   // ⏳ TEMPORIZADOR DE COBRO (Se activa solo si hay un préstamo activo)
   useEffect(() => {
@@ -278,6 +290,31 @@ const CreditSection = () => {
     );
   }
 
+  if (creditFetchError && !creditData.isUnlocked) {
+    return (
+      <div className="card-elevated p-6 relative overflow-hidden min-h-[220px] flex flex-col justify-center">
+        <div className="relative flex flex-col items-center text-center py-4">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-3 border border-destructive/20">
+            <AlertCircle className="w-5 h-5 text-destructive" />
+          </div>
+          <p className="text-sm font-bold text-foreground mb-1 break-words">{t("credit.sync_error_title")}</p>
+          <p className="text-xs text-muted-foreground max-w-[260px] mb-3 break-words">
+            {creditFetchError}
+          </p>
+          <button
+            onClick={() => {
+              hasLoadedRef.current = false;
+              setRetryTrigger((prev) => prev + 1);
+            }}
+            className="px-4 py-2 text-xs font-bold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            {t("credit.retry_button")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!creditData.isUnlocked) {
     return (
       <div className="card-elevated p-6 relative overflow-hidden min-h-[220px] flex flex-col justify-center">
@@ -329,7 +366,7 @@ const CreditSection = () => {
                 </div>
                 <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
                 <p className="text-xs text-red-400 mt-2">
-                  {t("credit.frozen_description")} <strong>{formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM</strong>.
+                  {t("credit.frozen_description")} <strong>{formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {creditData.currency}</strong>.
                 </p>
               </div>
               <button
@@ -350,7 +387,7 @@ const CreditSection = () => {
                   <span className="text-4xl font-extrabold text-amber-500 tabular-nums">
                     {formatAmount(totalToPay, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                  <span className="text-lg font-bold text-amber-500/70">XLM</span>
+                  <span className="text-lg font-bold text-amber-500/70">{creditData.currency}</span>
                 </div>
                 
                 {/* ⏱️ UI DEL TEMPORIZADOR */}
@@ -394,7 +431,7 @@ const CreditSection = () => {
               <span className="text-4xl font-extrabold text-foreground tabular-nums tracking-tight">
                 {formatAmount(creditData.limit)}
               </span>
-              <span className="text-lg font-bold text-muted-foreground">XLM</span>
+              <span className="text-lg font-bold text-muted-foreground">{creditData.currency}</span>
             </div>
             <p className="text-sm text-muted-foreground mb-4">{t("credit.limit_label")}</p>
             

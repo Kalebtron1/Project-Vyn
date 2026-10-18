@@ -184,6 +184,10 @@ const es = {
     title: "Crédito — Nivel {{tier}}",
     badge_onchain: "ON-CHAIN",
     syncing: "Sincronizando con Soroban...",
+    sync_error_title: "No se pudo consultar tu crédito",
+    sync_error_description:
+      "No pudimos verificar tu nivel de crédito en Soroban en este momento. Intenta de nuevo.",
+    retry_button: "Reintentar",
     locked_title: "Crédito Bloqueado 🔒",
     locked_description:
       "Tu nivel actual es {{tier}}. Reclama tu NFT para desbloquear.",
@@ -193,7 +197,7 @@ const es = {
     expires_in: "Vence en: {{time}}",
     limit_label: "Límite de crédito disponible según tu NFT",
     withdraw_button: "Retirar a mi wallet",
-    pay_button: "Pagar {{amount}} XLM",
+    pay_button: "Pagar {{amount}} USDC",
     authorizing: "Autorizando...",
     processing: "Procesando...",
     frozen_title: "¡Cuenta congelada!",
@@ -202,7 +206,7 @@ const es = {
     footer_network:
       "El retiro genera una transacción en la red de Stellar.",
     footer_interest:
-      "Total a pagar al vencer (1 mes): {{amount}} XLM (incluye 5% interés)",
+      "Total a pagar al vencer (1 mes): {{amount}} USDC (incluye 5% interés)",
     tiers: {
       "0": "Bronce",
       "1": "Plata",

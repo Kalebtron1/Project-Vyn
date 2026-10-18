@@ -109,13 +109,13 @@ Reads the current NFT tier for a wallet from the `vinculo_sbt` contract and retu
   "tier": 2,
   "tierName": "Oro",
   "availableCredit": 600,
-  "currency": "XLM"
+  "currency": "USDC"
 }
 ```
 
 **Credit limits by tier**
 
-| Tier | Name | Credit (XLM) |
+| Tier | Name | Credit (USDC) |
 |---|---|---|
 | 0 | Bronce | 0 (locked) |
 | 1 | Plata | 300 |
@@ -123,14 +123,14 @@ Reads the current NFT tier for a wallet from the `vinculo_sbt` contract and retu
 | 3 | Diamante | 1 500 |
 | 4 | Platino | 5 000 |
 
-On contract or RPC errors the endpoint returns tier 0 / 0 XLM rather than a 5xx, so the UI degrades gracefully.
-
 **Error responses**
 
 | Status | Body | Reason |
 |---|---|---|
-| 400 | `{ "error": "Falta wallet" }` | Missing `userAddress` |
+| 400 | `{ "error": "Falta wallet" }` | Missing or invalid `userAddress` |
 | 405 | `{ "error": "Method not allowed" }` | Non-POST request |
+| 500 | `{ "success": false, "error": "Falta configurar SECRET_KEY_ADMIN o NFT_CONTRACT_ID" }` | Missing server configuration |
+| 502 | `{ "success": false, "error": "No se pudo consultar el límite de crédito en Soroban", "details": "<message>" }` | Soroban RPC or contract simulation failure |
 
 ---
 

@@ -170,6 +170,10 @@ const en = {
     title: "Credit — {{tier}} Level",
     badge_onchain: "ON-CHAIN",
     syncing: "Syncing with Soroban...",
+    sync_error_title: "Could not load credit status",
+    sync_error_description:
+      "Unable to verify your credit tier on Soroban right now. Please try again.",
+    retry_button: "Retry",
     locked_title: "Credit Locked 🔒",
     locked_description:
       "Your current level is {{tier}}. Claim your NFT to unlock.",
@@ -179,7 +183,7 @@ const en = {
     expires_in: "Expires in: {{time}}",
     limit_label: "Available credit limit based on your SBT",
     withdraw_button: "Withdraw to my Wallet",
-    pay_button: "Pay {{amount}} XLM",
+    pay_button: "Pay {{amount}} USDC",
     authorizing: "Authorizing...",
     processing: "Processing...",
     frozen_title: "ACCOUNT FROZEN!",
@@ -188,7 +192,7 @@ const en = {
     footer_network:
       "The withdrawal creates a transaction on the Stellar Testnet.",
     footer_interest:
-      "Total due at maturity (1 month): {{amount}} XLM (Includes 5% interest)",
+      "Total due at maturity (1 month): {{amount}} USDC (Includes 5% interest)",
     tiers: {
       "0": "Bronze",
       "1": "Silver",

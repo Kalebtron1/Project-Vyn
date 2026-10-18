@@ -35,6 +35,15 @@ export default async function handler(req, res) {
   log.info("get_available_credit.start", { userAddress });
 
   const t0 = Date.now();
+  if (!process.env.SECRET_KEY_ADMIN || !process.env.NFT_CONTRACT_ID) {
+    const errMsg = "Falta configurar SECRET_KEY_ADMIN o NFT_CONTRACT_ID";
+    log.error("get_available_credit.config_error", { userAddress, err: errMsg });
+    return res.status(500).json({
+      success: false,
+      error: errMsg,
+    });
+  }
+
   try {
     const server = new rpc.Server(RPC_URL);
     const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
@@ -55,6 +64,9 @@ export default async function handler(req, res) {
     .build();
 
     const simulation = await server.simulateTransaction(tx);
+    if (simulation?.error) {
+      throw new Error(`Soroban simulation error: ${simulation.error}`);
+    }
 
     let finalTier = 0;
     if (simulation.result && simulation.result.retval) {
@@ -71,14 +83,14 @@ export default async function handler(req, res) {
     });
     const latencyMs = Date.now() - t0;
     // METRIC: get-available-credit latency and resolved tier
-    console.log(`[metric] get-available-credit latency=${latencyMs}ms tier=${finalTier} credit=${config.amount}XLM`);
+    console.log(`[metric] get-available-credit latency=${latencyMs}ms tier=${finalTier} credit=${config.amount}USDC`);
 
     return res.status(200).json({
       success: true,
       tier: finalTier,
       tierName: config.name,
       availableCredit: config.amount,
-      currency: "XLM"
+      currency: "USDC"
     });
 
   } catch (error) {
@@ -86,12 +98,10 @@ export default async function handler(req, res) {
     const latencyMs = Date.now() - t0;
     // METRIC: get-available-credit contract simulation failure
     console.log(`[metric] get-available-credit latency=${latencyMs}ms error="${error.message}"`);
-    return res.status(200).json({
-      success: true,
-      tier: 0,
-      tierName: "Bronce",
-      availableCredit: 0,
-      currency: "XLM"
+    return res.status(502).json({
+      success: false,
+      error: "No se pudo consultar el límite de crédito en Soroban",
+      details: error.message
     });
   }
 }
