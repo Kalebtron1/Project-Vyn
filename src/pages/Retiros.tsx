@@ -12,7 +12,7 @@ import AppShell from "@/components/AppShell";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
-import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
+import { CONTRACT_ID, RPC_URL, computeMinWithdrawOut } from "@/stellar/contracts";
 import { fetchContractBalance, fetchTotalDeposited, fetchTotalWithdrawn } from "@/stellar/queries";
 
 const Retiros = () => {
@@ -154,9 +154,11 @@ const Retiros = () => {
     if (val > realBalance) { setErrorMsg(t("withdrawals.error_insufficient")); setStep("error"); return; }
     setStep("signing");
     const valStroops = BigInt(Math.floor(val * 10000000));
+    const minOutStroops = computeMinWithdrawOut(valStroops);
     const res = await submitContractCall("withdraw", [
       nativeToScVal(walletAddress, { type: "address" }),
       nativeToScVal(valStroops, { type: "i128" }),
+      nativeToScVal(minOutStroops, { type: "i128" }),
     ]);
     if (res.ok) {
       if (walletAddress) loadData(walletAddress);
@@ -207,9 +209,11 @@ const Retiros = () => {
     setSpeiSigningLabel(t("withdrawals.spei.signing_withdraw"));
 
     const valStroops = BigInt(Math.floor(val * 10000000));
+    const minOutStroops = computeMinWithdrawOut(valStroops);
     const res = await submitContractCall("withdraw", [
       nativeToScVal(walletAddress, { type: "address" }),
       nativeToScVal(valStroops, { type: "i128" }),
+      nativeToScVal(minOutStroops, { type: "i128" }),
     ]);
     if (!res.ok) { setSpeiError(res.error || ""); setSpeiStep("error"); return; }
     if (walletAddress) loadData(walletAddress);

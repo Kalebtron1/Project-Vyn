@@ -56,6 +56,7 @@ pub enum Error {
     AlreadyInitialized = 2,
     InvalidAmount = 3,
     InsufficientPosition = 4,
+    SlippageExceeded = 5,
 }
 
 // ─── Storage ───────────────────────────────────────────────────────────────────
@@ -177,12 +178,13 @@ impl StakingContract {
         Ok(minted)
     }
 
-    /// Retira hasta `amount` del token redimiendo shares del vault.
+    /// Retira hasta `amount` del token redimiendo shares del vault, exigiendo
+    /// recibir al menos `min_out` unidades del token subyacente (#104).
     /// Si `amount` supera la posición, retira todo. Devuelve el monto realmente
     /// entregado al usuario (puede diferir levemente por redondeo del vault).
-    pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<i128, Error> {
+    pub fn withdraw(env: Env, user: Address, amount: i128, min_out: i128) -> Result<i128, Error> {
         user.require_auth();
-        if amount <= 0 {
+        if amount <= 0 || min_out < 0 {
             return Err(Error::InvalidAmount);
         }
 
@@ -218,10 +220,13 @@ impl StakingContract {
         // Redime del vault y mide el token efectivamente recibido.
         let token_client = token::Client::new(&env, &token_addr);
         let token_before = token_client.balance(&this);
-        let min_amounts_out = vec![&env, 0i128];
+        let min_amounts_out = vec![&env, min_out];
         vault.withdraw(&shares_to_burn, &min_amounts_out, &this);
         let token_after = token_client.balance(&this);
         let received = token_after - token_before;
+        if received < min_out {
+            return Err(Error::SlippageExceeded);
+        }
 
         // Entrega al usuario y actualiza contabilidad.
         token_client.transfer(&this, &user, &received);

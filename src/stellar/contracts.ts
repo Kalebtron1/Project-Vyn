@@ -23,3 +23,14 @@ export const LENDING_CONTRACT_ID = import.meta.env.VITE_LENDING_CONTRACT_ID;
 // (`withdraw_interest` exige `treasury.require_auth()`).
 export const TREASURY_ADDRESS = import.meta.env.VITE_TREASURY_ADDRESS;
 export const RPC_URL = "https://soroban-testnet.stellar.org";
+
+// Tolerancia de slippage por defecto para retiros del staking_pool (50 bps = 0.5%).
+export const WITHDRAW_SLIPPAGE_BPS = 50n;
+
+export function computeMinWithdrawOut(
+  amountStroops: bigint,
+  slippageBps: bigint = WITHDRAW_SLIPPAGE_BPS
+): bigint {
+  if (amountStroops <= 0n) return 0n;
+  return (amountStroops * (10_000n - slippageBps)) / 10_000n;
+}

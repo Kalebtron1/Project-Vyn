@@ -17,6 +17,8 @@ use soroban_sdk::{
 enum VaultKey {
     Token,
     Rate,
+    WithdrawRate,
+    LastMinOut,
     Shares(Address),
 }
 
@@ -35,11 +37,30 @@ impl MockVault {
         env.storage().instance().set(&VaultKey::Rate, &bps);
     }
 
+    /// Simula una caída súbita o pérdida en el momento exacto del retiro.
+    pub fn set_withdraw_rate(env: Env, bps: i128) {
+        env.storage().instance().set(&VaultKey::WithdrawRate, &bps);
+    }
+
+    pub fn last_min_out(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&VaultKey::LastMinOut)
+            .unwrap_or(0)
+    }
+
     fn rate(env: &Env) -> i128 {
         env.storage()
             .instance()
             .get(&VaultKey::Rate)
             .unwrap_or(10_000)
+    }
+
+    fn withdraw_rate(env: &Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&VaultKey::WithdrawRate)
+            .unwrap_or_else(|| Self::rate(env))
     }
 
     pub fn deposit(
@@ -67,11 +88,15 @@ impl MockVault {
     pub fn withdraw(
         env: Env,
         df_amount: i128,
-        _min_amounts_out: Vec<i128>,
+        min_amounts_out: Vec<i128>,
         from: Address,
     ) -> Vec<i128> {
         from.require_auth();
-        let out = df_amount * Self::rate(&env) / 10_000;
+        let min_out = min_amounts_out.get(0).unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&VaultKey::LastMinOut, &min_out);
+        let out = df_amount * Self::withdraw_rate(&env) / 10_000;
         let key = VaultKey::Shares(from.clone());
         let prev: i128 = env.storage().persistent().get(&key).unwrap_or(0);
         env.storage().persistent().set(&key, &(prev - df_amount));
@@ -208,8 +233,9 @@ fn test_partial_withdraw() {
     s.token_admin.mint(&user, &1_000);
     s.staking.deposit(&user, &1_000);
 
-    let received = s.staking.withdraw(&user, &400);
+    let received = s.staking.withdraw(&user, &400, &398);
     assert_eq!(received, 400);
+    assert_eq!(s.vault.last_min_out(), 398);
     assert_eq!(s.staking.get_shares(&user), 600);
     assert_eq!(s.staking.get_position(&user), 600);
     assert_eq!(s.staking.get_total_withdrawn(&user), 400);
@@ -232,14 +258,41 @@ fn test_full_withdraw_with_yield() {
     s.vault.set_rate(&11_000);
 
     // Pedir más que la posición retira todo (principal + yield).
-    let received = s.staking.withdraw(&user, &10_000);
+    let received = s.staking.withdraw(&user, &10_000, &1_090);
     assert_eq!(received, 1_100);
+    assert_eq!(s.vault.last_min_out(), 1_090);
     assert_eq!(s.staking.get_shares(&user), 0);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(
         token::Client::new(&s.env, &s.token_addr).balance(&user),
         1_100
     );
+}
+
+#[test]
+fn test_withdraw_slippage_exceeded_reverts() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    // Simula pérdida súbita del 5% en el momento de ejecutar el retiro en el vault
+    s.vault.set_withdraw_rate(&9_500);
+
+    // El usuario exige al menos 995 (0.5% de tolerancia), pero el vault solo entrega 950.
+    let res = s.staking.try_withdraw(&user, &1_000, &995);
+    assert_eq!(res, Err(Ok(Error::SlippageExceeded)));
+}
+
+#[test]
+fn test_withdraw_negative_min_out_rejected() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    let res = s.staking.try_withdraw(&user, &500, &-1);
+    assert_eq!(res, Err(Ok(Error::InvalidAmount)));
 }
 
 #[test]
@@ -254,7 +307,7 @@ fn test_deposit_invalid_amount() {
 fn test_withdraw_without_position() {
     let s = setup();
     let user = Address::generate(&s.env);
-    let res = s.staking.try_withdraw(&user, &100);
+    let res = s.staking.try_withdraw(&user, &100, &99);
     assert_eq!(res, Err(Ok(Error::InsufficientPosition)));
 }
 
