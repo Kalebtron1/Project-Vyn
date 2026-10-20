@@ -1,0 +1,22 @@
+{
+  "name": "Vínculo - Nivel Bronce",
+  "description": "SBT de reputación otorgado al alcanzar el nivel inicial de Trust Score en la red Stellar.",
+  "image": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/public/images/bronce.png",
+  "external_url": "https://vinculo.app",
+  "attributes": [
+    {
+      "trait_type": "Nivel",
+      "value": "Bronce"
+    },
+    {
+      "trait_type": "Beneficio de Crédito",
+      "value": 100,
+      "display_type": "number",
+      "unit": "XLM"
+    },
+    {
+      "trait_type": "Plataforma",
+      "value": "Vínculo"
+    }
+  ]
+}

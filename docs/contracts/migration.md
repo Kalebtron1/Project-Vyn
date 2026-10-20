@@ -107,6 +107,26 @@ stellar contract invoke \
 
 > **Note:** `upgrade` is a built-in Soroban host function. The contract code is replaced but all storage (tiers, admin) is preserved.
 
+### Metadata base URI (issue #103)
+
+`token_uri` now builds tier metadata URLs from `DataKey::MetadataBaseUri`. Upgraded
+instances that predate the key automatically fall back to the project-owned default
+`https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/metadata/`, so no
+migration call is required. To use a different host, set it as the admin:
+
+```bash
+stellar contract invoke \
+  --id $SBT_CONTRACT_ID \
+  --source $ADMIN_SECRET \
+  --network $NETWORK \
+  -- set_metadata_base_uri \
+  --admin $ADMIN_PUBLIC \
+  --base_uri "https://cdn.example.com/vyn/metadata/"
+```
+
+The base URI must be non-empty, at most 512 bytes, and end with `/`. The tier files
+are `bronce.json`, `plata.json`, `oro.json`, `diamante.json`, and `platino.json`.
+
 ---
 
 ## 2. staking_pool

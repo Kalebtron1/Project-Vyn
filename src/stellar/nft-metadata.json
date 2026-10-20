@@ -3,6 +3,7 @@
   "symbol": "VYNREP",
   "description": "NFT de reputación otorgado por la plataforma Vyn al alcanzar el nivel requerido de depósitos en la red Stellar.",
   "contract_id": "CBGATJCZN236KJFEF3MP3H26KQIVVOBCJSOPF6SBK72D5QGIMLHPI4G2",
+  "metadata_base_uri": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/metadata/",
   "network": "stellar-testnet",
   "rpc_url": "https://soroban-testnet.stellar.org",
   "mint_params": {
@@ -34,14 +35,17 @@
   },
   "levels": {
     "Bronce": {
+      "metadata_file": "bronce.json",
       "required_deposits": 3,
       "badge_color": "#CD7F32"
     },
     "Plata": {
+      "metadata_file": "plata.json",
       "required_deposits": 5,
       "badge_color": "#C0C0C0"
     },
     "Oro": {
+      "metadata_file": "oro.json",
       "required_deposits": 10,
       "badge_color": "#FFD700"
     }
