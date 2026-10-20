@@ -15,6 +15,7 @@ import {
   TransactionBuilder 
 } from "@stellar/stellar-sdk";
 import { walletAdapter } from "@/wallet";
+import { fetchActiveLoan, loanInterestStroops, type OnchainLoan } from "@/stellar/contracts";
 
 const getLendingContractId = () => {
   const contractId = import.meta.env.VITE_LENDING_CONTRACT_ID?.trim();
@@ -33,7 +34,7 @@ const getLendingContractId = () => {
 };
 
 const CreditSection = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
@@ -47,8 +48,10 @@ const CreditSection = () => {
   // 🔐 CANDADO DE SEGURIDAD PARA FREIGHTER
   const [registeredWallet, setRegisteredWallet] = useState<string | null>(null);
 
-  // ⏱️ ESTADOS PARA LA SIMULACIÓN DE MOROSIDAD (1 Mes = 60 Segundos)
-  const [timeLeft, setTimeLeft] = useState(60);
+  // ⏱️ Plazo on-chain (1 mes = 60 s). Si get_loan aún no respondió, el contador local cubre el demo.
+  const [activeLoan, setActiveLoan] = useState<OnchainLoan | null>(null);
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+  const [localTimeLeft, setLocalTimeLeft] = useState(60);
   const [isDefaulted, setIsDefaulted] = useState(false);
   
   const [creditData, setCreditData] = useState({
@@ -89,8 +92,22 @@ const CreditSection = () => {
   // Nombre del nivel traducido (cae al nombre del backend si falta la clave).
   const tierLabel = t(`credit.tiers.${creditData.tier}`, { defaultValue: creditData.tierName });
 
-  // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
-  const totalToPay = creditData.limit * 1.05;
+  // 💰 Total a pagar: el del préstamo on-chain, o la estimación a 1 mes.
+  const principalStroops = BigInt(Math.round(creditData.limit * 10_000_000));
+  const estimatedOwedStroops = principalStroops + loanInterestStroops(principalStroops, 1n);
+  const estimatedTotal = Number(estimatedOwedStroops) / 10_000_000;
+  const totalToPay = activeLoan?.totalOwed ?? estimatedTotal;
+  const timeLeft = activeLoan
+    ? Math.max(0, activeLoan.dueTimestamp - nowSec)
+    : localTimeLeft;
+  const loanOpen = Boolean(activeLoan) || creditWithdrawn;
+  const overdue = activeLoan ? activeLoan.isOverdue || timeLeft <= 0 : isDefaulted;
+  const dueLabel = activeLoan
+    ? new Intl.DateTimeFormat(i18n.language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(activeLoan.dueTimestamp * 1000))
+    : null;
 
   // 📡 Sincronización con el Backend/Soroban usando wallet de localStorage
   useEffect(() => {
@@ -127,6 +144,9 @@ const CreditSection = () => {
           if (data.anomaly) setScoreAnomaly(true);
         }
 
+        const loan = await fetchActiveLoan(wallet);
+        if (isMounted) setActiveLoan(loan);
+
       } catch (error) {
         console.error("Error cargando crédito on-chain:", error);
       } finally {
@@ -144,20 +164,25 @@ const CreditSection = () => {
     };
   }, [wallet, deposits, setScoreAnomaly]);
 
-  // ⏳ TEMPORIZADOR DE COBRO (Se activa solo si hay un préstamo activo)
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    if (creditWithdrawn && timeLeft > 0 && !isDefaulted) {
+    const timer = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // ⏳ TEMPORIZADOR DE COBRO (local, hasta que get_loan confirme el plazo)
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    if (!activeLoan && creditWithdrawn && localTimeLeft > 0 && !isDefaulted) {
       timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setLocalTimeLeft((prev) => prev - 1);
       }, 1000);
-    } else if (creditWithdrawn && timeLeft <= 0) {
-      setIsDefaulted(true); // ¡Cae en mora!
+    } else if (!activeLoan && creditWithdrawn && localTimeLeft <= 0) {
+      setIsDefaulted(true);
     }
 
     return () => clearInterval(timer);
-  }, [creditWithdrawn, timeLeft, isDefaulted]);
+  }, [activeLoan, creditWithdrawn, localTimeLeft, isDefaulted]);
 
   // 📥 FUNCION: RETIRAR CRÉDITO
   const handleWithdraw = async () => {
@@ -178,7 +203,7 @@ const CreditSection = () => {
       const networkPassphrase = Networks.TESTNET;
       const lendingContractId = getLendingContractId();
 
-      const amountInStroops = BigInt(creditData.limit) * BigInt(10_000_000);
+      const amountInStroops = principalStroops;
       const months = 1; 
 
       const contract = new Contract(lendingContractId);
@@ -202,8 +227,17 @@ const CreditSection = () => {
       await server.sendTransaction(signedTx);
       
       // Reiniciamos los estados del timer
-      setTimeLeft(60);
+      setLocalTimeLeft(60);
       setIsDefaulted(false);
+      setActiveLoan({
+        principal: creditData.limit,
+        totalOwed: estimatedTotal,
+        totalOwedStroops: estimatedOwedStroops.toString(),
+        dueTimestamp: Math.floor(Date.now() / 1000) + 60,
+        months: 1,
+        interest: Math.max(0, estimatedTotal - creditData.limit),
+        isOverdue: false,
+      });
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
 
@@ -234,8 +268,9 @@ const CreditSection = () => {
       const networkPassphrase = Networks.TESTNET;
       const lendingContractId = getLendingContractId();
 
-      // Usamos el totalToPay para cubrir el principal + 5%
-      const amountToRepay = BigInt(Math.ceil(totalToPay * 10_000_000));
+      const amountToRepay = activeLoan
+        ? BigInt(activeLoan.totalOwedStroops)
+        : BigInt(Math.ceil(totalToPay * 10_000_000));
 
       const contract = new Contract(lendingContractId);
       const operation = contract.call(
@@ -317,24 +352,45 @@ const CreditSection = () => {
       )}
 
       <div className="flex-1 flex flex-col justify-center">
-        {creditWithdrawn ? (
-          // 🚨 REVISAMOS SI ESTÁ EN MORA
-          isDefaulted ? (
+        {loanOpen ? (
+          overdue ? (
             <div className="py-4 text-center animate-fade-in flex flex-col h-full justify-between">
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
                 <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Lock className="w-6 h-6 text-red-500" />
                 </div>
-                <p className="text-lg font-bold text-red-500">{t("credit.frozen_title")}</p>
-                <p className="text-xs text-red-400 mt-2">
-                  {t("credit.frozen_description")} <strong>{totalToPay.toFixed(2)} XLM</strong>.
+                <p className="text-lg font-bold text-red-500 break-words">{t("credit.overdue_title")}</p>
+                <p className="text-xs text-red-400 mt-2 break-words">
+                  {t("credit.overdue_description")}
                 </p>
+                <p className="text-2xl font-extrabold text-red-500 tabular-nums mt-3">
+                  {totalToPay.toFixed(2)} <span className="text-base">XLM</span>
+                </p>
+                {dueLabel && (
+                  <p className="text-xs text-red-400 mt-2 break-words">{t("credit.due_on", { date: dueLabel })}</p>
+                )}
+                <p className="text-xs font-bold text-red-500 mt-1">{t("credit.expires_in", { time: "0:00" })}</p>
               </div>
+              {errorMsg && (
+                <div className="mb-4 mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-destructive text-xs text-left">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="break-words">{errorMsg}</p>
+                </div>
+              )}
               <button
-                disabled
-                className="w-full mt-4 flex items-center justify-center gap-3 py-3 text-sm font-bold rounded-xl bg-secondary text-muted-foreground cursor-not-allowed opacity-50"
+                onClick={handleRepay}
+                disabled={loadingTx}
+                className="w-full mt-4 flex items-center justify-center gap-3 py-3 px-3 text-sm font-bold rounded-xl border-2 border-red-500 text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 whitespace-normal text-center"
               >
-                {t("credit.contact_support")}
+                {loadingTx ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" /> {t("credit.processing")}
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpFromLine className="w-4 h-4 shrink-0" /> {t("credit.pay_button", { amount: totalToPay.toFixed(2) })}
+                  </>
+                )}
               </button>
             </div>
           ) : (
@@ -352,12 +408,16 @@ const CreditSection = () => {
                 </div>
                 
                 {/* ⏱️ UI DEL TEMPORIZADOR */}
-                <div className={`flex items-center justify-center gap-2 mt-4 mb-4 text-sm py-2 px-3 rounded-lg font-bold transition-colors ${
+                <div className={`flex items-center justify-center gap-2 mt-4 mb-1 text-sm py-2 px-3 rounded-lg font-bold transition-colors break-words ${
                   timeLeft <= 15 ? "text-red-500 bg-red-500/10 animate-pulse" : "text-amber-600 bg-amber-500/10"
                 }`}>
-                  <CalendarClock className="w-4 h-4" />
-                  <span>{t("credit.expires_in", { time: `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')} min` })}</span>
+                  <CalendarClock className="w-4 h-4 shrink-0" />
+                  <span>{t("credit.expires_in", { time: `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` })}</span>
                 </div>
+                {dueLabel && (
+                  <p className="text-xs text-muted-foreground mb-1 break-words">{t("credit.due_on", { date: dueLabel })}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground mb-3">{t("credit.demo_month")}</p>
               </div>
 
               {/* 🛑 BANNER DE ERROR AMIGABLE */}

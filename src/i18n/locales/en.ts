@@ -175,19 +175,23 @@ const en = {
     anomaly:
       "Anomalous score detected. The data will be reviewed before enabling operations.",
     debt_label: "Total Debt to Pay",
-    expires_in: "Expires in: {{time}}",
+    due_on: "Due {{date}}",
+    demo_month: "Demo: 1 month = 60 seconds",
+    expires_in: "Time left: {{time}}",
     limit_label: "Available credit limit based on your SBT",
     withdraw_button: "Withdraw to my Wallet",
     pay_button: "Pay {{amount}} XLM",
     authorizing: "Authorizing...",
     processing: "Processing...",
+    overdue_title: "Loan overdue",
+    overdue_description: "The due time has passed. Pay the full balance to protect your level.",
     frozen_title: "ACCOUNT FROZEN!",
     frozen_description: "Your payment term has expired. Outstanding debt:",
     contact_support: "Contact Support",
     footer_network:
       "The withdrawal creates a transaction on the Stellar Testnet.",
     footer_interest:
-      "Total due at maturity (1 month): {{amount}} XLM (Includes 5% interest)",
+      "Total due at maturity (1 month): {{amount}} XLM",
     tiers: {
       "0": "Bronze",
       "1": "Silver",

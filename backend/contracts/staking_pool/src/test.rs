@@ -3,7 +3,8 @@ extern crate std;
 
 use crate::{Error, StakingContract, StakingContractClient};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, token, vec, Address, Env, Vec,
+    contract, contractimpl, contracttype, testutils::Address as _, testutils::Events, token, vec,
+    Address, Env, Vec,
 };
 
 // ─── Mock vault DeFindex ───────────────────────────────────────────────────────
@@ -17,6 +18,8 @@ use soroban_sdk::{
 enum VaultKey {
     Token,
     Rate,
+    /// Recorte en bps aplicado al monto entregado (0 = sin pérdida).
+    LossBps,
     Shares(Address),
 }
 
@@ -33,6 +36,11 @@ impl MockVault {
     /// Ajusta el factor de apreciación (bps) para simular yield acumulado.
     pub fn set_rate(env: Env, bps: i128) {
         env.storage().instance().set(&VaultKey::Rate, &bps);
+    }
+
+    /// Simula una pérdida del vault: el monto entregado se reduce en `bps`.
+    pub fn set_loss_bps(env: Env, bps: i128) {
+        env.storage().instance().set(&VaultKey::LossBps, &bps);
     }
 
     fn rate(env: &Env) -> i128 {
@@ -71,7 +79,13 @@ impl MockVault {
         from: Address,
     ) -> Vec<i128> {
         from.require_auth();
-        let out = df_amount * Self::rate(&env) / 10_000;
+        let quoted = df_amount * Self::rate(&env) / 10_000;
+        let loss: i128 = env
+            .storage()
+            .instance()
+            .get(&VaultKey::LossBps)
+            .unwrap_or(0);
+        let out = quoted * (10_000 - loss) / 10_000;
         let key = VaultKey::Shares(from.clone());
         let prev: i128 = env.storage().persistent().get(&key).unwrap_or(0);
         env.storage().persistent().set(&key, &(prev - df_amount));
@@ -208,7 +222,7 @@ fn test_partial_withdraw() {
     s.token_admin.mint(&user, &1_000);
     s.staking.deposit(&user, &1_000);
 
-    let received = s.staking.withdraw(&user, &400);
+    let received = s.staking.withdraw(&user, &400, &0);
     assert_eq!(received, 400);
     assert_eq!(s.staking.get_shares(&user), 600);
     assert_eq!(s.staking.get_position(&user), 600);
@@ -232,7 +246,7 @@ fn test_full_withdraw_with_yield() {
     s.vault.set_rate(&11_000);
 
     // Pedir más que la posición retira todo (principal + yield).
-    let received = s.staking.withdraw(&user, &10_000);
+    let received = s.staking.withdraw(&user, &10_000, &0);
     assert_eq!(received, 1_100);
     assert_eq!(s.staking.get_shares(&user), 0);
     assert_eq!(s.staking.get_position(&user), 0);
@@ -254,7 +268,7 @@ fn test_deposit_invalid_amount() {
 fn test_withdraw_without_position() {
     let s = setup();
     let user = Address::generate(&s.env);
-    let res = s.staking.try_withdraw(&user, &100);
+    let res = s.staking.try_withdraw(&user, &100, &0);
     assert_eq!(res, Err(Ok(Error::InsufficientPosition)));
 }
 
@@ -275,4 +289,58 @@ fn test_get_position_zero_for_new_user() {
     let user = Address::generate(&s.env);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_withdraw_reverts_when_received_below_min_out() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+    // El vault entrega 10% menos de lo cotizado.
+    s.vault.set_loss_bps(&1_000);
+    let res = s.staking.try_withdraw(&user, &1_000, &950);
+    assert_eq!(res, Err(Ok(Error::SlippageExceeded)));
+    // La transacción revirtió: la posición sigue intacta.
+    assert_eq!(s.staking.get_shares(&user), 1_000);
+}
+
+#[test]
+fn test_withdraw_succeeds_at_min_out() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+    s.vault.set_loss_bps(&1_000);
+    let received = s.staking.withdraw(&user, &1_000, &900);
+    assert_eq!(received, 900);
+    assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_deposit_and_withdraw_emit_events() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+    let after_deposit = std::format!("{:?}", s.env.events().all());
+    assert!(after_deposit.contains("Symbol(deposit)"), "{after_deposit}");
+
+    s.staking.withdraw(&user, &400, &0);
+    let after_withdraw = std::format!("{:?}", s.env.events().all());
+    assert!(
+        after_withdraw.contains("Symbol(withdraw)"),
+        "{after_withdraw}"
+    );
+}
+
+#[test]
+fn test_init_and_set_vault_emit_events() {
+    let s = setup();
+    let after_init = std::format!("{:?}", s.env.events().all());
+    assert!(after_init.contains("Symbol(init)"), "{after_init}");
+
+    s.staking.set_vault(&Address::generate(&s.env));
+    let after_vault = std::format!("{:?}", s.env.events().all());
+    assert!(after_vault.contains("Symbol(set_vault)"), "{after_vault}");
 }

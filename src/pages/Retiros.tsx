@@ -12,7 +12,7 @@ import AppShell from "@/components/AppShell";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
-import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
+import { CONTRACT_ID, RPC_URL, minWithdrawOut } from "@/stellar/contracts";
 import { fetchContractBalance, fetchTotalDeposited, fetchTotalWithdrawn } from "@/stellar/queries";
 
 const Retiros = () => {
@@ -157,6 +157,7 @@ const Retiros = () => {
     const res = await submitContractCall("withdraw", [
       nativeToScVal(walletAddress, { type: "address" }),
       nativeToScVal(valStroops, { type: "i128" }),
+      nativeToScVal(minWithdrawOut(valStroops), { type: "i128" }),
     ]);
     if (res.ok) {
       if (walletAddress) loadData(walletAddress);
@@ -210,6 +211,7 @@ const Retiros = () => {
     const res = await submitContractCall("withdraw", [
       nativeToScVal(walletAddress, { type: "address" }),
       nativeToScVal(valStroops, { type: "i128" }),
+      nativeToScVal(minWithdrawOut(valStroops), { type: "i128" }),
     ]);
     if (!res.ok) { setSpeiError(res.error || ""); setSpeiStep("error"); return; }
     if (walletAddress) loadData(walletAddress);

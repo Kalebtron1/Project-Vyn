@@ -99,13 +99,16 @@ User taps "Retirar a mi Wallet" in CreditSection
                            └─ 60-second repayment countdown starts
 
 User taps "Pagar X XLM"
-  └─ Build vinculo_lending.repay(address, principal × 1.05 in stroops)
+  └─ Build vinculo_lending.repay(address, loan.total_owed)
        └─ server.prepareTransaction → signTransaction → sendTransaction
             └─ window.location.reload()
 ```
 
-**Interest rate:** 5% flat, applied at repayment time in the UI.  
-**Key files:** `src/components/CreditSection.tsx`
+**Interest:** stroops owed are `ceil(principal * 500 * months / (12 * 10_000))`, rounded in the pool's favor. A 12-month loan costs 5%; a 1-month loan costs one twelfth of that. The interest is stored on the loan and `repay` books that same value. Demo time scale: 1 month = 60 ledger seconds (`SECONDS_PER_MONTH`).
+
+**Overdue:** `get_loan.is_overdue` and `is_overdue(user)` are true when `total_owed > 0` and `ledger.timestamp >= due_timestamp`. An overdue loan does **not** revoke the SBT. Off-chain scoring should lower the user's score and block tier upgrades until the loan is repaid.
+
+**Key files:** `src/components/CreditSection.tsx`, `backend/contracts/vinculo_lending/src/lib.rs`
 
 ---
 

@@ -189,19 +189,23 @@ const es = {
     anomaly:
       "Score anómalo detectado. Los datos serán revisados antes de habilitar operaciones.",
     debt_label: "Deuda Total a Pagar",
-    expires_in: "Vence en: {{time}}",
+    due_on: "Vence el {{date}}",
+    demo_month: "Demo: 1 mes = 60 segundos",
+    expires_in: "Tiempo restante: {{time}}",
     limit_label: "Límite de crédito disponible según tu SBT",
     withdraw_button: "Retirar a mi Wallet",
     pay_button: "Pagar {{amount}} XLM",
     authorizing: "Autorizando...",
     processing: "Procesando...",
+    overdue_title: "Préstamo vencido",
+    overdue_description: "Ya pasó la fecha de pago. Paga el saldo completo para cuidar tu nivel.",
     frozen_title: "¡CUENTA CONGELADA!",
     frozen_description: "Tu plazo de pago ha expirado. Deuda pendiente:",
     contact_support: "Contactar a Soporte",
     footer_network:
       "El retiro genera una transacción en la red Testnet de Stellar.",
     footer_interest:
-      "Total a pagar al vencer (1 mes): {{amount}} XLM (Incluye 5% interés)",
+      "Total a pagar al vencer (1 mes): {{amount}} XLM",
     tiers: {
       "0": "Bronce",
       "1": "Plata",

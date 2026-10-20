@@ -109,6 +109,30 @@ Set `MAX_REPLAY_EVENTS` in your `.env` / deployment config to tune the replay wi
 
 ---
 
+## Contract events
+
+State-changing functions publish one Soroban event. The topic is `(name, address)` and the data payload stays small. An indexer should store that pair in `contract_events.payload`.
+
+| Contract | Topic | Address in topic | Data |
+|----------|--------|------------------|------|
+| `staking_pool` | `init` | admin | `true` |
+| `staking_pool` | `set_vault` | admin | `true` |
+| `staking_pool` | `deposit` | user | `(amount, shares_minted)` |
+| `staking_pool` | `withdraw` | user | `amount_received` |
+| `vinculo_lending` | `init_lending` | treasury | `true` |
+| `vinculo_lending` | `fund_pool` | funder | `amount` |
+| `vinculo_lending` | `loan` | user | `(principal, months, total_owed)` |
+| `vinculo_lending` | `repay` | user | `(paid, remaining)` |
+| `vinculo_lending` | `withdraw_interest` | treasury | `amount` |
+| `vinculo_lending` | `withdraw_pool` | treasury | `amount` |
+| `vinculo_sbt` | `init` | admin | `true` |
+| `vinculo_sbt` | `mint` | user | `tier` (0–4) |
+| `vinculo_sbt` | `revoke` | user | `0` |
+
+`src/ws/hub.ts` replays rows from `contract_events`; it does not decode these topics itself.
+
+---
+
 ## Source files
 
 | File | Purpose |

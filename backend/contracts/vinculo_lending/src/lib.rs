@@ -3,12 +3,28 @@
 //! Vive en `backend/contracts/vinculo_lending/` junto a `vinculo_sbt` y `staking_pool`.
 //! Consulta on-chain el nivel con `VinculoSBTClient::get_tier` (alineado al `vinculo_sbt` actual).
 //!
-//! Modo demo (hackathon): 1 "mes" de plazo = 60 segundos de ledger, igual que `staking_pool`.
+//! Modo demo (hackathon): 1 "mes" de plazo = `SECONDS_PER_MONTH` (60 segundos de ledger).
+//!
+//! Interés (a favor del pool, redondeo hacia arriba):
+//! `ceil(principal * apy_bps * months / (12 * 10_000))`.
+//! `apy_bps` es 500 (5% anual). Un préstamo de 12 meses paga el 5% completo;
+//! uno de 1 mes paga una doceava parte. El interés calculado se guarda en el
+//! préstamo y `repay` usa ese mismo valor, no lo recalcula.
+//!
+//! Un préstamo con saldo pendiente está vencido cuando
+//! `ledger.timestamp >= due_timestamp` (`is_overdue` / `get_loan.is_overdue`).
+//! Vencer no revoca el SBT: el score off-chain debe bajar y bloquear subidas
+//! de tier hasta el pago. Ver `docs/flows.md`.
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol};
 use vinculo_sbt::VinculoSBTClient;
+
+/// 5% anual, en basis points.
+const APY_BPS: u64 = 500;
+/// 1 mes de plazo en el demo = 60 segundos de ledger.
+pub const SECONDS_PER_MONTH: u64 = 60;
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +50,10 @@ pub struct Loan {
     pub due_timestamp: u64,
     pub months: u64,
     pub apy_bps: u64,
+    /// Interés fijado al abrir el préstamo. `repay` acredita este monto.
+    pub interest: i128,
+    /// Se recalcula al leer (`get_loan`). En storage queda en false.
+    pub is_overdue: bool,
 }
 
 #[contract]
@@ -57,6 +77,8 @@ impl VinculoLending {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
+        env.events()
+            .publish((Symbol::new(&env, "init_lending"), treasury), true);
     }
 
     /// Aporta liquidez al pool de préstamos (el `from` transfiere al contrato).
@@ -71,6 +93,8 @@ impl VinculoLending {
             .expect("init not called");
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, &env.current_contract_address(), &amount);
+        env.events()
+            .publish((Symbol::new(&env, "fund_pool"), from), amount);
     }
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
@@ -104,7 +128,7 @@ impl VinculoLending {
         let max = max_principal_for_tier(tier);
         assert!(amount <= max, "amount exceeds tier limit");
 
-        let interest = (amount * 5) / 100;
+        let interest = interest_for(amount, APY_BPS, months);
         let total_owed = amount + interest;
 
         let token_client = token::Client::new(&env, &token_addr);
@@ -117,11 +141,17 @@ impl VinculoLending {
         let loan = Loan {
             principal: amount,
             total_owed,
-            due_timestamp: env.ledger().timestamp() + months * 60,
+            due_timestamp: env.ledger().timestamp() + months * SECONDS_PER_MONTH,
             months,
-            apy_bps: 500,
+            apy_bps: APY_BPS,
+            interest,
+            is_overdue: false,
         };
         env.storage().persistent().set(&loan_key, &loan);
+        env.events().publish(
+            (Symbol::new(&env, "loan"), user),
+            (amount, months, total_owed),
+        );
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -148,18 +178,20 @@ impl VinculoLending {
         let token_client = token::Client::new(&env, &token_addr);
         token_client.transfer(&user, &env.current_contract_address(), &pay);
 
+        let interest = loan.interest;
         loan.total_owed -= pay;
         if loan.total_owed == 0 {
-            // Préstamo saldado: el interés (principal·5/100, igual que en
-            // `request_loan`) pasa a ganancia retirable por la tesorería. El
-            // principal permanece como liquidez del pool para seguir prestando.
-            let interest = (loan.principal * 5) / 100;
+            // Préstamo saldado: el interés guardado al abrir el préstamo pasa
+            // a ganancia retirable por la tesorería. El principal permanece
+            // como liquidez del pool para seguir prestando.
             let storage = env.storage().instance();
             let accrued: i128 = storage.get(&DataKey::AccruedInterest).unwrap_or(0);
             storage.set(&DataKey::AccruedInterest, &(accrued + interest));
             loan = Loan::default();
         }
         env.storage().persistent().set(&loan_key, &loan);
+        env.events()
+            .publish((Symbol::new(&env, "repay"), user), (pay, loan.total_owed));
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -188,6 +220,10 @@ impl VinculoLending {
 
         token_client.transfer(&this, &treasury, &withdrawable);
         storage.set(&DataKey::AccruedInterest, &(accrued - withdrawable));
+        env.events().publish(
+            (Symbol::new(&env, "withdraw_interest"), treasury),
+            withdrawable,
+        );
         withdrawable
     }
 
@@ -218,6 +254,8 @@ impl VinculoLending {
         assert!(withdrawable > 0, "nothing to withdraw");
 
         token_client.transfer(&this, &treasury, &withdrawable);
+        env.events()
+            .publish((Symbol::new(&env, "withdraw_pool"), treasury), withdrawable);
         withdrawable
     }
 
@@ -238,10 +276,23 @@ impl VinculoLending {
     }
 
     pub fn get_loan(env: Env, user: Address) -> Loan {
-        env.storage()
+        let mut loan: Loan = env
+            .storage()
             .persistent()
             .get(&DataKey::Loan(user))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        loan.is_overdue = loan_is_overdue(&env, &loan);
+        loan
+    }
+
+    /// true cuando hay deuda y el ledger ya alcanzó `due_timestamp`.
+    pub fn is_overdue(env: Env, user: Address) -> bool {
+        let loan: Loan = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Loan(user))
+            .unwrap_or_default();
+        loan_is_overdue(&env, &loan)
     }
 
     /// Saldo del token en custodia del contrato (liquidez disponible para desembolsos).
@@ -254,6 +305,23 @@ impl VinculoLending {
         let token_client = token::Client::new(&env, &token_addr);
         token_client.balance(&env.current_contract_address())
     }
+}
+
+#[cfg(test)]
+mod test;
+
+/// `ceil(principal * apy_bps * months / (12 * 10_000))`.
+fn interest_for(principal: i128, apy_bps: u64, months: u64) -> i128 {
+    let numer = principal * (apy_bps as i128) * (months as i128);
+    let denom: i128 = 12 * 10_000;
+    if numer <= 0 {
+        return 0;
+    }
+    (numer + denom - 1) / denom
+}
+
+fn loan_is_overdue(env: &Env, loan: &Loan) -> bool {
+    loan.total_owed > 0 && env.ledger().timestamp() >= loan.due_timestamp
 }
 
 fn max_principal_for_tier(tier: u32) -> i128 {

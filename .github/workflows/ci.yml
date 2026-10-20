@@ -51,3 +51,36 @@ jobs:
             echo "== cargo build (wasm release): $c =="
             (cd "$c" && cargo build --release --target wasm32-unknown-unknown)
           done
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        # Existing eslint errors (explicit any, empty interfaces, require) are
+        # outside this change. Keep the job so new failures stay visible, but
+        # do not block CI until that debt is cleared.
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholders so Vite can build without repository secrets.
+          VITE_PRIVY_APP_ID: ci-placeholder
+          VITE_LENDING_CONTRACT_ID: CDLZFC3SYJYDZT7K67BXO2J2P5P7XH4X7K5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q
+          VITE_STAKING_CONTRACT_ID: CDLZFC3SYJYDZT7K67BXO2J2P5P7XH4X7K5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q
+          VITE_TREASURY_ADDRESS: GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF

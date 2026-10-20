@@ -56,6 +56,8 @@ pub enum Error {
     AlreadyInitialized = 2,
     InvalidAmount = 3,
     InsufficientPosition = 4,
+    /// El vault entregó menos de `min_out`.
+    SlippageExceeded = 5,
 }
 
 // ─── Storage ───────────────────────────────────────────────────────────────────
@@ -93,6 +95,8 @@ impl StakingContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
+        env.events()
+            .publish((Symbol::new(&env, "init"), admin), true);
         Ok(())
     }
 
@@ -108,6 +112,8 @@ impl StakingContract {
         let admin = Self::read_admin(&env)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Vault, &new_vault);
+        env.events()
+            .publish((Symbol::new(&env, "set_vault"), admin), true);
         Ok(())
     }
 
@@ -174,15 +180,22 @@ impl StakingContract {
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
 
+        env.events()
+            .publish((Symbol::new(&env, "deposit"), user), (amount, minted));
+
         Ok(minted)
     }
 
     /// Retira hasta `amount` del token redimiendo shares del vault.
     /// Si `amount` supera la posición, retira todo. Devuelve el monto realmente
-    /// entregado al usuario (puede diferir levemente por redondeo del vault).
-    pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<i128, Error> {
+    /// entregado al usuario.
+    ///
+    /// `min_out` es el mínimo aceptable (en unidades del token). Se reenvía al
+    /// vault como `min_amounts_out` y, si aun así lo recibido es menor, la
+    /// transacción revierte con `SlippageExceeded`.
+    pub fn withdraw(env: Env, user: Address, amount: i128, min_out: i128) -> Result<i128, Error> {
         user.require_auth();
-        if amount <= 0 {
+        if amount <= 0 || min_out < 0 {
             return Err(Error::InvalidAmount);
         }
 
@@ -218,10 +231,13 @@ impl StakingContract {
         // Redime del vault y mide el token efectivamente recibido.
         let token_client = token::Client::new(&env, &token_addr);
         let token_before = token_client.balance(&this);
-        let min_amounts_out = vec![&env, 0i128];
+        let min_amounts_out = vec![&env, min_out];
         vault.withdraw(&shares_to_burn, &min_amounts_out, &this);
         let token_after = token_client.balance(&this);
         let received = token_after - token_before;
+        if received < min_out {
+            return Err(Error::SlippageExceeded);
+        }
 
         // Entrega al usuario y actualiza contabilidad.
         token_client.transfer(&this, &user, &received);
@@ -231,6 +247,9 @@ impl StakingContract {
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
+
+        env.events()
+            .publish((Symbol::new(&env, "withdraw"), user), received);
 
         Ok(received)
     }

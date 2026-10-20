@@ -2,6 +2,10 @@
  * contractEventRepository.ts
  *
  * Data-access layer for the `contract_events` table.
+ * The `payload` JSON mirrors one on-chain event (see docs/websocket.md):
+ * `{ topic, address, data }` where `topic` is deposit | withdraw | loan |
+ * repay | mint | revoke | fund_pool | withdraw_interest | withdraw_pool | init.
+ *
  * The table schema is assumed to be:
  *   contract_events (
  *     event_id   BIGSERIAL PRIMARY KEY,
