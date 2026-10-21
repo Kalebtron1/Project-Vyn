@@ -112,6 +112,7 @@ const es = {
         "Sin conexión a la red. Verifica tu internet e intenta de nuevo.",
       generic:
         "Error de conexión. Verifica que tu wallet esté desbloqueada e intenta de nuevo.",
+      privy_failed: "No se pudo iniciar sesión con ese método. Prueba con tu correo.",
     },
   },
 

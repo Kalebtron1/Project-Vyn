@@ -14,6 +14,7 @@ import {
   type PrivyConnectedWallet,
 } from "@/lib/privyBridge";
 import { WalletSetupModal } from "@/components/WalletSetupModal";
+import { toast } from "@/components/ui/sonner";
 
 // Human-readable error messages resolved through i18n
 function friendlyError(
@@ -37,7 +38,7 @@ const Login = () => {
   const { connect } = useMobileWallet();
   // Privy se carga en paralelo con esta página (PrivyGate); si el usuario toca
   // "Entrar con correo" antes de que esté listo, `privyLogin` lo abre al estarlo.
-  const { authenticated } = usePrivyBridge();
+  const { authenticated, modalOpen, loginError } = usePrivyBridge();
   const { address, onboarded, ready, setSession } = useWalletSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,9 +77,31 @@ const Login = () => {
 
   useEffect(() => onPrivyConnected(enterWithPrivy), [enterWithPrivy]);
 
+  // Si el usuario cierra el modal de Privy sin entrar, el botón vuelve a su estado
+  // normal (antes se quedaba en "Creando tu cuenta…" hasta recargar).
+  const sawModalRef = useRef(false);
+  useEffect(() => {
+    if (!privyPending) return;
+    if (modalOpen) {
+      sawModalRef.current = true;
+    } else if (sawModalRef.current && !authenticated) {
+      sawModalRef.current = false;
+      setPrivyPending(false);
+    }
+  }, [privyPending, modalOpen, authenticated]);
+
+  // Un método del modal (p. ej. Google) falló sin mostrar nada: se avisa con un toast,
+  // que queda por encima del modal de Privy.
+  const privyClickAtRef = useRef(Number.POSITIVE_INFINITY);
+  useEffect(() => {
+    if (!loginError || loginError.at < privyClickAtRef.current) return;
+    toast.error(t("login.errors.privy_failed"), { description: loginError.message });
+  }, [loginError, t]);
+
   const loginWithPrivy = () => {
     setError(null);
     setPrivyPending(true);
+    privyClickAtRef.current = Date.now();
     try {
       privyLogin();
     } catch (err: any) {

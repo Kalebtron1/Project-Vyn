@@ -10,6 +10,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import {
   E2E_PRIVY_AUTH_KEY,
   E2E_PRIVY_EMAIL,
+  E2E_PRIVY_LOGIN_FAILURE_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
   e2ePrivyKeypair,
   recordPrivyCall,
@@ -29,6 +30,7 @@ type PrivyValue = {
 };
 
 const Ctx = createContext<PrivyValue | null>(null);
+const ModalCtx = createContext(false);
 
 export function PrivyProvider({
   children,
@@ -49,12 +51,29 @@ export function PrivyProvider({
     return () => clearTimeout(timer);
   }, [ready, readyDelay]);
 
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    const w = window as unknown as { __e2ePrivyCloseModal?: () => void };
+    w.__e2ePrivyCloseModal = () => setModalOpen(false);
+  }, []);
+
   const login = useCallback(() => {
     recordPrivyCall("login");
+    setModalOpen(true);
+    const failure = localStorage.getItem(E2E_PRIVY_LOGIN_FAILURE_KEY);
+    if (failure) {
+      // Like Privy's Google/Apple buttons when its API rejects the OAuth init:
+      // an unhandled rejection with a Privy error, and the modal stays open.
+      const error = Object.assign(new Error(failure), { type: "invalid_data", privyErrorCode: undefined });
+      setTimeout(() => { void Promise.reject(error); }, 50);
+      return;
+    }
     // Privy authenticates asynchronously once the user finishes its modal.
     setTimeout(() => {
       localStorage.setItem(E2E_PRIVY_AUTH_KEY, "1");
       setAuthenticated(true);
+      setModalOpen(false);
     }, 50);
   }, []);
 
@@ -82,7 +101,15 @@ export function PrivyProvider({
     [ready, authenticated, user, login, logout]
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <ModalCtx.Provider value={modalOpen}>
+      <Ctx.Provider value={value}>{children}</Ctx.Provider>
+    </ModalCtx.Provider>
+  );
+}
+
+export function useModalStatus(): { isOpen: boolean } {
+  return { isOpen: useContext(ModalCtx) };
 }
 
 export function usePrivy(): PrivyValue {

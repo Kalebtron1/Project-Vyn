@@ -6,7 +6,12 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../playwright-fixture";
 import { E2E_WALLET, ONBOARDED_KEY, PROVIDER_KEY, WALLET_KEY, seedWalletSession, stubCreditApi } from "./helpers";
-import { E2E_PRIVY_AUTH_KEY, E2E_PRIVY_READY_DELAY_KEY, e2ePrivyKeypair } from "./mocks/privy-wallet";
+import {
+  E2E_PRIVY_AUTH_KEY,
+  E2E_PRIVY_LOGIN_FAILURE_KEY,
+  E2E_PRIVY_READY_DELAY_KEY,
+  e2ePrivyKeypair,
+} from "./mocks/privy-wallet";
 
 const PRIVY_WALLET = e2ePrivyKeypair().publicKey();
 
@@ -80,6 +85,21 @@ test.describe("Privy loads on demand", () => {
     expect(await privyCalls(page)).toContain("login");
     expect(await page.evaluate((key) => localStorage.getItem(key), PROVIDER_KEY)).toBe("privy");
     expect(await page.evaluate((key) => localStorage.getItem(key), WALLET_KEY)).toBe(PRIVY_WALLET);
+  });
+
+  test("a failing login method shows why, and closing the modal resets the button", async ({ page }) => {
+    await isolate(page);
+    await seedStorage(page, { [E2E_PRIVY_LOGIN_FAILURE_KEY]: "Login with Google not allowed" });
+
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("login-email").click();
+
+    await expect(page.getByText("Login with Google not allowed")).toBeVisible();
+    await expect(page.getByTestId("login-email")).toBeDisabled();
+
+    await page.evaluate(() => (window as unknown as { __e2ePrivyCloseModal: () => void }).__e2ePrivyCloseModal());
+    await expect(page.getByTestId("login-email")).toBeEnabled();
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test("an email session survives a reload and signs right away", async ({ page }) => {
