@@ -1,5 +1,5 @@
 /**
- * PrivyLayer — SDK de Privy (login con correo/Google/Apple) cargado bajo demanda.
+ * PrivyLayer — SDK de Privy (login con correo/Google) cargado bajo demanda.
  *
  * Privy y sus dependencias (viem, WalletConnect, Coinbase…) pesan ~2 MB. Esta capa
  * se monta junto a las rutas, no alrededor de ellas (ver `PrivyGate`), y la app sólo
@@ -15,7 +15,7 @@ const PrivyLayer = () => (
   <PrivyProvider
     appId={import.meta.env.VITE_PRIVY_APP_ID}
     config={{
-      loginMethods: ["email", "google", "apple"],
+      loginMethods: ["email", "google"],
       appearance: { theme: "light" },
     }}
   >
