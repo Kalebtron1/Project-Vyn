@@ -35,6 +35,8 @@ export interface PrivyBridgeState {
   email?: string;
   /** El modal de login de Privy está abierto. */
   modalOpen: boolean;
+  /** Passkeys vinculadas a la cuenta (acceso con huella/cara/PIN). */
+  passkeys: number;
   /** Último error al iniciar sesión (`at` distingue dos errores con el mismo texto). */
   loginError?: { message: string; at: number };
 }
@@ -45,6 +47,7 @@ let state: PrivyBridgeState = {
   ready: false,
   authenticated: false,
   modalOpen: false,
+  passkeys: 0,
 };
 const stateListeners = new Set<() => void>();
 // Promesas pendientes (firma, export) que esperan a que cambie el estado o el signer.
@@ -147,6 +150,8 @@ export interface PrivyActions {
   login: () => void;
   logout: () => Promise<void>;
   exportWallet: (address: string) => Promise<void>;
+  /** Abre el modal de Privy para registrar una passkey en la cuenta actual. */
+  linkPasskey: () => void;
 }
 
 let actions: PrivyActions | null = null;
@@ -224,6 +229,19 @@ export async function privyExportWallet(address: string): Promise<void> {
     "Privy no está listo. Inténtalo de nuevo en unos segundos."
   );
   await current.exportWallet(address);
+}
+
+/**
+ * Registra una passkey (huella/cara/PIN) en la cuenta de correo actual, con el modal
+ * de Privy. La cuenta se sigue recuperando con el correo; la passkey sólo agiliza
+ * los siguientes accesos.
+ */
+export async function privyLinkPasskey(): Promise<void> {
+  const current = await waitFor(
+    () => (actions && state.ready && state.authenticated ? actions : null),
+    "Privy no está listo. Inténtalo de nuevo en unos segundos."
+  );
+  current.linkPasskey();
 }
 
 // ─── Evento de conexión ──────────────────────────────────────────────────────

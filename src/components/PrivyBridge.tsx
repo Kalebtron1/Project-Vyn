@@ -73,7 +73,7 @@ async function ensureFundedTestnet(address: string): Promise<void> {
 }
 
 export function PrivyBridge() {
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, user, login, logout, linkPasskey } = usePrivy();
   const { signRawHash } = useSignRawHash();
   const { createWallet } = useCreateWallet();
   const { exportWallet } = useExportWallet();
@@ -87,15 +87,18 @@ export function PrivyBridge() {
       login,
       logout,
       exportWallet: (address) => exportWallet({ address }),
+      linkPasskey,
     });
-  }, [login, logout, exportWallet]);
+  }, [login, logout, exportWallet, linkPasskey]);
 
   useEffect(() => {
+    const linked = (user as { linkedAccounts?: Array<{ type?: string }> } | null)?.linkedAccounts ?? [];
     setPrivyState({
       loaded: true,
       ready,
       authenticated,
       email: (user as { email?: { address?: string } } | null)?.email?.address,
+      passkeys: linked.filter((account) => account.type === "passkey").length,
     });
   }, [ready, authenticated, user]);
 
