@@ -12,6 +12,7 @@ function fakeActions() {
     logout: vi.fn(async () => {}),
     exportWallet: vi.fn(async () => {}),
     linkPasskey: vi.fn(),
+    linkGoogle: vi.fn(),
   };
 }
 
@@ -119,6 +120,7 @@ describe("privyBridge", () => {
       ),
       exportWallet: vi.fn(async () => {}),
       linkPasskey: vi.fn(),
+      linkGoogle: vi.fn(),
     };
 
     bridge.privyLogout();
@@ -157,5 +159,21 @@ describe("privyBridge", () => {
     bridge.setPrivyState({ authenticated: true });
     await linking;
     expect(actions.linkPasskey).toHaveBeenCalledTimes(1);
+  });
+
+  it("links Google once authenticated and tracks the pending redirect", async () => {
+    const bridge = await loadBridge();
+    const actions = fakeActions();
+    const linking = bridge.privyLinkGoogle();
+    expect(bridge.isOAuthLinkPending()).toBe(false);
+
+    bridge.registerPrivyActions(actions);
+    bridge.setPrivyState({ loaded: true, ready: true, authenticated: true });
+    await linking;
+    expect(actions.linkGoogle).toHaveBeenCalledTimes(1);
+    expect(bridge.isOAuthLinkPending()).toBe(true);
+
+    bridge.reportPrivyLinkError("linked_to_another_user", "google");
+    expect(bridge.isOAuthLinkPending()).toBe(false);
   });
 });

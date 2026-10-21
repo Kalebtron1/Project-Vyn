@@ -367,6 +367,15 @@ const es = {
     usdc_already_claimed_desc: "Esta wallet ya recibió el USDC de prueba.",
     usdc_account_not_funded: "Tu cuenta aún no existe en la red (sin XLM). Inténtalo de nuevo en unos segundos; si persiste, fondéala con XLM de testnet.",
     usdc_popup_blocked: "Tu navegador bloqueó la ventana de Albedo. Permite las ventanas emergentes para este sitio y vuelve a pulsar Activar USDC.",
+    access_title: "Métodos de acceso",
+    access_desc: "Todos te llevan a la misma cuenta y a la misma wallet.",
+    google_link_hint: "Vincula tu cuenta de Google para entrar también con ella.",
+    google_link_button: "Vincular Google",
+    google_linked: "Google vinculado",
+    google_link_title: "Vincular Google",
+    google_link_taken:
+      "Esa cuenta de Google ya está registrada como otra cuenta de Vyn, así que no se puede vincular aquí.",
+    google_link_error: "No se pudo vincular Google. Inténtalo de nuevo en unos segundos.",
     passkey_title: "Acceso con huella",
     passkey_desc:
       "Entra más rápido con la huella, la cara o el PIN de tu celular. Si cambias de celular, recuperas tu cuenta con tu correo.",

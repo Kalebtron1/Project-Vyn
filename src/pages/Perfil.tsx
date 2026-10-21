@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "../stellar/queries";
 import { recordMint } from "../stellar/activity";
-import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck, Fingerprint } from "lucide-react";
+import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck, Fingerprint, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
 import AppShell from "@/components/AppShell";
@@ -14,10 +14,26 @@ import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
 import { tierLabel, tierNumberFromName } from "@/lib/tier";
 import { useWalletSession } from "@/context/WalletSessionContext";
-import { PRIVY_PROVIDER, privyExportWallet, privyLinkPasskey, usePrivyBridge } from "@/lib/privyBridge";
+import {
+  PRIVY_PROVIDER,
+  privyExportWallet,
+  privyLinkGoogle,
+  privyLinkPasskey,
+  usePrivyBridge,
+} from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
+
+// Logo "G" de Google (lucide no incluye logos de marcas).
+const GoogleIcon = () => (
+  <svg viewBox="0 0 48 48" className="w-5 h-5 shrink-0" aria-hidden="true">
+    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+  </svg>
+);
 
 const Perfil = () => {
   const navigate = useNavigate();
@@ -67,10 +83,21 @@ const Perfil = () => {
   const { provider } = useWalletSession();
   const { sign } = useMobileWallet();
   const isPrivy = provider === PRIVY_PROVIDER;
-  // Acceso con huella (passkey): sólo para cuentas de correo, que se siguen
-  // recuperando con el correo; la passkey agiliza los siguientes accesos.
-  const { passkeys } = usePrivyBridge();
+  // Métodos de acceso (sólo cuentas de correo/Google, es decir Privy): vincular Google
+  // y la passkey hacen que todos los métodos entren a la misma cuenta y wallet.
+  const {
+    ready: privyReady,
+    authenticated: privyAuthenticated,
+    passkeys,
+    googleLinked,
+    linkError,
+  } = usePrivyBridge();
+  // Hasta que Privy confirma la cuenta no se sabe qué tiene vinculado: así el botón de
+  // Google no aparece un instante y desaparece en cuentas que ya lo tienen.
+  const accessMethodsKnown = privyReady && privyAuthenticated;
   const [linkingPasskey, setLinkingPasskey] = useState(false);
+  const [linkingGoogle, setLinkingGoogle] = useState(false);
+  const mountedAtRef = useRef(Date.now());
   const [activatingUsdc, setActivatingUsdc] = useState(false);
   // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"). Persiste entre
   // recargas (se lee on-chain). Se aplica a CUALQUIER wallet, no solo Privy.
@@ -464,6 +491,38 @@ const Perfil = () => {
 
   const handleLogout = () => disconnect();
 
+  // Vincular Google redirige a Google y vuelve a esta página: los errores (p. ej. ese
+  // Google ya es otra cuenta de Vyn) llegan por el puente, también tras volver.
+  useEffect(() => {
+    if (!linkError || linkError.at < mountedAtRef.current) return;
+    setLinkingGoogle(false);
+    if (linkError.method && linkError.method !== "google") return;
+    if (linkError.code === "exited_link_flow") return;
+    toast({
+      title: t("profile.google_link_title"),
+      description:
+        linkError.code === "linked_to_another_user"
+          ? t("profile.google_link_taken")
+          : t("profile.google_link_error"),
+      variant: "destructive",
+    });
+  }, [linkError, t]);
+
+  const linkGoogle = async () => {
+    setLinkingGoogle(true);
+    try {
+      await privyLinkGoogle();
+      // Sigue "cargando" mientras el navegador va a Google.
+    } catch {
+      setLinkingGoogle(false);
+      toast({
+        title: t("profile.google_link_title"),
+        description: t("profile.google_link_error"),
+        variant: "destructive",
+      });
+    }
+  };
+
   const addPasskey = async () => {
     setLinkingPasskey(true);
     try {
@@ -682,36 +741,76 @@ const Perfil = () => {
             )}
           </div>
 
-          {/* Acceso con huella (passkey): sólo cuentas de correo/Google (Privy). */}
+          {/* Métodos de acceso: sólo cuentas de correo/Google (Privy). */}
           {isPrivy && (
-            <div className="card-elevated p-6 animate-fade-up" data-testid="passkey-card">
-              <div className="flex items-center gap-2 mb-4">
-                <Fingerprint className="w-5 h-5 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">{t("profile.passkey_title")}</h3>
+            <div className="card-elevated p-6 animate-fade-up" data-testid="access-methods-card">
+              <div className="flex items-center gap-2 mb-2">
+                <KeyRound className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-bold text-foreground">{t("profile.access_title")}</h3>
               </div>
-              <p className="text-xs text-muted-foreground mb-4 break-words">
-                {passkeys > 0 ? t("profile.passkey_enabled_desc") : t("profile.passkey_desc")}
-              </p>
-              {passkeys > 0 && (
-                <p className="flex items-center gap-2 text-sm font-bold text-emerald-600 mb-3">
-                  <CircleCheck className="w-5 h-5 shrink-0" />
-                  {t("profile.passkey_enabled")}
-                </p>
+              <p className="text-xs text-muted-foreground mb-5 break-words">{t("profile.access_desc")}</p>
+
+              {!accessMethodsKnown ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-label={t("common.loading")} />
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Google: si ya está vinculado, sólo se muestra el estado. */}
+                  {googleLinked ? (
+                    <p className="flex items-center gap-2 text-sm font-bold text-emerald-600" data-testid="google-linked">
+                      <CircleCheck className="w-5 h-5 shrink-0" />
+                      {t("profile.google_linked")}
+                    </p>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2 break-words">{t("profile.google_link_hint")}</p>
+                      <button
+                        onClick={linkGoogle}
+                        disabled={linkingGoogle}
+                        data-testid="link-google"
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-5 py-3 text-sm font-bold text-foreground active:scale-[0.98] transition-all disabled:opacity-60 whitespace-normal text-center"
+                      >
+                        {linkingGoogle ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <GoogleIcon />}
+                        <span className="min-w-0 break-words">{t("profile.google_link_button")}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="h-px bg-border" />
+
+                  {/* Passkey (huella/cara/PIN). */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Fingerprint className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-bold text-foreground">{t("profile.passkey_title")}</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3 break-words">
+                      {passkeys > 0 ? t("profile.passkey_enabled_desc") : t("profile.passkey_desc")}
+                    </p>
+                    {passkeys > 0 && (
+                      <p className="flex items-center gap-2 text-sm font-bold text-emerald-600 mb-3">
+                        <CircleCheck className="w-5 h-5 shrink-0" />
+                        {t("profile.passkey_enabled")}
+                      </p>
+                    )}
+                    <button
+                      onClick={addPasskey}
+                      disabled={linkingPasskey}
+                      className={`w-full flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-60 whitespace-normal text-center ${
+                        passkeys > 0
+                          ? "border border-primary/30 text-primary"
+                          : "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      }`}
+                    >
+                      {linkingPasskey ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Fingerprint className="w-5 h-5 shrink-0" />}
+                      <span className="min-w-0 break-words">
+                        {passkeys > 0 ? t("profile.passkey_add_another") : t("profile.passkey_button")}
+                      </span>
+                    </button>
+                  </div>
+                </div>
               )}
-              <button
-                onClick={addPasskey}
-                disabled={linkingPasskey}
-                className={`w-full flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-60 whitespace-normal text-center ${
-                  passkeys > 0
-                    ? "border border-primary/30 text-primary"
-                    : "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                }`}
-              >
-                {linkingPasskey ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Fingerprint className="w-5 h-5 shrink-0" />}
-                <span className="min-w-0 break-words">
-                  {passkeys > 0 ? t("profile.passkey_add_another") : t("profile.passkey_button")}
-                </span>
-              </button>
             </div>
           )}
 
