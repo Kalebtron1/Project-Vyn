@@ -11,6 +11,7 @@ function fakeActions() {
     login: vi.fn(),
     logout: vi.fn(async () => {}),
     exportWallet: vi.fn(async () => {}),
+    linkPasskey: vi.fn(),
   };
 }
 
@@ -117,6 +118,7 @@ describe("privyBridge", () => {
         })
       ),
       exportWallet: vi.fn(async () => {}),
+      linkPasskey: vi.fn(),
     };
 
     bridge.privyLogout();
@@ -140,5 +142,20 @@ describe("privyBridge", () => {
     bridge.setPrivyState({ loaded: true, ready: true, authenticated: true });
     await exporting;
     expect(actions.exportWallet).toHaveBeenCalledWith("GADDR");
+  });
+
+  it("links a passkey only once the email session is authenticated", async () => {
+    const bridge = await loadBridge();
+    const actions = fakeActions();
+    const linking = bridge.privyLinkPasskey();
+
+    bridge.registerPrivyActions(actions);
+    bridge.setPrivyState({ loaded: true, ready: true, authenticated: false });
+    await flush();
+    expect(actions.linkPasskey).not.toHaveBeenCalled();
+
+    bridge.setPrivyState({ authenticated: true });
+    await linking;
+    expect(actions.linkPasskey).toHaveBeenCalledTimes(1);
   });
 });

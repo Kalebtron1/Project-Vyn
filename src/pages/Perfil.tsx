@@ -4,7 +4,7 @@ import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { fetchContractBalance } from "../stellar/queries";
 import { recordMint } from "../stellar/activity";
-import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck } from "lucide-react";
+import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck, Fingerprint } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
 import AppShell from "@/components/AppShell";
@@ -14,7 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
 import { tierLabel, tierNumberFromName } from "@/lib/tier";
 import { useWalletSession } from "@/context/WalletSessionContext";
-import { PRIVY_PROVIDER, privyExportWallet } from "@/lib/privyBridge";
+import { PRIVY_PROVIDER, privyExportWallet, privyLinkPasskey, usePrivyBridge } from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
@@ -67,6 +67,10 @@ const Perfil = () => {
   const { provider } = useWalletSession();
   const { sign } = useMobileWallet();
   const isPrivy = provider === PRIVY_PROVIDER;
+  // Acceso con huella (passkey): sólo para cuentas de correo, que se siguen
+  // recuperando con el correo; la passkey agiliza los siguientes accesos.
+  const { passkeys } = usePrivyBridge();
+  const [linkingPasskey, setLinkingPasskey] = useState(false);
   const [activatingUsdc, setActivatingUsdc] = useState(false);
   // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"). Persiste entre
   // recargas (se lee on-chain). Se aplica a CUALQUIER wallet, no solo Privy.
@@ -460,6 +464,21 @@ const Perfil = () => {
 
   const handleLogout = () => disconnect();
 
+  const addPasskey = async () => {
+    setLinkingPasskey(true);
+    try {
+      await privyLinkPasskey();
+    } catch {
+      toast({
+        title: t("profile.passkey_title"),
+        description: t("profile.passkey_error"),
+        variant: "destructive",
+      });
+    } finally {
+      setLinkingPasskey(false);
+    }
+  };
+
   const menuItems = [
     { icon: Bell, label: t("profile.menu_notifications"), detail: t("profile.menu_notifications_detail"), action: () => navigate("/notificaciones") },
     { icon: HelpCircle, label: t("profile.menu_help"), detail: "", action: () => navigate("/ayuda") },
@@ -662,6 +681,39 @@ const Perfil = () => {
               </button>
             )}
           </div>
+
+          {/* Acceso con huella (passkey): sólo cuentas de correo/Google (Privy). */}
+          {isPrivy && (
+            <div className="card-elevated p-6 animate-fade-up" data-testid="passkey-card">
+              <div className="flex items-center gap-2 mb-4">
+                <Fingerprint className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-bold text-foreground">{t("profile.passkey_title")}</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4 break-words">
+                {passkeys > 0 ? t("profile.passkey_enabled_desc") : t("profile.passkey_desc")}
+              </p>
+              {passkeys > 0 && (
+                <p className="flex items-center gap-2 text-sm font-bold text-emerald-600 mb-3">
+                  <CircleCheck className="w-5 h-5 shrink-0" />
+                  {t("profile.passkey_enabled")}
+                </p>
+              )}
+              <button
+                onClick={addPasskey}
+                disabled={linkingPasskey}
+                className={`w-full flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-60 whitespace-normal text-center ${
+                  passkeys > 0
+                    ? "border border-primary/30 text-primary"
+                    : "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                }`}
+              >
+                {linkingPasskey ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Fingerprint className="w-5 h-5 shrink-0" />}
+                <span className="min-w-0 break-words">
+                  {passkeys > 0 ? t("profile.passkey_add_another") : t("profile.passkey_button")}
+                </span>
+              </button>
+            </div>
+          )}
 
           {/* Preferencias: idioma (accesible también en móvil) */}
           <div className="card-elevated p-6 flex items-center justify-between animate-fade-up" style={{ animationDelay: "100ms" }}>

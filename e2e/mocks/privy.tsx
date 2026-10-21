@@ -11,6 +11,7 @@ import {
   E2E_PRIVY_AUTH_KEY,
   E2E_PRIVY_EMAIL,
   E2E_PRIVY_LOGIN_FAILURE_KEY,
+  E2E_PRIVY_PASSKEY_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
   e2ePrivyKeypair,
   recordPrivyCall,
@@ -27,6 +28,7 @@ type PrivyValue = {
   user: PrivyUser | null;
   login: () => void;
   logout: () => Promise<void>;
+  linkPasskey: () => void;
 };
 
 const Ctx = createContext<PrivyValue | null>(null);
@@ -52,6 +54,18 @@ export function PrivyProvider({
   }, [ready, readyDelay]);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [passkeyLinked, setPasskeyLinked] = useState(
+    () => localStorage.getItem(E2E_PRIVY_PASSKEY_KEY) === "1"
+  );
+
+  const linkPasskey = useCallback(() => {
+    recordPrivyCall("linkPasskey");
+    // Privy shows its modal, the OS asks for the fingerprint, then the user updates.
+    setTimeout(() => {
+      localStorage.setItem(E2E_PRIVY_PASSKEY_KEY, "1");
+      setPasskeyLinked(true);
+    }, 50);
+  }, []);
 
   useEffect(() => {
     const w = window as unknown as { __e2ePrivyCloseModal?: () => void };
@@ -90,15 +104,16 @@ export function PrivyProvider({
             email: { address: E2E_PRIVY_EMAIL },
             linkedAccounts: [
               { type: "wallet", chainType: "stellar", address: e2ePrivyKeypair().publicKey() },
+              ...(passkeyLinked ? [{ type: "passkey", chainType: "", address: "" }] : []),
             ],
           }
         : null,
-    [authenticated]
+    [authenticated, passkeyLinked]
   );
 
   const value = useMemo<PrivyValue>(
-    () => ({ ready, authenticated: ready && authenticated, user: ready ? user : null, login, logout }),
-    [ready, authenticated, user, login, logout]
+    () => ({ ready, authenticated: ready && authenticated, user: ready ? user : null, login, logout, linkPasskey }),
+    [ready, authenticated, user, login, logout, linkPasskey]
   );
 
   return (

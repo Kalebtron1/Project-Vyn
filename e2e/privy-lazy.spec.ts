@@ -134,6 +134,28 @@ test.describe("Privy loads on demand", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test("an email account turns on fingerprint sign-in from Perfil", async ({ page }) => {
+    await isolate(page);
+    await seedPrivySession(page);
+
+    await page.goto("/perfil", { waitUntil: "domcontentloaded" });
+    const card = page.getByTestId("passkey-card");
+    await card.getByRole("button", { name: /Activar acceso con huella|Turn on fingerprint sign-in/ }).click();
+
+    await expect.poll(() => privyCalls(page)).toContain("linkPasskey");
+    await expect(card.getByText(/Acceso con huella activado|Fingerprint sign-in is on/)).toBeVisible();
+    await expect(card.getByRole("button", { name: /Agregar en otro dispositivo|Add another device/ })).toBeVisible();
+  });
+
+  test("a wallet session does not offer fingerprint sign-in", async ({ page }) => {
+    await isolate(page);
+    await seedWalletSession(page);
+
+    await page.goto("/perfil", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("button", { name: /Abrir wallet|Open wallet/ })).toBeVisible();
+    await expect(page.getByTestId("passkey-card")).toHaveCount(0);
+  });
+
   test("a leftover Privy session does not log a wallet user back in", async ({ page }) => {
     const requests = await isolate(page);
     await seedStorage(page, {
