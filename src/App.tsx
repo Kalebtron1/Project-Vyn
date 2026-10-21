@@ -5,10 +5,9 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { PrivyProvider } from "@privy-io/react-auth";
 import { AppProvider } from "@/context/AppContext";
 import { WalletSessionProvider, useWalletSession } from "@/context/WalletSessionContext";
-import { PrivyBridge } from "@/components/PrivyBridge";
+import { PrivyGate } from "@/components/PrivyGate";
 
 // Cada página se descarga al visitarla: el Stellar SDK y el kit de wallets que
 // usan sólo se cargan con las rutas que los necesitan.
@@ -57,18 +56,12 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AppProvider>
-       <PrivyProvider
-         appId={import.meta.env.VITE_PRIVY_APP_ID}
-         config={{
-           loginMethods: ["email", "google", "apple"],
-           appearance: { theme: "light" },
-         }}
-       >
-        <PrivyBridge />
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <WalletSessionProvider>
+            {/* Privy (login con correo) se carga sólo cuando hace falta: ver PrivyGate. */}
+            <PrivyGate />
             <Suspense fallback={<Spinner />}>
             <Routes>
               {/* Login - sin RequireWallet, completamente público */}
@@ -90,7 +83,6 @@ const App = () => (
             </Suspense>
           </WalletSessionProvider>
         </BrowserRouter>
-       </PrivyProvider>
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>

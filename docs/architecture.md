@@ -98,6 +98,19 @@ provider above — no xBull-specific code exists or is needed. `useWallet`'s Fre
 FREIGHTER_ID`; other providers, including xBull, are not polled for availability and rely
 on the kit surfacing connection/signing errors directly.
 
+### Email login (Privy, `src/components/PrivyLayer.tsx`, `src/lib/privyBridge.ts`)
+
+Privy and its dependencies weigh about 2 MB, so they load only when needed. `PrivyGate`
+mounts `PrivyLayer` (the `PrivyProvider` + `PrivyBridge`) next to the routes, not around
+them, in three cases: on `/login`, for an email session (`provider === "privy"`), or when
+something calls into the bridge. Freighter and kit sessions never download Privy.
+
+App code must not import `@privy-io/*` directly; that would pull Privy back into every
+page. Use `privyBridge` instead: `usePrivyBridge()` for state (`ready`, `authenticated`,
+`email`), `privyLogin()`, `privyLogout()`, `privyExportWallet()` and `privySign()`. The
+actions queue or wait until Privy is ready, so callers don't need to know whether it has
+loaded yet.
+
 ---
 
 ## Layer 2 — Serverless API

@@ -5,12 +5,23 @@
  *  2. Registra en `privyBridge` la función de firma: construye el hash de la tx Stellar,
  *     lo firma con `useSignRawHash` (Ed25519) y adjunta la firma al XDR.
  *  3. Publica el evento de conexión para que Login abra la sesión de la app.
+ *  4. Publica el estado del SDK y registra `login`/`logout`/`exportWallet`, para que
+ *     el resto de la app use Privy sin importarlo (ver `privyBridge`).
  */
 
 import { useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useSignRawHash, useCreateWallet } from "@privy-io/react-auth/extended-chains";
-import { registerPrivySigner, notifyPrivyConnected } from "@/lib/privyBridge";
+import {
+  useSignRawHash,
+  useCreateWallet,
+  useExportWallet,
+} from "@privy-io/react-auth/extended-chains";
+import {
+  registerPrivySigner,
+  registerPrivyActions,
+  setPrivyState,
+  notifyPrivyConnected,
+} from "@/lib/privyBridge";
 
 // El Stellar SDK (y el kit, de donde sale NETWORK_PASSPHRASE) se cargan al firmar,
 // no al montar: este componente vive en la raíz y si no entrarían al bundle inicial.
@@ -61,10 +72,38 @@ async function ensureFundedTestnet(address: string): Promise<void> {
 }
 
 export function PrivyBridge() {
-  const { ready, authenticated, user } = usePrivy();
+  const { ready, authenticated, user, login, logout } = usePrivy();
   const { signRawHash } = useSignRawHash();
   const { createWallet } = useCreateWallet();
+  const { exportWallet } = useExportWallet();
   const addrRef = useRef<string | null>(null);
+
+  // Acciones del SDK para Login, Perfil y WalletSessionContext. Va antes de publicar
+  // el estado para que los pedidos encolados (login/logout) se ejecuten al estar listo.
+  useEffect(() => {
+    registerPrivyActions({
+      login,
+      logout,
+      exportWallet: (address) => exportWallet({ address }),
+    });
+  }, [login, logout, exportWallet]);
+
+  useEffect(() => {
+    setPrivyState({
+      loaded: true,
+      ready,
+      authenticated,
+      email: (user as { email?: { address?: string } } | null)?.email?.address,
+    });
+  }, [ready, authenticated, user]);
+
+  useEffect(
+    () => () => {
+      registerPrivyActions(null);
+      setPrivyState({ loaded: false, ready: false, authenticated: false });
+    },
+    []
+  );
 
   // Asegura wallet Stellar + registra firma + notifica conexión.
   useEffect(() => {
