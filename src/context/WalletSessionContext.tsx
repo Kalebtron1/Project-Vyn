@@ -19,8 +19,8 @@ import React, {
   useState,
 } from "react";
 import * as FreighterAPI from "@stellar/freighter-api";
-import { usePrivy } from "@privy-io/react-auth";
 import * as sessionStore from "@/lib/sessionStore";
+import { privyLogout } from "@/lib/privyBridge";
 // `walletEnv` y no `mobileWalletConnectors`/`stellarWalletsKit`: este provider está
 // en la raíz y no debe meter el kit ni el Stellar SDK en el bundle inicial.
 import { FREIGHTER_ID, isMobileBrowser } from "@/lib/walletEnv";
@@ -70,11 +70,6 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   const [walletMismatch, setWalletMismatch] = useState(false);
   const [activeAddress, setActiveAddress] = useState<string | null>(null);
 
-  // Sesión de Privy (login con correo/Google/Apple). La necesitamos para poder
-  // cerrarla en `disconnect`: si no, Privy sigue `authenticated` y vuelve a
-  // re-crear la sesión (deja el botón de Login cargando y te re-entra solo).
-  const { authenticated: privyAuthenticated, logout: privyLogout } = usePrivy();
-
   // Cargar la sesión UNA vez (con respaldo en cookie + rehidratación de localStorage).
   useEffect(() => {
     setAddress(sessionStore.getItem(WALLET_KEY));
@@ -113,11 +108,10 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     setActiveAddress(null);
     // Cierra también la sesión de Privy. Sin esto, tras hacer logout Privy seguiría
     // autenticado y volvería a entrar solo / dejaría el botón de Login cargando.
-    // Es no-op si la sesión no es de Privy (p. ej. Freighter), así que da igual el provider.
-    if (privyAuthenticated) {
-      void Promise.resolve(privyLogout()).catch(() => {});
-    }
-  }, [privyAuthenticated, privyLogout]);
+    // Vía el puente: si Privy no está cargado (p. ej. sesión de Freighter), la cierra
+    // en cuanto cargue en /login; si no había sesión de Privy, no hace nada.
+    privyLogout();
+  }, []);
 
   // Desktop + Freighter: detectar cambio de cuenta en la extensión.
   // Sólo Freighter expone lectura silenciosa de la cuenta activa; para otras

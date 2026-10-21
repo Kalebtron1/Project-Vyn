@@ -2,12 +2,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Wallet, AlertCircle, Mail, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePrivy } from "@privy-io/react-auth";
 import logoVin from "@/assets/logo-vin.png";
 import LanguageToggle from "@/components/LanguageToggle";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { useWalletSession } from "@/context/WalletSessionContext";
-import { PRIVY_PROVIDER, onPrivyConnected, type PrivyConnectedWallet } from "@/lib/privyBridge";
+import {
+  PRIVY_PROVIDER,
+  onPrivyConnected,
+  privyLogin,
+  usePrivyBridge,
+  type PrivyConnectedWallet,
+} from "@/lib/privyBridge";
 import { WalletSetupModal } from "@/components/WalletSetupModal";
 
 // Human-readable error messages resolved through i18n
@@ -30,7 +35,9 @@ const Login = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { connect } = useMobileWallet();
-  const { login, authenticated } = usePrivy();
+  // Privy se carga en paralelo con esta página (PrivyGate); si el usuario toca
+  // "Entrar con correo" antes de que esté listo, `privyLogin` lo abre al estarlo.
+  const { authenticated } = usePrivyBridge();
   const { address, onboarded, ready, setSession } = useWalletSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +80,7 @@ const Login = () => {
     setError(null);
     setPrivyPending(true);
     try {
-      login();
+      privyLogin();
     } catch (err: any) {
       setError(err?.message ?? t("login.errors.generic"));
       setPrivyPending(false);
@@ -122,6 +129,7 @@ const Login = () => {
         <button
           onClick={loginWithPrivy}
           disabled={privyLoading || loading}
+          data-testid="login-email"
           className="w-full flex items-center justify-center gap-3 rounded-2xl bg-foreground text-background px-5 py-4 text-sm font-bold shadow-lg active:scale-[0.98] transition-all disabled:opacity-60 whitespace-normal text-center"
         >
           {privyLoading ? <Loader2 className="h-5 w-5 animate-spin shrink-0" /> : <Mail className="h-5 w-5 shrink-0" />}

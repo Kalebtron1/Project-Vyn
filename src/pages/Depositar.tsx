@@ -14,11 +14,10 @@ import {
   ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle, Send,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePrivy } from "@privy-io/react-auth";
 import confetti from "canvas-confetti";
 import AppShell from "@/components/AppShell";
 import { useWalletSession } from "@/context/WalletSessionContext";
-import { PRIVY_PROVIDER } from "@/lib/privyBridge";
+import { PRIVY_PROVIDER, usePrivyBridge } from "@/lib/privyBridge";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
 import { depositToVault } from "@/stellar/deposit";
@@ -36,9 +35,8 @@ const Depositar = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { address, provider } = useWalletSession();
-  const { user } = usePrivy();
+  const { email } = usePrivyBridge();
   const { sign } = useMobileWallet();
-  const email = user?.email?.address;
 
   const [vaulted, setVaulted] = useState(false); // true si el USDC se depositó al vault
   const [amount, setAmount] = useState("500"); // MXN

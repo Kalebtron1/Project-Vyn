@@ -7,7 +7,6 @@ import { recordMint } from "../stellar/activity";
 import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
-import { useExportWallet } from "@privy-io/react-auth/extended-chains";
 import AppShell from "@/components/AppShell";
 import LanguageToggle from "@/components/LanguageToggle";
 import NFTModal from "@/components/NFTModal";
@@ -15,7 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
 import { tierLabel, tierNumberFromName } from "@/lib/tier";
 import { useWalletSession } from "@/context/WalletSessionContext";
-import { PRIVY_PROVIDER } from "@/lib/privyBridge";
+import { PRIVY_PROVIDER, privyExportWallet } from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
@@ -66,7 +65,6 @@ const Perfil = () => {
   const { creditWithdrawn } = useApp();
   const { wallet: walletAddress, shortWallet, disconnect } = useWallet();
   const { provider } = useWalletSession();
-  const { exportWallet } = useExportWallet();
   const { sign } = useMobileWallet();
   const isPrivy = provider === PRIVY_PROVIDER;
   const [activatingUsdc, setActivatingUsdc] = useState(false);
@@ -191,7 +189,7 @@ const Perfil = () => {
   const openWallet = async () => {
     try {
       if (isPrivy && walletAddress) {
-        await exportWallet({ address: walletAddress });
+        await privyExportWallet(walletAddress);
       } else {
         await requestAccess();
       }
