@@ -348,6 +348,15 @@ const en = {
     usdc_already_claimed_desc: "This wallet already received the test USDC.",
     usdc_account_not_funded: "Your account doesn't exist on the network yet (no XLM). Try again in a few seconds; if it persists, fund it with testnet XLM.",
     usdc_popup_blocked: "Your browser blocked the Albedo window. Allow pop-ups for this site and tap Activate USDC again.",
+    access_title: "Sign-in methods",
+    access_desc: "They all take you to the same account and the same wallet.",
+    google_link_hint: "Link your Google account so you can sign in with it too.",
+    google_link_button: "Link Google",
+    google_linked: "Google linked",
+    google_link_title: "Link Google",
+    google_link_taken:
+      "That Google account is already registered as a different Vyn account, so it can't be linked here.",
+    google_link_error: "Couldn't link Google. Try again in a few seconds.",
     passkey_title: "Fingerprint sign-in",
     passkey_desc:
       "Sign in faster with your phone's fingerprint, face or PIN. If you change phones, you recover your account with your email.",

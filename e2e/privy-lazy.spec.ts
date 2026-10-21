@@ -8,6 +8,8 @@ import { test, expect } from "../playwright-fixture";
 import { E2E_WALLET, ONBOARDED_KEY, PROVIDER_KEY, WALLET_KEY, seedWalletSession, stubCreditApi } from "./helpers";
 import {
   E2E_PRIVY_AUTH_KEY,
+  E2E_PRIVY_GOOGLE_KEY,
+  E2E_PRIVY_GOOGLE_TAKEN_KEY,
   E2E_PRIVY_LOGIN_FAILURE_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
   e2ePrivyKeypair,
@@ -39,12 +41,13 @@ async function seedStorage(page: Page, values: Record<string, string>): Promise<
   }, values);
 }
 
-function seedPrivySession(page: Page): Promise<void> {
+function seedPrivySession(page: Page, extra: Record<string, string> = {}): Promise<void> {
   return seedStorage(page, {
     [WALLET_KEY]: PRIVY_WALLET,
     [PROVIDER_KEY]: "privy",
     [ONBOARDED_KEY]: "1",
     [E2E_PRIVY_AUTH_KEY]: "1",
+    ...extra,
   });
 }
 
@@ -139,7 +142,7 @@ test.describe("Privy loads on demand", () => {
     await seedPrivySession(page);
 
     await page.goto("/perfil", { waitUntil: "domcontentloaded" });
-    const card = page.getByTestId("passkey-card");
+    const card = page.getByTestId("access-methods-card");
     await card.getByRole("button", { name: /Activar acceso con huella|Turn on fingerprint sign-in/ }).click();
 
     await expect.poll(() => privyCalls(page)).toContain("linkPasskey");
@@ -147,13 +150,63 @@ test.describe("Privy loads on demand", () => {
     await expect(card.getByRole("button", { name: /Agregar en otro dispositivo|Add another device/ })).toBeVisible();
   });
 
-  test("a wallet session does not offer fingerprint sign-in", async ({ page }) => {
+  test("a wallet session does not offer sign-in methods", async ({ page }) => {
     await isolate(page);
     await seedWalletSession(page);
 
     await page.goto("/perfil", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: /Abrir wallet|Open wallet/ })).toBeVisible();
-    await expect(page.getByTestId("passkey-card")).toHaveCount(0);
+    await expect(page.getByTestId("access-methods-card")).toHaveCount(0);
+  });
+
+  test("linking Google hides the button, also after a reload", async ({ page }) => {
+    await isolate(page);
+    await seedPrivySession(page);
+
+    await page.goto("/perfil", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("link-google").click();
+
+    await expect.poll(() => privyCalls(page)).toContain("linkGoogle");
+    await expect(page.getByTestId("google-linked")).toBeVisible();
+    await expect(page.getByTestId("link-google")).toHaveCount(0);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("google-linked")).toBeVisible();
+    await expect(page.getByTestId("link-google")).toHaveCount(0);
+  });
+
+  test("an account with Google linked never shows the button while Privy loads", async ({ page }) => {
+    await isolate(page);
+    await seedPrivySession(page, { [E2E_PRIVY_GOOGLE_KEY]: "1", [E2E_PRIVY_READY_DELAY_KEY]: "1500" });
+    // Record every time the button shows up, even briefly.
+    await page.addInitScript(() => {
+      new MutationObserver(() => {
+        if (document.querySelector('[data-testid="link-google"]')) {
+          (window as unknown as { __sawLinkGoogle?: boolean }).__sawLinkGoogle = true;
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
+
+    await page.goto("/perfil", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("access-methods-card")).toBeVisible();
+    await expect(page.getByTestId("google-linked")).toBeVisible();
+    expect(
+      await page.evaluate(() => (window as unknown as { __sawLinkGoogle?: boolean }).__sawLinkGoogle ?? false)
+    ).toBe(false);
+  });
+
+  test("a Google account that belongs to another Vyn account shows a clear message", async ({ page }) => {
+    await isolate(page);
+    await seedPrivySession(page, { [E2E_PRIVY_GOOGLE_TAKEN_KEY]: "1" });
+
+    await page.goto("/perfil", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("link-google").click();
+
+    await expect(
+      page.getByText(/ya está registrada como otra cuenta de Vyn|already registered as a different Vyn account/).first()
+    ).toBeVisible();
+    await expect(page.getByTestId("link-google")).toBeEnabled();
+    await expect(page.getByTestId("google-linked")).toHaveCount(0);
   });
 
   test("a leftover Privy session does not log a wallet user back in", async ({ page }) => {

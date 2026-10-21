@@ -37,6 +37,10 @@ export interface PrivyBridgeState {
   modalOpen: boolean;
   /** Passkeys vinculadas a la cuenta (acceso con huella/cara/PIN). */
   passkeys: number;
+  /** La cuenta tiene Google vinculado (entra con Google a la misma wallet). */
+  googleLinked: boolean;
+  /** Último error al vincular un método (`code` es el código de Privy). */
+  linkError?: { code: string; method: string; message?: string; at: number };
   /** Último error al iniciar sesión (`at` distingue dos errores con el mismo texto). */
   loginError?: { message: string; at: number };
 }
@@ -48,6 +52,7 @@ let state: PrivyBridgeState = {
   authenticated: false,
   modalOpen: false,
   passkeys: 0,
+  googleLinked: false,
 };
 const stateListeners = new Set<() => void>();
 // Promesas pendientes (firma, export) que esperan a que cambie el estado o el signer.
@@ -82,6 +87,12 @@ export function setPrivyState(patch: Partial<PrivyBridgeState>): void {
 /** Lo llama `PrivyBridge` cuando un intento de login falla (p. ej. Google rechazado). */
 export function reportPrivyLoginError(message: string): void {
   setPrivyState({ loginError: { message, at: Date.now() } });
+}
+
+/** Lo llama `PrivyBridge` cuando vincular un método falla (p. ej. Google ya usado). */
+export function reportPrivyLinkError(code: string, method: string, message?: string): void {
+  oauthLinkPendingAt = 0;
+  setPrivyState({ linkError: { code, method, message, at: Date.now() } });
 }
 
 /** Estado de Privy para componentes React (se re-renderiza al cambiar). */
@@ -152,6 +163,8 @@ export interface PrivyActions {
   exportWallet: (address: string) => Promise<void>;
   /** Abre el modal de Privy para registrar una passkey en la cuenta actual. */
   linkPasskey: () => void;
+  /** Redirige a Google para vincularlo a la cuenta actual. */
+  linkGoogle: () => void;
 }
 
 let actions: PrivyActions | null = null;
@@ -242,6 +255,29 @@ export async function privyLinkPasskey(): Promise<void> {
     "Privy no está listo. Inténtalo de nuevo en unos segundos."
   );
   current.linkPasskey();
+}
+
+// Vincular Google redirige a Google sin abrir el modal de Privy; si Privy rechaza el
+// inicio, el error queda sin manejar (como en el login). Marcamos el intento para que
+// `PrivyBridge` sepa que ese error es del vínculo.
+let oauthLinkPendingAt = 0;
+
+/** ¿Hay un vínculo con Google recién pedido (todavía sin redirigir)? */
+export function isOAuthLinkPending(): boolean {
+  return oauthLinkPendingAt > 0 && Date.now() - oauthLinkPendingAt < 30_000;
+}
+
+/**
+ * Vincula Google a la cuenta de correo actual: redirige a Google y, al volver, Privy
+ * completa el vínculo. Después, entrar con Google lleva a la misma cuenta y wallet.
+ */
+export async function privyLinkGoogle(): Promise<void> {
+  const current = await waitFor(
+    () => (actions && state.ready && state.authenticated ? actions : null),
+    "Privy no está listo. Inténtalo de nuevo en unos segundos."
+  );
+  oauthLinkPendingAt = Date.now();
+  current.linkGoogle();
 }
 
 // ─── Evento de conexión ──────────────────────────────────────────────────────

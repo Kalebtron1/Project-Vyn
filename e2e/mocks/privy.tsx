@@ -6,10 +6,12 @@
  * It behaves like an email session: `login()` authenticates and exposes a Stellar
  * wallet, and the session survives reloads (see `privy-wallet.ts`).
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   E2E_PRIVY_AUTH_KEY,
   E2E_PRIVY_EMAIL,
+  E2E_PRIVY_GOOGLE_KEY,
+  E2E_PRIVY_GOOGLE_TAKEN_KEY,
   E2E_PRIVY_LOGIN_FAILURE_KEY,
   E2E_PRIVY_PASSKEY_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
@@ -29,6 +31,7 @@ type PrivyValue = {
   login: () => void;
   logout: () => Promise<void>;
   linkPasskey: () => void;
+  linkGoogle: (onError: (code: string) => void) => void;
 };
 
 const Ctx = createContext<PrivyValue | null>(null);
@@ -57,6 +60,23 @@ export function PrivyProvider({
   const [passkeyLinked, setPasskeyLinked] = useState(
     () => localStorage.getItem(E2E_PRIVY_PASSKEY_KEY) === "1"
   );
+
+  const [googleLinked, setGoogleLinked] = useState(
+    () => localStorage.getItem(E2E_PRIVY_GOOGLE_KEY) === "1"
+  );
+
+  // Real Privy redirects to Google and finishes the link when the user returns.
+  const linkGoogle = useCallback((onError: (code: string) => void) => {
+    recordPrivyCall("linkGoogle");
+    setTimeout(() => {
+      if (localStorage.getItem(E2E_PRIVY_GOOGLE_TAKEN_KEY)) {
+        onError("linked_to_another_user");
+        return;
+      }
+      localStorage.setItem(E2E_PRIVY_GOOGLE_KEY, "1");
+      setGoogleLinked(true);
+    }, 50);
+  }, []);
 
   const linkPasskey = useCallback(() => {
     recordPrivyCall("linkPasskey");
@@ -105,15 +125,24 @@ export function PrivyProvider({
             linkedAccounts: [
               { type: "wallet", chainType: "stellar", address: e2ePrivyKeypair().publicKey() },
               ...(passkeyLinked ? [{ type: "passkey", chainType: "", address: "" }] : []),
+              ...(googleLinked ? [{ type: "google_oauth", chainType: "", address: "" }] : []),
             ],
           }
         : null,
-    [authenticated, passkeyLinked]
+    [authenticated, passkeyLinked, googleLinked]
   );
 
   const value = useMemo<PrivyValue>(
-    () => ({ ready, authenticated: ready && authenticated, user: ready ? user : null, login, logout, linkPasskey }),
-    [ready, authenticated, user, login, logout, linkPasskey]
+    () => ({
+      ready,
+      authenticated: ready && authenticated,
+      user: ready ? user : null,
+      login,
+      logout,
+      linkPasskey,
+      linkGoogle,
+    }),
+    [ready, authenticated, user, login, logout, linkPasskey, linkGoogle]
   );
 
   return (
@@ -133,4 +162,19 @@ export function usePrivy(): PrivyValue {
     throw new Error("usePrivy must be used within PrivyProvider (E2E stub)");
   }
   return ctx;
+}
+
+export function useLinkAccount(callbacks?: {
+  onError?: (error: string, details?: { linkMethod: string }) => void;
+}): { linkGoogle: () => void } {
+  const ctx = usePrivy();
+  const callbacksRef = useRef(callbacks);
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  });
+  const linkGoogle = useCallback(
+    () => ctx.linkGoogle((code) => callbacksRef.current?.onError?.(code, { linkMethod: "google" })),
+    [ctx]
+  );
+  return { linkGoogle };
 }

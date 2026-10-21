@@ -17,6 +17,10 @@ export const E2E_PRIVY_READY_DELAY_KEY = "e2e_privy_ready_delay";
 export const E2E_PRIVY_LOGIN_FAILURE_KEY = "e2e_privy_login_failure";
 /** The stub's account has a passkey linked (persists like Privy's user). */
 export const E2E_PRIVY_PASSKEY_KEY = "e2e_privy_passkey";
+/** The stub's account has Google linked. */
+export const E2E_PRIVY_GOOGLE_KEY = "e2e_privy_google";
+/** When set, linking Google fails as "already linked to another user". */
+export const E2E_PRIVY_GOOGLE_TAKEN_KEY = "e2e_privy_google_taken";
 export const E2E_PRIVY_EMAIL = "e2e@vyn.test";
 
 /** Test-only wallet (testnet, never funded). Derived from a fixed seed so no secret is stored. */
@@ -24,7 +28,7 @@ export function e2ePrivyKeypair(): Keypair {
   return Keypair.fromRawEd25519Seed(Buffer.alloc(32, 7));
 }
 
-export type PrivyCall = "login" | "logout" | "exportWallet" | "signRawHash" | "linkPasskey";
+export type PrivyCall = "login" | "logout" | "exportWallet" | "signRawHash" | "linkPasskey" | "linkGoogle";
 
 export function recordPrivyCall(call: PrivyCall): void {
   const w = window as unknown as { __e2ePrivyCalls?: PrivyCall[] };

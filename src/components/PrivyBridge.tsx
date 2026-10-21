@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { usePrivy, useModalStatus } from "@privy-io/react-auth";
+import { usePrivy, useModalStatus, useLinkAccount } from "@privy-io/react-auth";
 import {
   useSignRawHash,
   useCreateWallet,
@@ -18,7 +18,9 @@ import {
 } from "@privy-io/react-auth/extended-chains";
 import {
   registerPrivySigner,
+  isOAuthLinkPending,
   registerPrivyActions,
+  reportPrivyLinkError,
   reportPrivyLoginError,
   setPrivyState,
   notifyPrivyConnected,
@@ -78,6 +80,10 @@ export function PrivyBridge() {
   const { createWallet } = useCreateWallet();
   const { exportWallet } = useExportWallet();
   const { isOpen: modalOpen } = useModalStatus();
+  // Errores al vincular (p. ej. `linked_to_another_user` si ese Google ya es otra cuenta).
+  const { linkGoogle } = useLinkAccount({
+    onError: (error, details) => reportPrivyLinkError(String(error), details?.linkMethod ?? ""),
+  });
   const addrRef = useRef<string | null>(null);
 
   // Acciones del SDK para Login, Perfil y WalletSessionContext. Va antes de publicar
@@ -88,8 +94,9 @@ export function PrivyBridge() {
       logout,
       exportWallet: (address) => exportWallet({ address }),
       linkPasskey,
+      linkGoogle,
     });
-  }, [login, logout, exportWallet, linkPasskey]);
+  }, [login, logout, exportWallet, linkPasskey, linkGoogle]);
 
   useEffect(() => {
     const linked = (user as { linkedAccounts?: Array<{ type?: string }> } | null)?.linkedAccounts ?? [];
@@ -99,6 +106,7 @@ export function PrivyBridge() {
       authenticated,
       email: (user as { email?: { address?: string } } | null)?.email?.address,
       passkeys: linked.filter((account) => account.type === "passkey").length,
+      googleLinked: linked.some((account) => account.type === "google_oauth"),
     });
   }, [ready, authenticated, user]);
 
@@ -118,12 +126,19 @@ export function PrivyBridge() {
   useEffect(() => {
     const onRejection = (event: PromiseRejectionEvent) => {
       const { modalOpen: open, authenticated: authed } = loginWatchRef.current;
-      if (!open || authed) return;
+      // Vincular Google tampoco maneja el error del inicio (redirige sin modal).
+      const linking = isOAuthLinkPending();
+      if (!linking && (!open || authed)) return;
       // Todos los errores de Privy definen `privyErrorCode` (aunque sea undefined).
       const reason = event.reason as unknown;
       if (!(reason instanceof Error) || !("privyErrorCode" in reason)) return;
-      console.error("Privy login error:", reason);
-      reportPrivyLoginError(reason.message || String(reason));
+      console.error(linking ? "Privy link error:" : "Privy login error:", reason);
+      if (linking) {
+        const code = (reason as { privyErrorCode?: string }).privyErrorCode ?? "oauth_init_failed";
+        reportPrivyLinkError(code, "google", reason.message);
+      } else {
+        reportPrivyLoginError(reason.message || String(reason));
+      }
     };
     window.addEventListener("unhandledrejection", onRejection);
     return () => window.removeEventListener("unhandledrejection", onRejection);
