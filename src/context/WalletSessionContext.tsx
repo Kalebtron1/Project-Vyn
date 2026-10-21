@@ -21,8 +21,9 @@ import React, {
 import * as FreighterAPI from "@stellar/freighter-api";
 import { usePrivy } from "@privy-io/react-auth";
 import * as sessionStore from "@/lib/sessionStore";
-import { isMobileBrowser } from "@/lib/mobileWalletConnectors";
-import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
+// `walletEnv` y no `mobileWalletConnectors`/`stellarWalletsKit`: este provider está
+// en la raíz y no debe meter el kit ni el Stellar SDK en el bundle inicial.
+import { FREIGHTER_ID, isMobileBrowser } from "@/lib/walletEnv";
 
 export const WALLET_KEY = "vinculo_wallet";
 export const ONBOARDED_KEY = "vinculo_onboarded";

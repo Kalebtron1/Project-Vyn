@@ -10,10 +10,16 @@
 import { useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignRawHash, useCreateWallet } from "@privy-io/react-auth/extended-chains";
-import { TransactionBuilder, Keypair } from "@stellar/stellar-sdk";
-import { Buffer } from "buffer";
-import { NETWORK_PASSPHRASE } from "@/lib/stellarWalletsKit";
 import { registerPrivySigner, notifyPrivyConnected } from "@/lib/privyBridge";
+
+// El Stellar SDK (y el kit, de donde sale NETWORK_PASSPHRASE) se cargan al firmar,
+// no al montar: este componente vive en la raíz y si no entrarían al bundle inicial.
+const loadSigningDeps = () =>
+  Promise.all([
+    import("@stellar/stellar-sdk"),
+    import("buffer"),
+    import("@/lib/stellarWalletsKit"),
+  ]);
 
 /** hex (con o sin 0x) → Uint8Array. */
 function hexToBytes(hex: string): Uint8Array {
@@ -87,6 +93,8 @@ export function PrivyBridge() {
       const email = (user as { email?: { address?: string } })?.email?.address;
 
       registerPrivySigner(async (xdr: string) => {
+        const [{ TransactionBuilder, Keypair }, { Buffer }, { NETWORK_PASSPHRASE }] =
+          await loadSigningDeps();
         const tx = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
         // Stellar firma el SHA-256 del signature base; `tx.hash()` ya es ese hash de 32 bytes.
         const txHash = tx.hash();
