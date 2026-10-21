@@ -33,6 +33,10 @@ export interface PrivyBridgeState {
   ready: boolean;
   authenticated: boolean;
   email?: string;
+  /** El modal de login de Privy está abierto. */
+  modalOpen: boolean;
+  /** Último error al iniciar sesión (`at` distingue dos errores con el mismo texto). */
+  loginError?: { message: string; at: number };
 }
 
 let state: PrivyBridgeState = {
@@ -40,6 +44,7 @@ let state: PrivyBridgeState = {
   loaded: false,
   ready: false,
   authenticated: false,
+  modalOpen: false,
 };
 const stateListeners = new Set<() => void>();
 // Promesas pendientes (firma, export) que esperan a que cambie el estado o el signer.
@@ -69,6 +74,11 @@ export function setPrivyState(patch: Partial<PrivyBridgeState>): void {
   stateListeners.forEach((cb) => cb());
   flushPending();
   runWaiters();
+}
+
+/** Lo llama `PrivyBridge` cuando un intento de login falla (p. ej. Google rechazado). */
+export function reportPrivyLoginError(message: string): void {
+  setPrivyState({ loginError: { message, at: Date.now() } });
 }
 
 /** Estado de Privy para componentes React (se re-renderiza al cambiar). */

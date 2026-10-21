@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useModalStatus } from "@privy-io/react-auth";
 import {
   useSignRawHash,
   useCreateWallet,
@@ -19,6 +19,7 @@ import {
 import {
   registerPrivySigner,
   registerPrivyActions,
+  reportPrivyLoginError,
   setPrivyState,
   notifyPrivyConnected,
 } from "@/lib/privyBridge";
@@ -76,6 +77,7 @@ export function PrivyBridge() {
   const { signRawHash } = useSignRawHash();
   const { createWallet } = useCreateWallet();
   const { exportWallet } = useExportWallet();
+  const { isOpen: modalOpen } = useModalStatus();
   const addrRef = useRef<string | null>(null);
 
   // Acciones del SDK para Login, Perfil y WalletSessionContext. Va antes de publicar
@@ -97,10 +99,37 @@ export function PrivyBridge() {
     });
   }, [ready, authenticated, user]);
 
+  useEffect(() => {
+    setPrivyState({ modalOpen });
+  }, [modalOpen]);
+
+  // Los botones de Google/Apple del modal de Privy no manejan el error cuando su
+  // servidor rechaza el inicio (método deshabilitado, dominio o redirect no permitido
+  // en el dashboard…): queda como promesa rechazada sin manejar y en pantalla no pasa
+  // nada. Lo capturamos mientras el modal está abierto para mostrárselo al usuario.
+  const loginWatchRef = useRef({ modalOpen, authenticated });
+  useEffect(() => {
+    loginWatchRef.current = { modalOpen, authenticated };
+  }, [modalOpen, authenticated]);
+
+  useEffect(() => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const { modalOpen: open, authenticated: authed } = loginWatchRef.current;
+      if (!open || authed) return;
+      // Todos los errores de Privy definen `privyErrorCode` (aunque sea undefined).
+      const reason = event.reason as unknown;
+      if (!(reason instanceof Error) || !("privyErrorCode" in reason)) return;
+      console.error("Privy login error:", reason);
+      reportPrivyLoginError(reason.message || String(reason));
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
+
   useEffect(
     () => () => {
       registerPrivyActions(null);
-      setPrivyState({ loaded: false, ready: false, authenticated: false });
+      setPrivyState({ loaded: false, ready: false, authenticated: false, modalOpen: false });
     },
     []
   );

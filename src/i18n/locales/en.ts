@@ -102,6 +102,7 @@ const en = {
         "No network connection. Check your internet and try again.",
       generic:
         "Connection error. Make sure your wallet is unlocked and try again.",
+      privy_failed: "Couldn't sign in with that method. Try your email instead.",
     },
   },
 
