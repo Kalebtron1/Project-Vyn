@@ -93,7 +93,7 @@ If any API route returns `500`, check the Vercel dashboard for missing env vars:
 
 `STAKING_CONTRACT_ID` and `VITE_STAKING_CONTRACT_ID` must hold the **same** contract ID. There is no fallback — a missing value returns a `500`.
 
-> See [deployment.md — Environment variables in Vercel](deployment.md#environment-variables-in-vercel) for the full variable list.
+> See [deployment.md — Environment variables in Vercel](deployment.md#environment-variables) for the full variable list.
 
 ---
 
@@ -145,7 +145,7 @@ After any rollback, re-run the [post-deploy verification](#post-deploy-verificat
 
 - Confirm the user has Freighter (desktop) or Albedo (mobile) installed.
 - Check that `VITE_STAKING_CONTRACT_ID` and `VITE_LENDING_CONTRACT_ID` are set — the frontend reads these at startup.
-- See [flows.md — Authentication](flows.md#1-authentication-and-wallet-setup) for the full auth flow.
+- See [flows.md — Authentication](flows.md#1-sign-in) for the full auth flow.
 
 ### NFT/SBT minting stuck
 
