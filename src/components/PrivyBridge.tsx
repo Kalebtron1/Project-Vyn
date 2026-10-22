@@ -25,6 +25,12 @@ import {
   setPrivyState,
   notifyPrivyConnected,
 } from "@/lib/privyBridge";
+import {
+  createStellarWalletOnce,
+  primaryStellarWallet,
+  signingWalletFor,
+  stellarWalletsOf,
+} from "@/lib/privyWallets";
 
 // El Stellar SDK (y el kit, de donde sale NETWORK_PASSPHRASE) se cargan al firmar,
 // no al montar: este componente vive en la raíz y si no entrarían al bundle inicial.
@@ -51,11 +57,6 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-function findStellarAddress(user: unknown): string | undefined {
-  const accounts = (user as { linkedAccounts?: Array<Record<string, unknown>> })?.linkedAccounts || [];
-  const acc = accounts.find((a) => a.type === "wallet" && a.chainType === "stellar");
-  return acc?.address as string | undefined;
-}
 
 const HORIZON_TESTNET = "https://horizon-testnet.stellar.org";
 const FRIENDBOT = "https://friendbot.stellar.org";
@@ -158,14 +159,15 @@ export function PrivyBridge() {
     let cancelled = false;
 
     (async () => {
-      let address = findStellarAddress(user);
+      // Siempre la wallet más antigua: `linkedAccounts` no garantiza orden y una cuenta
+      // puede tener varias (ver `privyWallets`).
+      let address = primaryStellarWallet(user);
       if (!address) {
         try {
-          const { wallet } = await createWallet({ chainType: "stellar" });
-          address = wallet.address;
+          address = await createStellarWalletOnce(() => createWallet({ chainType: "stellar" }));
         } catch {
           // Pudo crearse en paralelo: re-leer del usuario.
-          address = findStellarAddress(user);
+          address = primaryStellarWallet(user);
         }
       }
       if (cancelled || !address) return;
@@ -177,19 +179,25 @@ export function PrivyBridge() {
     function addRefAndRegister(address: string) {
       addrRef.current = address;
       const email = (user as { email?: { address?: string } })?.email?.address;
+      const wallets = stellarWalletsOf(user);
+      const ownWallets = wallets.length ? wallets : [address];
 
       registerPrivySigner(async (xdr: string) => {
         const [{ TransactionBuilder, Keypair }, { Buffer }, { NETWORK_PASSPHRASE }] =
           await loadSigningDeps();
         const tx = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
+        // Firma con la wallet de la que sale la transacción si es de la cuenta: una sesión
+        // que quedó en otra de sus wallets sigue firmando bien.
+        const source = "feeSource" in tx ? tx.feeSource : tx.source;
+        const signer = signingWalletFor(ownWallets, source) ?? address;
         // Stellar firma el SHA-256 del signature base; `tx.hash()` ya es ese hash de 32 bytes.
         const txHash = tx.hash();
         const hashHex = ("0x" + txHash.toString("hex")) as `0x${string}`;
-        const { signature } = await signRawHash({ address, chainType: "stellar", hash: hashHex });
+        const { signature } = await signRawHash({ address: signer, chainType: "stellar", hash: hashHex });
         // `signature` es la firma Ed25519 (hex). Verificamos LOCALMENTE que valide sobre el
         // hash antes de enviarla; si no, fallamos claro (evita un confuso tx_bad_auth de Horizon).
         const sigBytes = hexToBytes(signature);
-        const kp = Keypair.fromPublicKey(address);
+        const kp = Keypair.fromPublicKey(signer);
         if (!kp.verify(txHash, Buffer.from(sigBytes))) {
           throw new Error(
             "La firma de Privy no valida sobre el hash de la transacción. " +
@@ -197,7 +205,7 @@ export function PrivyBridge() {
             "(revisa bloqueadores/red o la config de embedded wallets en el dashboard)."
           );
         }
-        tx.addSignature(address, bytesToBase64(sigBytes));
+        tx.addSignature(signer, bytesToBase64(sigBytes));
         return tx.toXDR();
       });
 

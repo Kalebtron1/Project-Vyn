@@ -12,7 +12,9 @@ import {
   E2E_PRIVY_GOOGLE_TAKEN_KEY,
   E2E_PRIVY_LOGIN_FAILURE_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
+  E2E_PRIVY_TWO_WALLETS_KEY,
   e2ePrivyKeypair,
+  e2ePrivySecondKeypair,
 } from "./mocks/privy-wallet";
 
 const PRIVY_WALLET = e2ePrivyKeypair().publicKey();
@@ -103,6 +105,28 @@ test.describe("Privy loads on demand", () => {
     await page.evaluate(() => (window as unknown as { __e2ePrivyCloseModal: () => void }).__e2ePrivyCloseModal());
     await expect(page.getByTestId("login-email")).toBeEnabled();
     await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test("an account with two wallets always enters with the oldest one", async ({ page }) => {
+    await isolate(page);
+    await seedStorage(page, { [E2E_PRIVY_TWO_WALLETS_KEY]: "1" });
+
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("login-email").click();
+
+    await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
+    // The stub lists the newer wallet first; the app must still pick the oldest.
+    expect(await page.evaluate((key) => localStorage.getItem(key), WALLET_KEY)).toBe(PRIVY_WALLET);
+  });
+
+  test("a session left on the account's other wallet still signs", async ({ page }) => {
+    await isolate(page);
+    const otherWallet = e2ePrivySecondKeypair().publicKey();
+    await seedPrivySession(page, { [WALLET_KEY]: otherWallet, [E2E_PRIVY_TWO_WALLETS_KEY]: "1" });
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("open-deposit")).toBeVisible();
+    expect(await signThroughPrivy(page, otherWallet)).toEqual({ signatures: 1, valid: true });
   });
 
   test("an email session survives a reload and signs right away", async ({ page }) => {
