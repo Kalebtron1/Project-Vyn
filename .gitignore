@@ -43,8 +43,9 @@ Cargo.lock.bak
 /blob-report/
 /playwright/.cache/
 
-# Claude Code local settings (per machine)
+# Claude Code local settings and desktop-app preview config (per machine)
 .claude/settings.local.json
+.claude/launch.json
 
 # Obsidian (docs/ is a vault): share only the link settings, ignore the rest
 docs/.obsidian/*
