@@ -72,6 +72,7 @@ The project uses the following variables:
 
 Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless API functions, and three Soroban smart contracts on Stellar Testnet.
 
+- [Docs index](docs/00-Index.md) — map of every note, decision records and contribution rules (`docs/` is also an Obsidian vault).
 - [Architecture overview](docs/architecture.md) — layers, components, contracts, and where to make common changes.
 - [Core flows](docs/flows.md) — step-by-step walkthroughs of auth, deposit, scoring/minting, credit, and loan flows.
 - [Deployment guide](docs/deployment.md) — local setup, Vercel deploy, rollback steps, and contract redeployment.
