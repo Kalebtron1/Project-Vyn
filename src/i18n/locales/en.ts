@@ -8,6 +8,7 @@ const en = {
     app_name: "Vyn",
     app_tagline: "Stellar Microcredits",
     loading: "Loading...",
+    syncing: "Updating…",
     error: "Error",
     close: "Close",
     copy: "Copy",
@@ -85,7 +86,7 @@ const en = {
     title: "Vínculo",
     accesly_cta: "Sign in with email",
     accesly_creating: "Creating your account…",
-    accesly_hint: "With Google or Apple. No seed phrase, no gas.",
+    accesly_hint: "With your email, Google or fingerprint (passkey). No seed phrase, no gas.",
     accesly_popup_hint: "Complete sign-in in the window that appeared.",
     or_divider: "or",
     connect_wallet: "Connect wallet",
@@ -102,6 +103,7 @@ const en = {
         "No network connection. Check your internet and try again.",
       generic:
         "Connection error. Make sure your wallet is unlocked and try again.",
+      privy_failed: "Couldn't sign in with that method. Try your email instead.",
     },
   },
 
@@ -129,6 +131,8 @@ const en = {
   },
 
   home: {
+    balance_title: "My savings",
+    balance_caption: "Balance available in the contract",
     deposit_button: "Deposit Earnings",
     wallet_disconnected_title: "Wallet disconnected",
     wallet_disconnected_description:
@@ -347,6 +351,24 @@ const en = {
     usdc_already_claimed_desc: "This wallet already received the test USDC.",
     usdc_account_not_funded: "Your account doesn't exist on the network yet (no XLM). Try again in a few seconds; if it persists, fund it with testnet XLM.",
     usdc_popup_blocked: "Your browser blocked the Albedo window. Allow pop-ups for this site and tap Activate USDC again.",
+    access_title: "Sign-in methods",
+    access_desc: "They all take you to the same account and the same wallet.",
+    google_link_hint: "Link your Google account so you can sign in with it too.",
+    google_link_button: "Link Google",
+    google_linked: "Google linked",
+    google_link_title: "Link Google",
+    google_link_taken:
+      "That Google account is already registered as a different Vyn account, so it can't be linked here.",
+    google_link_error: "Couldn't link Google. Try again in a few seconds.",
+    passkey_title: "Fingerprint sign-in",
+    passkey_desc:
+      "Sign in faster with your phone's fingerprint, face or PIN. If you change phones, you recover your account with your email.",
+    passkey_button: "Turn on fingerprint sign-in",
+    passkey_enabled: "Fingerprint sign-in is on",
+    passkey_enabled_desc:
+      "To sign in, tap “Sign in with email” and choose the passkey option. Your email still recovers your account.",
+    passkey_add_another: "Add another device",
+    passkey_error: "Couldn't open fingerprint setup. Try again in a few seconds.",
     menu_notifications: "Notifications",
     menu_notifications_detail: "Enabled",
     menu_help: "Help center",

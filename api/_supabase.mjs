@@ -32,7 +32,7 @@ export function isSupabaseConfigured() {
 // ── Fallback en memoria (dev sin Supabase) ──────────────────────────────────
 const memory = new Map(); // wallet_address -> row
 
-async function sbFetch(path, { method = "GET", body, headers = {} } = {}) {
+async function sbFetch(path, { method = "GET", body, headers = {}, signal } = {}) {
   const cfg = getConfig();
   const res = await fetch(`${cfg.url}/rest/v1/${path}`, {
     method,
@@ -43,6 +43,7 @@ async function sbFetch(path, { method = "GET", body, headers = {} } = {}) {
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   const text = await res.text();
   let data = null;
@@ -55,6 +56,21 @@ async function sbFetch(path, { method = "GET", body, headers = {} } = {}) {
     throw err;
   }
   return data;
+}
+
+// ── Keep-alive / readiness ──────────────────────────────────────────────────
+// Supabase pausa los proyectos del plan Free con poca actividad en 7 días. El
+// workflow `supabase-keepalive` llama a /api/readiness cada 6 h y esta lectura
+// mínima cuenta como actividad (y detecta si Supabase dejó de responder).
+const PING_TIMEOUT_MS = 5000;
+
+/** "ok" si Supabase responde, "not_configured" si faltan las variables. Lanza si falla. */
+export async function pingSupabase() {
+  if (!isSupabaseConfigured()) return "not_configured";
+  await sbFetch("faucet_claims?select=claimed_at&limit=1", {
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+  });
+  return "ok";
 }
 
 /** Busca el mapping por dirección de wallet (identidad estable del usuario Accesly). */

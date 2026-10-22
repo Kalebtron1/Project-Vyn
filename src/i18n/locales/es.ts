@@ -15,6 +15,7 @@ const es = {
     app_name: "Vyn",
     app_tagline: "Stellar Microcredits",
     loading: "Cargando...",
+    syncing: "Actualizando…",
     error: "Error",
     close: "Cerrar",
     copy: "Copiar",
@@ -95,7 +96,7 @@ const es = {
     title: "Vínculo",
     accesly_cta: "Entrar con correo",
     accesly_creating: "Creando tu cuenta…",
-    accesly_hint: "Con Google o Apple. Sin frase semilla, sin gas.",
+    accesly_hint: "Con tu correo, Google o tu huella (passkey). Sin frase semilla, sin gas.",
     accesly_popup_hint: "Completa el inicio de sesión en la ventana que apareció.",
     or_divider: "o",
     connect_wallet: "Conectar wallet",
@@ -112,6 +113,7 @@ const es = {
         "Sin conexión a la red. Verifica tu internet e intenta de nuevo.",
       generic:
         "Error de conexión. Verifica que tu wallet esté desbloqueada e intenta de nuevo.",
+      privy_failed: "No se pudo iniciar sesión con ese método. Prueba con tu correo.",
     },
   },
 
@@ -141,6 +143,8 @@ const es = {
 
   // ─── Home / Index ────────────────────────────────────────────────────────────
   home: {
+    balance_title: "Mi ahorro",
+    balance_caption: "Saldo disponible en contrato",
     deposit_button: "Depositar Ganancias",
     wallet_disconnected_title: "Wallet desconectada",
     wallet_disconnected_description:
@@ -366,6 +370,24 @@ const es = {
     usdc_already_claimed_desc: "Esta wallet ya recibió el USDC de prueba.",
     usdc_account_not_funded: "Tu cuenta aún no existe en la red (sin XLM). Inténtalo de nuevo en unos segundos; si persiste, fondéala con XLM de testnet.",
     usdc_popup_blocked: "Tu navegador bloqueó la ventana de Albedo. Permite las ventanas emergentes para este sitio y vuelve a pulsar Activar USDC.",
+    access_title: "Métodos de acceso",
+    access_desc: "Todos te llevan a la misma cuenta y a la misma wallet.",
+    google_link_hint: "Vincula tu cuenta de Google para entrar también con ella.",
+    google_link_button: "Vincular Google",
+    google_linked: "Google vinculado",
+    google_link_title: "Vincular Google",
+    google_link_taken:
+      "Esa cuenta de Google ya está registrada como otra cuenta de Vyn, así que no se puede vincular aquí.",
+    google_link_error: "No se pudo vincular Google. Inténtalo de nuevo en unos segundos.",
+    passkey_title: "Acceso con huella",
+    passkey_desc:
+      "Entra más rápido con la huella, la cara o el PIN de tu celular. Si cambias de celular, recuperas tu cuenta con tu correo.",
+    passkey_button: "Activar acceso con huella",
+    passkey_enabled: "Acceso con huella activado",
+    passkey_enabled_desc:
+      "Para entrar, toca «Entrar con correo» y elige la opción de passkey. Tu correo sigue sirviendo para recuperar la cuenta.",
+    passkey_add_another: "Agregar en otro dispositivo",
+    passkey_error: "No se pudo abrir el registro de la huella. Inténtalo de nuevo en unos segundos.",
     menu_notifications: "Notificaciones",
     menu_notifications_detail: "Activadas",
     menu_help: "Centro de ayuda",

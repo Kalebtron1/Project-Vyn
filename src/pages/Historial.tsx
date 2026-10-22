@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import {
   ArrowUpRight, ArrowDownLeft, ArrowUpFromLine, Banknote, Award,
@@ -7,7 +7,8 @@ import {
 import { useTranslation } from "react-i18next";
 import AppShell from "@/components/AppShell";
 import { useFormatters } from "@/lib/format";
-import { fetchActivity, type ActivityItem, type ActivityKind } from "@/stellar/activity";
+import { type ActivityItem, type ActivityKind } from "@/stellar/activity";
+import { useActivity, useCredit } from "@/lib/chainData";
 
 // Misma estética por tipo que ActivityList: ahorro USDC, crédito XLM, mint = nivel.
 const KIND_META: Record<
@@ -34,46 +35,14 @@ const Historial = () => {
   const { wallet: walletAddress } = useWallet();
   const { t } = useTranslation();
   const { formatAmount, formatDate } = useFormatters();
-  const [items, setItems] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sbtLevel, setSbtLevel] = useState<string | null>(null);
+  // Actividad y nivel: lecturas compartidas con Inicio, en caché (sin polling).
+  const { data: items = [], isPending } = useActivity(walletAddress);
+  const credit = useCredit(walletAddress);
+  const loading = !!walletAddress && isPending;
+  const sbtLevel =
+    credit.data?.success && Number(credit.data.tier) >= 1 ? credit.data.tierName ?? null : null;
   const [tab, setTab] = useState<TabId>("all");
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    if (!walletAddress) {
-      setLoading(false);
-      return;
-    }
-
-    const load = async () => {
-      try {
-        const [activity] = await Promise.all([
-          fetchActivity(walletAddress),
-          fetch(`/api/get-available-credit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userAddress: walletAddress }),
-          })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((d) => {
-              if (d?.success && d.tier >= 1) setSbtLevel(d.tierName);
-              else setSbtLevel(null);
-            })
-            .catch(() => setSbtLevel(null)),
-        ]);
-        setItems(activity);
-      } catch (error) {
-        console.error("Error cargando historial:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-    const interval = setInterval(load, 15000);
-    return () => clearInterval(interval);
-  }, [walletAddress]);
 
   // Filtrado por pestaña + búsqueda (sobre datos reales).
   const filtered = useMemo(() => {

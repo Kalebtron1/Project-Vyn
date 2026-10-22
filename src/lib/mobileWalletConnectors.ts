@@ -54,12 +54,9 @@ export type WalletId = string;
 
 // ─── Environment detection ────────────────────────────────────────────────────
 
-export function isMobileBrowser(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
-    navigator.userAgent
-  );
-}
+// Vive en `walletEnv` (sin dependencias pesadas) para que la raíz de la app pueda
+// usarlo sin cargar el kit; se re-exporta aquí para no romper los imports existentes.
+export { isMobileBrowser } from "@/lib/walletEnv";
 
 /** Sólo relevante para Freighter (detección de cambio de cuenta en escritorio). */
 export async function isFreighterAvailable(): Promise<boolean> {

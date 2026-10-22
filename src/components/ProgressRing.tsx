@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
-import { fetchContractBalance } from "../stellar/queries";
+import { useCredit, useScore } from "@/lib/chainData";
 import { tierLabel } from "@/lib/tier";
 import { Shield, Star, Crown, Gem, Trophy, Activity, Loader2, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -46,94 +46,27 @@ const ProgressRing = () => {
   const { t } = useTranslation();
   const { wallet: walletAddress } = useWallet();
 
-  const [riskScore, setRiskScore] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [onChainTier, setOnChainTier] = useState(0);
-  const [needsMinting, setNeedsMinting] = useState(false);
-  const [levelToMint, setLevelToMint] = useState<Level | null>(null);
-  const [historyCount, setHistoryCount] = useState(0);
-  const [minHistoryRequired, setMinHistoryRequired] = useState(3);
-  const [isHistoryEligible, setIsHistoryEligible] = useState(false);
+  // Tier on-chain (crédito) y score en vivo: lecturas compartidas con NftLevelCard,
+  // en caché y refrescadas tras cada acción (sin polling).
+  const credit = useCredit(walletAddress);
+  const scoreQuery = useScore(walletAddress);
+  const isLoading = !!walletAddress && (credit.isPending || scoreQuery.isPending);
 
-  // 1. Función de carga envuelta en useCallback para evitar bucles infinitos
-  const refreshData = useCallback(async (isInitial = false) => {
-    if (!walletAddress) {
-      if (isInitial) setIsLoading(false);
-      return;
-    }
+  const scoreData = scoreQuery.data;
+  const eligibility = scoreData?.eligibility || {};
+  const historyCount = Number(eligibility?.historyCount) || 0;
+  const minHistoryRequired = Number(eligibility?.minHistoryRequired) || 3;
+  const isHistoryEligible = Boolean(eligibility?.isHistoryEligible);
 
-    if (isInitial) setIsLoading(true);
+  // El Ring Score refleja el score dinámico en vivo (sube al depositar, baja al
+  // retirar). El tier on-chain solo gobierna las medallas de niveles alcanzados.
+  const onChainTier = Number(credit.data?.tier) || 0;
+  const riskScore = Number(scoreData?.score) || 0;
 
-    try {
-      // Obtenemos el saldo real del contrato inteligente
-      const balance = await fetchContractBalance(walletAddress);
-
-      // Consultamos Tier actual (on-chain) y Score calculado (backend)
-      const [onChainRes, scoreRes] = await Promise.all([
-        fetch(`/api/get-available-credit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userAddress: walletAddress })
-        }),
-        fetch(`/api/calculate-score`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            address: walletAddress,
-            totalDeposited: Number(balance),
-          })
-        })
-      ]);
-
-      const onChainData = await onChainRes.json();
-      const scoreData = await scoreRes.json();
-
-      // DEBUG: mostrar datos en consola para diagnosticar el Ring Score
-      console.debug("[DEBUG] onChainData:", onChainData);
-      console.debug("[DEBUG] scoreData:", scoreData);
-
-      const eligibility = scoreData?.eligibility || {};
-      const txCount = Number(eligibility?.historyCount) || 0;
-      const minRequired = Number(eligibility?.minHistoryRequired) || 3;
-      const eligibleByHistory = Boolean(eligibility?.isHistoryEligible);
-
-      setHistoryCount(txCount);
-      setMinHistoryRequired(minRequired);
-      setIsHistoryEligible(eligibleByHistory);
-
-      // El Ring Score refleja el score dinámico en vivo (sube al depositar, baja al
-      // retirar). El tier on-chain solo gobierna las medallas de niveles alcanzados.
-      const blockchainTier = onChainData.tier || 0;
-      const dynamicScore = scoreData.score || 0;
-
-      setRiskScore(dynamicScore);
-      setOnChainTier(blockchainTier);
-
-      // Verificamos si merece un ascenso solo cuando hay historial suficiente.
-      const calculatedTier = scoreData.tier || 0;
-      if (eligibleByHistory && calculatedTier > blockchainTier && calculatedTier >= 1) {
-        setNeedsMinting(true);
-        setLevelToMint(LEVELS[calculatedTier] || LEVELS[1]);
-      } else {
-        setNeedsMinting(false);
-      }
-    } catch (error) {
-      console.error("❌ Error actualizando reputación:", error);
-    } finally {
-      if (isInitial) setIsLoading(false);
-    }
-  }, [walletAddress]);
-
-  // 2. Efecto de Polling: Se dispara al inicio y cada 15 segundos
-  useEffect(() => {
-    refreshData(true);
-
-    const interval = setInterval(() => {
-      refreshData(false); // Refresco silencioso (sin spinner)
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, [refreshData]);
+  // Merece un ascenso solo cuando hay historial suficiente.
+  const calculatedTier = Number(scoreData?.tier) || 0;
+  const needsMinting = isHistoryEligible && calculatedTier > onChainTier && calculatedTier >= 1;
+  const levelToMint: Level | null = needsMinting ? LEVELS[calculatedTier] || LEVELS[1] : null;
 
   const current = getCurrentLevel(riskScore);
   const next = getNextLevel(riskScore);

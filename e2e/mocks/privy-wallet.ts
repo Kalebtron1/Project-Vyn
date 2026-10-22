@@ -1,0 +1,49 @@
+/**
+ * Shared state for the Privy E2E stubs (`privy.tsx`, `privy-extended.ts`) and the
+ * specs that drive them.
+ *
+ * The stub persists its session in localStorage like Privy does, so specs can test
+ * reloads and seed a leftover Privy session. Calls are recorded on
+ * `window.__e2ePrivyCalls` so specs can assert on them.
+ */
+
+import { Keypair } from "@stellar/stellar-sdk";
+import { Buffer } from "buffer";
+
+export const E2E_PRIVY_AUTH_KEY = "e2e_privy_authenticated";
+/** Optional delay (ms) before the stub reports `ready`, to test early clicks. */
+export const E2E_PRIVY_READY_DELAY_KEY = "e2e_privy_ready_delay";
+/** When set, `login()` fails with this message the way Privy's OAuth buttons do. */
+export const E2E_PRIVY_LOGIN_FAILURE_KEY = "e2e_privy_login_failure";
+/** The stub's account has a passkey linked (persists like Privy's user). */
+export const E2E_PRIVY_PASSKEY_KEY = "e2e_privy_passkey";
+/** The stub's account has Google linked. */
+export const E2E_PRIVY_GOOGLE_KEY = "e2e_privy_google";
+/** When set, linking Google fails as "already linked to another user". */
+export const E2E_PRIVY_GOOGLE_TAKEN_KEY = "e2e_privy_google_taken";
+/** The stub's account has two Stellar wallets (the newer one listed first). */
+export const E2E_PRIVY_TWO_WALLETS_KEY = "e2e_privy_two_wallets";
+export const E2E_PRIVY_EMAIL = "e2e@vyn.test";
+
+/** Test-only wallet (testnet, never funded). Derived from a fixed seed so no secret is stored. */
+export function e2ePrivyKeypair(): Keypair {
+  return Keypair.fromRawEd25519Seed(Buffer.alloc(32, 7));
+}
+
+/** Second test wallet, created after the first (see E2E_PRIVY_TWO_WALLETS_KEY). */
+export function e2ePrivySecondKeypair(): Keypair {
+  return Keypair.fromRawEd25519Seed(Buffer.alloc(32, 8));
+}
+
+/** The stub's keypair for one of its wallet addresses. */
+export function e2ePrivyKeypairFor(address: string): Keypair {
+  const second = e2ePrivySecondKeypair();
+  return second.publicKey() === address ? second : e2ePrivyKeypair();
+}
+
+export type PrivyCall = "login" | "logout" | "exportWallet" | "signRawHash" | "linkPasskey" | "linkGoogle";
+
+export function recordPrivyCall(call: PrivyCall): void {
+  const w = window as unknown as { __e2ePrivyCalls?: PrivyCall[] };
+  (w.__e2ePrivyCalls ??= []).push(call);
+}

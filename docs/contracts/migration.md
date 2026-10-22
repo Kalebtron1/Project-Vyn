@@ -1,5 +1,13 @@
 # Contract Migration & Upgrade Guide
 
+> ⚠️ **Read first (2026-10-22).** None of the three contracts exposes an `upgrade`
+> function. In Soroban a contract can only replace its own Wasm if it implements a function
+> that calls `update_current_contract_wasm`, so the **Upgrade** sections below (and
+> `scripts/upgrade_contract.sh`) fail against the deployed contracts. Today a change means
+> deploying a new instance, initializing it, and updating the IDs in Vercel
+> ([deployment](../deployment.md#contract-redeployment)). Storage does not carry over: SBT
+> tiers, pool shares and loans start empty.
+
 Covers the full deploy and upgrade sequence for the three Soroban contracts in this repo.  
 All commands target **Stellar Testnet** (`--network testnet`). Swap `testnet` for `futurenet` or a local node as needed.
 
@@ -109,10 +117,13 @@ stellar contract invoke \
 
 ### Metadata base URI (issue #103)
 
-`token_uri` now builds tier metadata URLs from `DataKey::MetadataBaseUri`. Upgraded
-instances that predate the key automatically fall back to the project-owned default
-`https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/metadata/`, so no
-migration call is required. To use a different host, set it as the admin:
+`token_uri` now builds tier metadata URLs from `DataKey::MetadataBaseUri`. `init` sets
+it to the project-owned default
+`https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/metadata/`. Because the
+deployed contracts cannot be upgraded in place today (see the warning at the top), this
+change ships with a fresh deploy. Instances that lack the key (for example, if an
+`upgrade` entry point is added later) fall back to the same default, so no migration
+call is required. To use a different host, set it as the admin:
 
 ```bash
 stellar contract invoke \
@@ -155,7 +166,8 @@ export STAKING_CONTRACT_ID="C..."
 
 ### Initialize
 
-Requires a Stellar Asset Contract (SAC) address for the token. Use the XLM SAC on testnet or deploy your own:
+Requires the admin address, the SAC of the **USDC** token held by the DeFindex vault, and
+the vault address (create the vault first with `scripts/create_vault.sh`):
 
 ```bash
 stellar contract invoke \
@@ -163,7 +175,9 @@ stellar contract invoke \
   --source $ADMIN_SECRET \
   --network $NETWORK \
   -- init \
-  --token <TOKEN_SAC_ADDRESS>
+  --admin $ADMIN_PUBLIC \
+  --token <USDC_SAC_ADDRESS> \
+  --vault <DEFINDEX_VAULT_ADDRESS>
 ```
 
 ### Upgrade
@@ -223,8 +237,9 @@ stellar contract invoke \
   --source $ADMIN_SECRET \
   --network $NETWORK \
   -- init_lending \
-  --token <TOKEN_SAC_ADDRESS> \
-  --sbt $SBT_CONTRACT_ID
+  --token <XLM_SAC_ADDRESS> \
+  --sbt $SBT_CONTRACT_ID \
+  --treasury <TREASURY_G_ADDRESS>
 ```
 
 ### Fund the pool
@@ -269,7 +284,12 @@ Update `.env.local` with the new contract IDs:
 ```
 NFT_CONTRACT_ID=<new SBT_CONTRACT_ID>
 VITE_LENDING_CONTRACT_ID=<new LENDING_CONTRACT_ID>
+STAKING_CONTRACT_ID=<new STAKING_CONTRACT_ID>
+VITE_STAKING_CONTRACT_ID=<new STAKING_CONTRACT_ID>
+VITE_TREASURY_ADDRESS=<treasury G address>
 ```
+
+Set the same values in Vercel and redeploy (`VITE_*` are compiled into the bundle).
 
 Restart the backend and frontend so they pick up the new values.
 

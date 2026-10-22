@@ -1,164 +1,225 @@
+---
+tags: [architecture]
+updated: 2026-10-22
+files:
+  - src/App.tsx
+  - src/context/WalletSessionContext.tsx
+  - src/context/AppContext.tsx
+  - src/lib/chainData.ts
+  - src/stellar/
+  - api/
+  - backend/contracts/
+  - vercel.json
+---
+
 # Architecture
 
 ## Overview
 
-Vyn is a DeFi savings and credit app built on Stellar/Soroban. It has three layers:
+Vyn is a savings and credit app on Stellar/Soroban **testnet**. Users save USDC in a pool
+that earns real yield from a DeFindex vault, build a reputation score from that behavior,
+receive a soulbound tier token (SBT) and borrow against the tier. They can also move money in
+and out with Mexican bank transfers (SPEI) through BlindPay.
 
 ```
-Browser (React)
-    │
-    ├── Vercel API        — serverless functions (scoring, minting, credit)
-    └── Stellar Testnet   — three Soroban smart contracts
+Browser (React SPA)
+  ├─ wallet: Stellar Wallets Kit (Freighter, Albedo, xBull, LOBSTR, Hana, Rabet, WalletConnect)
+  │          or Privy (email / Google / passkey → embedded Stellar wallet)
+  ├─ Soroban RPC + Horizon (testnet)  ── staking_pool ─▶ DeFindex vault
+  │                                    ── vinculo_lending ─▶ vinculo_sbt.get_tier
+  └─ /api/* on Vercel (10 Node functions)
+        ├─ scoring, SBT mint, credit       → Soroban RPC (admin key)
+        ├─ SPEI on/off-ramp                → BlindPay API, Horizon (admin / payout keys)
+        ├─ USDC faucet                     → Horizon (admin key)
+        └─ idempotency and mapping         → Supabase (REST)
 ```
 
-Authentication is **wallet-based**: the connected Stellar address is stored in
-`localStorage.vinculo_wallet` and gates the routes. There is no separate auth backend or
-user database. Connection and signing go through Stellar Wallets Kit (see
-[Wallet providers](#wallet-providers) below), which supports Freighter, xBull, Lobstr,
-Hana and Rabet on desktop, and Albedo on mobile.
+There is no user database and no backend session. The "session" is the connected address in
+browser storage. API endpoints receive the address in the request and do not verify who sent
+it (see [pending integrations](integrations/pending.md)).
+
+Every external service has its own note: start at the
+[integrations overview](integrations/overview.md).
 
 ---
 
 ## Layer 1 — Frontend
 
-**Stack:** Vite · React · TypeScript · Tailwind CSS  
-**Entry:** `src/main.tsx` → `src/App.tsx`
+**Stack:** Vite 5 · React 18 · TypeScript · React Router 6 · React Query 5 · Tailwind ·
+shadcn/ui · i18next (Spanish primary, English).
+**Entry:** `src/main.tsx` → `src/App.tsx`. Every page is lazy-loaded with `React.lazy`.
 
-### Routing (`src/App.tsx`)
+### Routes (`src/App.tsx`)
 
 | Path | Page | Guards |
 |---|---|---|
 | `/login` | `Login` | public |
-| `/bienvenida` | `Onboarding` | `RequireWallet` |
-| `/` | `Index` | `RequireWallet` + `RequireOnboarding` |
-| `/historial` | `Historial` | `RequireWallet` + `RequireOnboarding` |
-| `/perfil` | `Perfil` | `RequireWallet` + `RequireOnboarding` |
-| `/retiros` | `Retiros` | `RequireWallet` + `RequireOnboarding` |
-| `/notificaciones` | `Notificaciones` | `RequireWallet` + `RequireOnboarding` |
-| `/ayuda` | `Ayuda` | `RequireWallet` + `RequireOnboarding` |
+| `/bienvenida` | `Onboarding` (redirects to `/` once onboarded) | `RequireWallet` |
+| `/` | `Index` (home dashboard) | `RequireWallet` + `RequireOnboarding` |
+| `/historial` | `Historial` | same |
+| `/perfil` | `Perfil` (score, SBT mint, USDC activation, access methods) | same |
+| `/retiros` | `Retiros` (USDC or SPEI withdrawal) | same |
+| `/depositar` | `Depositar` (SPEI on-ramp) | same |
+| `/tesoreria` | `Tesoreria` (treasury panel; nav entry only for `VITE_TREASURY_ADDRESS`) | same |
+| `/notificaciones` | `Notificaciones` | same |
+| `/ayuda` | `Ayuda` | same |
+| `*` | `NotFound` | — |
 
-**Guards:**
-- `RequireWallet` — redirects to `/login` if `localStorage.vinculo_wallet` is absent.
-- `RequireOnboarding` — redirects to `/bienvenida` if `localStorage.vinculo_onboarded !== "1"`.
+**Guards** read `WalletSessionContext`, which loads the session once at startup:
 
-### State (`src/context/AppContext.tsx`)
+- `RequireWallet` shows a spinner until the session is loaded, then redirects to `/login` if
+  there is no address.
+- `RequireOnboarding` redirects to `/bienvenida` if `vinculo_onboarded !== "1"`.
 
-In-memory React context. Tracks deposits, withdrawals, stakes, and credit state for the current session. Not persisted to a database — on-chain data is the source of truth.
+### Session (`src/context/WalletSessionContext.tsx`, `src/lib/sessionStore.ts`)
 
-| Action | Effect |
-|---|---|
-| `addDeposit(amount)` | Appends deposit, increments counter, triggers unlock celebration |
-| `withdrawCredit()` | Sets `creditWithdrawn = true` |
-| `addWithdrawal(amount, txHash)` | Appends withdrawal, decrements balance |
-| `addStake(amount, months)` | Appends stake position with APY |
+Keys `vinculo_wallet`, `vinculo_wallet_provider` (a kit wallet ID or `"privy"`) and
+`vinculo_onboarded`, stored in `localStorage` and mirrored to 30-day cookies so the session
+survives unreliable mobile storage. On desktop with Freighter it checks the extension every
+1.5 s and exposes `walletMismatch` when the active account changes. `disconnect()` clears
+the keys and logs out of Privy.
+
+### In-memory UI state (`src/context/AppContext.tsx`)
+
+Session-only flags: deposit counter and unlock celebration, `creditWithdrawn` (an open loan),
+local withdrawals list, success modals and `scoreAnomaly`. Nothing here is persisted; on-chain
+data is the source of truth, and an open loan is forgotten on reload
+([pending](integrations/pending.md#in-memory-state-that-should-come-from-the-chain)).
 
 ### Key components
 
 | Component | Responsibility |
 |---|---|
-| `BalanceCard` | Displays on-chain staking balance via `fetchContractBalance` |
-| `ProgressRing` | Visual progress toward next tier |
-| `CreditSection` | Polls `/api/get-available-credit`, handles loan request and repayment |
-| `DepositModal` | Freighter-signed deposit to `staking_pool` contract |
-| `NFTModal` | Shows NFT tier image and metadata |
+| `AppShell`, `BottomNav`, `navItems.ts` | Layout, header ("Actualizando…" while chain data loads), sidebar and bottom nav. |
+| `BalanceCard` | Savings position (`useSavings`). |
+| `ProgressRing`, `NftLevelCard` | Score and tier progress (`useScore`, `useCredit`). |
+| `YieldCard` | Yield earned (`useYield`). |
+| `CreditSection` | Credit limit (`useCredit`), loan request and repayment, 60 s demo countdown. |
+| `ActivityList`, `PeriodSummaryCard` | Recent activity (`useActivity`). |
+| `DepositModal` | Choose wallet deposit or SPEI; wallet deposit calls `staking_pool.deposit`. |
+| `NFTModal` | Tier image (local `public/images/`) and the mint transaction link. |
+| `WalletSetupModal` | Supported wallets and install links on `/login`. |
+| `PrivyGate`, `PrivyLayer`, `PrivyBridge` | Lazy Privy layer ([Privy](integrations/privy.md)). |
 
 ### Stellar helpers (`src/stellar/`)
 
 | File | Purpose |
 |---|---|
-| `contracts.ts` | Exports `CONTRACT_ID` (staking_pool) and `RPC_URL` |
-| `queries.ts` | `fetchContractBalance(address)` and `fetchStakeInfo(address)` — read-only Soroban simulations |
+| `contracts.ts` | `CONTRACT_ID` (`VITE_STAKING_CONTRACT_ID`), `LENDING_CONTRACT_ID`, `TREASURY_ADDRESS`, `RPC_URL`, reference `VAULT_ID`. |
+| `queries.ts` | `readSavingsSnapshot` (position, deposited, withdrawn in one go); legacy `fetch*` helpers. |
+| `deposit.ts` | `depositToVault(address, amount, sign)`, shared by the SPEI on-ramp. |
+| `trustline.ts` | Friendbot funding, USDC trustline check/build/submit, USDC balance (Horizon). |
+| `activity.ts` | History from Horizon operations plus locally stored mints. |
+| `treasury.ts` | Accrued interest and pool balance of `vinculo_lending`. |
 
-### Hooks
+### Wallet providers (`src/lib/stellarWalletsKit.ts`, `src/lib/mobileWalletConnectors.ts`, `src/wallet/`)
 
-| Hook | Purpose |
-|---|---|
-| `useWallet` | Reads `vinculo_wallet` from localStorage, provides `shortWallet`, `walletMismatch` and `disconnect` |
+Connect and sign go through **Stellar Wallets Kit**, which owns the wallet-selection modal
+(`kit.authModal()`). Registered modules: Freighter, Albedo, xBull, LOBSTR, Hana, Rabet, and
+WalletConnect when `VITE_WALLETCONNECT_PROJECT_ID` is set. App code never branches on the
+wallet: `connectWallet()` / `signTransactionXdr()` are provider-agnostic, and
+`StellarWalletAdapter` delegates to them. A Privy session signs through `privySign` instead.
+Details: [Stellar Wallets Kit](integrations/stellar-wallets-kit.md).
 
-### Wallet providers (`src/lib/stellarWalletsKit.ts`, `src/wallet/`)
+### On-chain data and caching (`src/lib/chainData.ts`, `src/lib/queryClient.ts`)
 
-Connect and sign both go through **Stellar Wallets Kit**, which owns its own
-provider-selection modal (`kit.authModal()`). App code never branches on which wallet was
-chosen — `connectWallet()` / `signTransactionXdr()` in `mobileWalletConnectors.ts` are
-provider-agnostic, and `StellarWalletAdapter` (the `WalletAdapter` implementation used
-throughout the app) simply delegates to them. Adding a new provider is a matter of
-registering its module in `stellarWalletsKit.ts` — no other files need to change.
+Balances, credit/tier, score, activity and treasury figures are read through React Query
+hooks (`useSavings`, `useYield`, `useCredit`, `useScore`, `useActivity`, `useTreasury`).
+Each value is requested once per wallet and shared by every card that shows it. There is
+**no polling**: data is fresh for 60 s and is read again when the user returns to the tab
+or opens a page after that, or right after an action that changes it.
 
-Registered modules: `FreighterModule`, `AlbedoModule`, `xBullModule`, `LobstrModule`,
-`HanaModule`, `RabetModule`.
+After a deposit, withdrawal, loan, repayment, SBT mint or treasury action, call
+`useRefreshChainData()(address)`. It refreshes that wallet's data immediately, then the
+Horizon-backed data (history and score) once more 6 s later, because Horizon indexes
+confirmed transactions with a short delay. Wait for the transaction to be confirmed
+first (`waitForConfirmation`); otherwise the network still returns the old values.
+See [ADR-003](decisions/ADR-003-no-polling-cache.md). `Perfil` still has its own fetches.
 
-| Environment | Providers | Notes |
-|---|---|---|
-| Desktop | Freighter, xBull, Lobstr, Hana, Rabet | User picks one from the kit's modal; the choice is persisted (`vinculo_wallet_provider`) and restored on reload. |
-| Mobile | Albedo | Selected automatically; also reachable via Privy for email login (see `privyBridge.ts`). |
+### Email login (Privy)
 
-**xBull on desktop:** connect and sign follow the same path as every other desktop
-provider above — no xBull-specific code exists or is needed. `useWallet`'s Freighter
-"extension gone" polling (`src/hooks/useWallet.tsx`) only applies when `provider ===
-FREIGHTER_ID`; other providers, including xBull, are not polled for availability and rely
-on the kit surfacing connection/signing errors directly.
+Privy and its dependencies weigh about 2 MB, so they load only when needed. `PrivyGate`
+mounts `PrivyLayer` next to the routes in three cases: on `/login`, for a Privy session, or
+when something calls into the bridge. App code must not import `@privy-io/*`; it uses
+`src/lib/privyBridge.ts`. See [ADR-001](decisions/ADR-001-lazy-privy.md),
+[ADR-002](decisions/ADR-002-oldest-privy-wallet.md) and [Privy](integrations/privy.md).
 
 ---
 
-## Layer 2 — Serverless API
+## Layer 2 — Serverless API (`api/`)
 
-Deployed as Vercel serverless functions. Routes are defined in `vercel.json`.
+Vercel Node functions built from `api/**/*.js` (`vercel.json` uses the legacy `builds`
+format). Files starting with `_` and `.mjs` files are shared helpers, not functions. The
+Hobby plan allows 12 functions per deployment; there are 10
+([Vercel](integrations/vercel.md)).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `POST /api/calculate-score` | POST | Computes reputation score from Horizon transaction history |
-| `POST /api/get-available-credit` | POST | Reads NFT tier from `vinculo_sbt` contract, returns credit limit |
-| `POST /api/evaluate-and-mint` | POST | Calls `calculate-score`, then mints NFT via `vinculo_sbt.mint()` |
-| `GET /api/get-user-data` | GET | Reads staking balance from `staking_pool`, derives a legacy tier |
-| `GET /api/health` | GET | Returns a lightweight service health signal for deploy checks |
-| `GET /api/readiness` | GET | Returns a readiness signal for smoke tests and deployment validation |
+| `/api/calculate-score` | POST | Score and tier from the `staking_pool` counters (`_scoring-core.mjs`). |
+| `/api/evaluate-and-mint` | POST | Recomputes the score and mints the SBT tier with the admin key. |
+| `/api/get-available-credit` | POST | Reads the SBT tier and returns the credit limit. |
+| `/api/faucet-usdc` | POST | Sends 2 test USDC once per wallet. |
+| `/api/onramp?action=…` | GET/POST | SPEI on-ramp: init, quote, payin, status, settle. |
+| `/api/blindpay?action=…` | GET/POST | SPEI off-ramp: quote, payout, status. |
+| `/api/health` | GET | Liveness. |
+| `/api/readiness` | GET | Checks Supabase; used by the keep-alive workflow. |
+| `/api/nonce` | POST | Unused (legacy). |
+| `/api/get-user-data` | GET | Unused (legacy). |
 
-## Health and readiness checks
+Request and response shapes: [API reference](api.md). Shared modules: `_scoring-core.mjs`,
+`_blindpay-core.mjs`, `_blindpay-onramp.mjs`, `_faucet-core.mjs`, `_usdc.mjs`,
+`_supabase.mjs`, `_logger.mjs` (JSON logs) and `validation.mjs` (zod schemas).
 
-- `GET /api/health` returns `200` and a JSON payload with `status: "ok"`, `endpoint: "/api/health"`, and `timestamp`.
-- `GET /api/readiness` returns `200` and a JSON payload with `status: "ready"`, `endpoint: "/api/readiness"`, and `timestamp`.
-- Non-`GET` requests receive `405 Method Not Allowed` and an `Allow: [GET]` response header.
-- A missing or unreachable endpoint indicates a deployment or server failure; a `5xx` response indicates a function runtime error.
-
-All functions set permissive CORS headers and handle `OPTIONS` preflight.
+`backend/server.js` is an Express server for local development that mirrors most endpoints
+on port 3000 (Vite proxies `/api` to it). It is not deployed and has drifted: it lacks the
+consolidated `/api/blindpay` route.
 
 ---
 
-## Layer 3 — Soroban Contracts
+## Layer 3 — Soroban contracts (`backend/contracts/`)
 
-Source in `backend/contracts/`. All deployed to Stellar Testnet.
+All on testnet. None has an `upgrade` function, so a change means a redeploy with a new ID
+([migration](contracts/migration.md)).
 
-| Contract | Env var | Responsibility |
-|---|---|---|
-| `staking_pool` | `CONTRACT_ID` (hardcoded) | Accepts XLM deposits, tracks balances and stake positions |
-| `vinculo_sbt` | `NFT_CONTRACT_ID` | Mints and stores SBT/NFT tiers per wallet address |
-| `vinculo_lending` | `VITE_LENDING_CONTRACT_ID` | Issues and tracks loans (`request_loan`, `repay`) |
+| Contract | ID variable(s) | Token | Responsibility |
+|---|---|---|---|
+| `staking_pool` | `VITE_STAKING_CONTRACT_ID`, `STAKING_CONTRACT_ID` | USDC | Custodies deposits in a DeFindex vault, tracks shares and the counters used for scoring ([DeFindex](integrations/defindex.md)). |
+| `vinculo_sbt` | `NFT_CONTRACT_ID` | — | Stores one tier (0–4) per address; only the admin can `mint` or `revoke`. |
+| `vinculo_lending` | `VITE_LENDING_CONTRACT_ID` | XLM (native) | Loans up to the tier's limit at 5 % flat; interest goes to the treasury. |
 
-**Key functions called by the app:**
+**Functions called by the app:**
 
 | Contract | Function | Called from |
 |---|---|---|
-| `staking_pool` | `deposit` | `DepositModal` (Freighter-signed) |
-| `staking_pool` | `get_balance` | `queries.ts`, `api/get-user-data.js` |
-| `staking_pool` | `get_stake` | `queries.ts` |
+| `staking_pool` | `deposit` | `DepositModal`, `depositToVault` (user-signed) |
+| `staking_pool` | `withdraw` | `Retiros` (user-signed) |
+| `staking_pool` | `get_position`, `get_total_deposited`, `get_total_withdrawn` | `readSavingsSnapshot`, scoring |
+| `staking_pool` | `get_tx_count` | scoring |
 | `vinculo_sbt` | `mint` | `api/evaluate-and-mint.js` (admin-signed) |
 | `vinculo_sbt` | `get_tier` | `api/get-available-credit.js` (simulated) |
-| `vinculo_lending` | `request_loan` | `CreditSection` (Freighter-signed) |
-| `vinculo_lending` | `repay` | `CreditSection` (Freighter-signed) |
+| `vinculo_lending` | `request_loan`, `repay` | `CreditSection` (user-signed) |
+| `vinculo_lending` | `fund_pool`, `withdraw_interest`, `withdraw_pool` | `Tesoreria` (treasury-signed) |
+| `vinculo_lending` | `get_accrued_interest`, `get_pool_balance` | `treasury.ts` (simulated) |
 
 ---
 
-## Tier System
+## Tier system
 
-| Tier | Name | Score threshold | Credit limit |
+| Tier | Name | Score | Credit limit (XLM) |
 |---|---|---|---|
-| 0 | Bronce | < 50 | 0 XLM (locked) |
-| 1 | Plata | ≥ 50 | 300 XLM |
-| 2 | Oro | ≥ 150 | 600 XLM |
-| 3 | Diamante | ≥ 500 | 1 500 XLM |
-| 4 | Platino | ≥ 1 000 | 5 000 XLM |
+| 0 | Bronce | < 50 | 0 (locked) |
+| 1 | Plata | ≥ 50 | 300 |
+| 2 | Oro | ≥ 150 | 600 |
+| 3 | Diamante | ≥ 500 | 1 500 |
+| 4 | Platino | ≥ 1 000 | 5 000 |
 
-The tier is stored on-chain in `vinculo_sbt`. The scoring engine in `api/calculate-score.js` computes a score from Horizon transaction history and maps it to a tier number. `api/evaluate-and-mint.js` is the only path that writes a new tier to the contract.
+The score comes from the user's on-chain counters in `staking_pool`
+(`api/_scoring-core.mjs`): at least 3 transactions are required, then
+`score = min(position / deposited, 1) × log10(txCount + 1) × 100`, multiplied by 0.2 if the
+position is below 10 % of what was deposited, and capped at 1 000. Tiers 3 and 4 are
+practically unreachable with this curve (issue #95). The tier is stored on-chain by
+`api/evaluate-and-mint.js`; the credit limits live in both `api/get-available-credit.js`
+(`CREDIT_LIMITS`) and `vinculo_lending` (`max_principal_for_tier`).
 
 ---
 
@@ -166,9 +227,10 @@ The tier is stored on-chain in `vinculo_sbt`. The scoring engine in `api/calcula
 
 | Change | Files to touch |
 |---|---|
-| Add a new page | `src/pages/`, `src/App.tsx` (add route) |
-| Change credit limits | `api/get-available-credit.js` → `CREDIT_LIMITS` |
-| Change score thresholds | `api/calculate-score.js` → tier mapping block |
-| Change staking APY | `src/context/AppContext.tsx` → `STAKING_APY` |
-| Add a contract function call | `src/stellar/queries.ts` (read) or component (write, Freighter-signed) |
-| Add an API endpoint | `api/<name>.js` + entry in `vercel.json` routes |
+| Add a page | `src/pages/`, a lazy route in `src/App.tsx`, `src/components/navItems.ts` if it needs a tab |
+| Show on-chain data | A hook in `src/lib/chainData.ts` (no polling, [ADR-003](decisions/ADR-003-no-polling-cache.md)) |
+| Add user-facing text | `src/i18n/locales/es.ts` and `en.ts` |
+| Change credit limits | `api/get-available-credit.js` `CREDIT_LIMITS` **and** `max_principal_for_tier` in `vinculo_lending` (redeploy) |
+| Change score thresholds or formula | `api/_scoring-core.mjs`, plus `tierFromScore` in `Perfil.tsx` and the thresholds in `ProgressRing` |
+| Add an API endpoint | Prefer a new `action` in an existing function; a new `api/<name>.js` uses one of the 2 remaining Vercel functions. Shared code goes in `api/_<name>.mjs`. |
+| Add a contract call | Read: `src/stellar/` + a `chainData` hook. Write: build, `prepareTransaction`, sign with the wallet layer, wait for confirmation, refresh. |

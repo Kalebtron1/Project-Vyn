@@ -3,7 +3,8 @@ import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
 import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useCredit, useRefreshChainData, waitForConfirmation } from "@/lib/chainData";
 import confetti from "canvas-confetti";
 
 // 🚀 IMPORTACIONES WEB3
@@ -33,32 +34,53 @@ const getLendingContractId = () => {
   return contractId;
 };
 
+// Envía la tx y espera a que la red la confirme: si se refrescan los datos antes, la red
+// aún devuelve los valores viejos (y un fallo pasaría desapercibido).
+async function sendAndConfirm(server: rpc.Server, signedXdr: string, networkPassphrase: string) {
+  const sent = await server.sendTransaction(TransactionBuilder.fromXDR(signedXdr, networkPassphrase));
+  if (sent.status === "ERROR") throw new Error("La red rechazó la transacción.");
+  if ((await waitForConfirmation(server, sent.hash)) === "FAILED") {
+    throw new Error("La transacción falló en el contrato.");
+  }
+}
+
 const CreditSection = () => {
   const { t } = useTranslation();
   const { formatAmount } = useFormatters();
-  const { creditWithdrawn, withdrawCredit, deposits, scoreAnomaly, setScoreAnomaly } = useApp();
+  const { creditWithdrawn, withdrawCredit, clearCreditWithdrawal, scoreAnomaly, setScoreAnomaly } = useApp();
   const { wallet } = useWallet();
   const [loadingTx, setLoadingTx] = useState(false);
-  const [loadingCredit, setLoadingCredit] = useState(true);
-  // Solo mostramos el spinner en la primera carga; los refrescos del polling son silenciosos.
-  const hasLoadedRef = useRef(false);
+  // Crédito y tier on-chain: lectura compartida y en caché (se refresca tras cada
+  // acción, sin polling). El spinner sólo aparece en la primera carga.
+  const credit = useCredit(wallet);
+  const refreshChainData = useRefreshChainData();
+  const loadingCredit = !wallet || credit.isPending;
   
   // 💅 ESTADO PARA ERRORES ESTÉTICOS (Reemplaza al alert)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 🔐 CANDADO DE SEGURIDAD PARA FREIGHTER
-  const [registeredWallet, setRegisteredWallet] = useState<string | null>(null);
+  // 🔐 CANDADO DE SEGURIDAD PARA FREIGHTER: la wallet real del usuario.
+  const registeredWallet = wallet ?? null;
 
   // ⏱️ ESTADOS PARA LA SIMULACIÓN DE MOROSIDAD (1 Mes = 60 Segundos)
   const [timeLeft, setTimeLeft] = useState(60);
   const [isDefaulted, setIsDefaulted] = useState(false);
   
-  const [creditData, setCreditData] = useState({
-    limit: 0,
-    tierName: "Bronce",
-    tier: 0,
-    isUnlocked: false
-  });
+  const creditData = useMemo(() => {
+    const data = credit.data;
+    if (!data?.success) return { limit: 0, tierName: "Bronce", tier: 0, isUnlocked: false };
+    const tier = Number(data.tier) || 0;
+    return {
+      limit: Number(data.availableCredit) || 0,
+      tierName: data.tierName || "Bronce",
+      tier,
+      isUnlocked: tier >= 1,
+    };
+  }, [credit.data]);
+
+  useEffect(() => {
+    if (credit.data?.anomaly) setScoreAnomaly(true);
+  }, [credit.data, setScoreAnomaly]);
 
   const toFriendlyWithdrawError = (error: any) => {
     const raw = String(error?.message || "").toLowerCase();
@@ -93,58 +115,6 @@ const CreditSection = () => {
 
   // 💰 CÁLCULO DEL TOTAL A PAGAR (Principal + 5% de Interés)
   const totalToPay = creditData.limit * 1.05;
-
-  // 📡 Sincronización con el Backend/Soroban usando wallet de localStorage
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchBlockchainCredit = async () => {
-      // Esperamos a que la wallet del contexto esté disponible; mantenemos el
-      // loader inicial (useState(true)) sin volver a tocarlo en cada poll.
-      if (!wallet) return;
-
-      const silent = hasLoadedRef.current;
-
-      try {
-        if (!silent && isMounted) setLoadingCredit(true);
-
-        // Guardamos la wallet real del usuario
-        setRegisteredWallet(wallet);
-
-        const response = await fetch(`/api/get-available-credit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userAddress: wallet })
-        });
-
-        const data = await response.json();
-
-        if (data.success && isMounted) {
-          setCreditData({
-            limit: data.availableCredit,
-            tierName: data.tierName,
-            tier: data.tier,
-            isUnlocked: data.tier >= 1
-          });
-          if (data.anomaly) setScoreAnomaly(true);
-        }
-
-      } catch (error) {
-        console.error("Error cargando crédito on-chain:", error);
-      } finally {
-        hasLoadedRef.current = true;
-        if (!silent && isMounted) setLoadingCredit(false);
-      }
-    };
-
-    fetchBlockchainCredit();
-    const intervalId = setInterval(() => fetchBlockchainCredit(), 8000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
-    };
-  }, [wallet, deposits, setScoreAnomaly]);
 
   // ⏳ TEMPORIZADOR DE COBRO (Se activa solo si hay un préstamo activo)
   useEffect(() => {
@@ -199,15 +169,14 @@ const CreditSection = () => {
 
       const preparedTx = await server.prepareTransaction(tx);
       const signedXdr = await walletAdapter.sign(preparedTx.toXDR(), networkPassphrase);
-      
-      const signedTx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
-      await server.sendTransaction(signedTx);
-      
+      await sendAndConfirm(server, signedXdr, networkPassphrase);
+
       // Reiniciamos los estados del timer
       setTimeLeft(60);
       setIsDefaulted(false);
       withdrawCredit(); 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#ffffff'] });
+      refreshChainData(userAddress);
 
     } catch (error: any) {
       console.error("❌ Error al retirar:", error);
@@ -254,11 +223,14 @@ const CreditSection = () => {
 
       const preparedTx = await server.prepareTransaction(tx);
       const signedXdr = await walletAdapter.sign(preparedTx.toXDR(), networkPassphrase);
-      
-      const signedTx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
-      await server.sendTransaction(signedTx);
-      
-      window.location.reload(); 
+      await sendAndConfirm(server, signedXdr, networkPassphrase);
+
+      // Préstamo saldado: se vuelve a la vista de crédito disponible y se refrescan
+      // saldo, crédito e historial (antes se recargaba toda la página).
+      clearCreditWithdrawal();
+      setTimeLeft(60);
+      setIsDefaulted(false);
+      refreshChainData(userAddress);
 
     } catch (error: any) {
       console.error("❌ Error al pagar:", error);

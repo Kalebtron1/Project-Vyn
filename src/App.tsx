@@ -1,26 +1,31 @@
+import { lazy, Suspense } from "react";
 import { ThemeProvider } from "next-themes";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { PrivyProvider } from "@privy-io/react-auth";
 import { AppProvider } from "@/context/AppContext";
 import { WalletSessionProvider, useWalletSession } from "@/context/WalletSessionContext";
-import { PrivyBridge } from "@/components/PrivyBridge";
-import Index from "./pages/Index.tsx";
-import Historial from "./pages/Historial.tsx";
-import Perfil from "./pages/Perfil.tsx";
-import Retiros from "./pages/Retiros.tsx";
-import Depositar from "./pages/Depositar.tsx";
-import Tesoreria from "./pages/Tesoreria.tsx";
-import Onboarding from "./pages/Onboarding.tsx";
-import Login from "./pages/Login.tsx";
-import Notificaciones from "./pages/Notificaciones.tsx";
-import Ayuda from "./pages/Ayuda.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { PrivyGate } from "@/components/PrivyGate";
+import { createAppQueryClient } from "@/lib/queryClient";
 
-const queryClient = new QueryClient();
+// Cada página se descarga al visitarla: el Stellar SDK y el kit de wallets que
+// usan sólo se cargan con las rutas que los necesitan.
+const Index = lazy(() => import("./pages/Index.tsx"));
+const Historial = lazy(() => import("./pages/Historial.tsx"));
+const Perfil = lazy(() => import("./pages/Perfil.tsx"));
+const Retiros = lazy(() => import("./pages/Retiros.tsx"));
+const Depositar = lazy(() => import("./pages/Depositar.tsx"));
+const Tesoreria = lazy(() => import("./pages/Tesoreria.tsx"));
+const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
+const Login = lazy(() => import("./pages/Login.tsx"));
+const Notificaciones = lazy(() => import("./pages/Notificaciones.tsx"));
+const Ayuda = lazy(() => import("./pages/Ayuda.tsx"));
+const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+
+// Caché de datos on-chain: se leen al entrar y tras cada acción, sin polling.
+const queryClient = createAppQueryClient();
 
 const Spinner = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -53,18 +58,13 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AppProvider>
-       <PrivyProvider
-         appId={import.meta.env.VITE_PRIVY_APP_ID}
-         config={{
-           loginMethods: ["email", "google", "apple"],
-           appearance: { theme: "light" },
-         }}
-       >
-        <PrivyBridge />
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <WalletSessionProvider>
+            {/* Privy (login con correo) se carga sólo cuando hace falta: ver PrivyGate. */}
+            <PrivyGate />
+            <Suspense fallback={<Spinner />}>
             <Routes>
               {/* Login - sin RequireWallet, completamente público */}
               <Route path="/login" element={<Login />} />
@@ -82,9 +82,9 @@ const App = () => (
               
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </WalletSessionProvider>
         </BrowserRouter>
-       </PrivyProvider>
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>

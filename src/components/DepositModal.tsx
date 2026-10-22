@@ -16,6 +16,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
 import { getUsdcBalance } from "@/stellar/trustline";
+import { useRefreshChainData, waitForConfirmation } from "@/lib/chainData";
 
 interface Props {
   open: boolean;
@@ -38,6 +39,7 @@ function friendlyDepositError(msg: string, cancelled: boolean): string {
 
 const DepositModal = ({ open, onClose }: Props) => {
   const { addDeposit, depositsCount, requiredDeposits, isUnlocked, setShowUnlockCelebration } = useApp();
+  const refreshChainData = useRefreshChainData();
   const { isMobile, provider, connect, sign } = useMobileWallet();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -141,6 +143,9 @@ const DepositModal = ({ open, onClose }: Props) => {
       }
 
       setTxHash(submitRes.hash);
+      // Cuando la red confirme el depósito, se refrescan saldo, score e historial
+      // (sin bloquear la pantalla de éxito).
+      void waitForConfirmation(server, submitRes.hash).then(() => refreshChainData(sourcePublicKey));
 
       const wasLocked = !isUnlocked;
       const willUnlock = depositsCount + 1 >= requiredDeposits;

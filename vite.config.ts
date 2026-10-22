@@ -34,6 +34,22 @@ export default defineConfig(({ mode }) => ({
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // React y el router se cargan completos en cada visita: en su propio chunk
+        // siguen cacheados entre deploys aunque cambie el código de la app.
+        // Privy/viem/WalletConnect NO van en un chunk manual: tienen pantallas que hoy
+        // se cargan bajo demanda y forzarlas a un chunk las metería al bundle inicial.
+        // El Stellar SDK ya sale solo en un chunk aparte que piden las páginas que lo usan.
+        manualChunks(id) {
+          if (/\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//.test(id)) {
+            return "vendor-react";
+          }
+        },
+      },
+    },
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
