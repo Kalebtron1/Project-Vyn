@@ -33,7 +33,10 @@ There is no environment variable for the network. The RPC URL
 - `api/_scoring-core.mjs`, `api/evaluate-and-mint.js`, `api/get-available-credit.js`,
   `api/get-user-data.js`, `api/_blindpay-core.mjs` and `backend/server.js`.
 
-Moving to mainnet means changing every one of them (issue #97 proposes one shared config).
+`Networks.TESTNET` also appears directly in the files that build transactions
+(`deposit.ts`, `queries.ts`, `treasury.ts`, `DepositModal`, `Retiros`, `Tesoreria`, …);
+19 source files in total hard-code testnet. Moving to mainnet means changing every one of
+them (issue #97 proposes one shared config).
 
 Contract IDs do come from the environment:
 
