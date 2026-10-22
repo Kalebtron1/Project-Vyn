@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { Medal, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
-import { fetchContractBalance } from "@/stellar/queries";
+import { useCredit, useScore } from "@/lib/chainData";
 import { getCurrentLevel, getNextLevel } from "@/components/ProgressRing";
 import { tierLabel } from "@/lib/tier";
 
@@ -10,54 +9,12 @@ import { tierLabel } from "@/lib/tier";
 const NftLevelCard = () => {
   const { t } = useTranslation();
   const { wallet } = useWallet();
-  const [score, setScore] = useState(0);
-  const [tier, setTier] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!wallet) {
-      setLoading(false);
-      return;
-    }
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const balance = await fetchContractBalance(wallet);
-        const [creditRes, scoreRes] = await Promise.all([
-          fetch("/api/get-available-credit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userAddress: wallet }),
-          }),
-          fetch("/api/calculate-score", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ address: wallet, totalDeposited: Number(balance) }),
-          }),
-        ]);
-        const creditData = creditRes.ok ? await creditRes.json() : {};
-        const scoreData = scoreRes.ok ? await scoreRes.json() : {};
-        const onChainTier = Number(creditData?.tier) || 0;
-        const dynamicScore = Number(scoreData?.score) || 0;
-        if (!mounted) return;
-        setTier(onChainTier);
-        // Score en vivo: sube al depositar, baja al retirar (sin piso por tier).
-        setScore(dynamicScore);
-      } catch (error) {
-        console.error("Error cargando nivel NFT:", error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    load();
-    const id = setInterval(load, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
-  }, [wallet]);
+  // Tier on-chain y score en vivo, compartidos con ProgressRing (una sola lectura).
+  const credit = useCredit(wallet);
+  const scoreQuery = useScore(wallet);
+  const loading = !!wallet && (credit.isPending || scoreQuery.isPending);
+  // Score en vivo: sube al depositar, baja al retirar (sin piso por tier).
+  const score = Number(scoreQuery.data?.score) || 0;
 
   if (loading) {
     return (

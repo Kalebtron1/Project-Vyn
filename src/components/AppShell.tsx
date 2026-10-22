@@ -1,13 +1,14 @@
 import { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bell, HelpCircle, LogOut, Wallet, AlertTriangle } from "lucide-react";
+import { Bell, HelpCircle, LogOut, Wallet, AlertTriangle, Loader2 } from "lucide-react";
 import logoVin from "@/assets/logo-vin.png";
 import BottomNav from "@/components/BottomNav";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
 import { getNavItems } from "@/components/navItems";
 import { useWallet } from "@/hooks/useWallet";
+import { useChainSyncing } from "@/lib/chainData";
 
 interface AppShellProps {
   title: string;
@@ -26,6 +27,9 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
   const { t } = useTranslation();
   const { wallet, shortWallet, walletStatus, disconnect, walletMismatch, activeAddress } =
     useWallet();
+
+  // Aviso de lectura on-chain en curso (al entrar o tras una acción).
+  const syncing = useChainSyncing();
 
   const navItems = getNavItems();
   const initials = shortWallet ? shortWallet.slice(0, 2).toUpperCase() : "WL";
@@ -107,7 +111,14 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
             </button>
             <div className="min-w-0">
               <h1 className="text-xl md:text-2xl font-extrabold tracking-tight truncate">{title}</h1>
-              {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+              {syncing ? (
+                <p className="text-xs text-primary font-semibold flex items-center gap-1.5" role="status" data-testid="chain-syncing">
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                  <span className="truncate">{t("common.syncing")}</span>
+                </p>
+              ) : (
+                subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+              )}
             </div>
           </div>
 

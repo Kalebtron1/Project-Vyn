@@ -22,6 +22,7 @@ import {
   usePrivyBridge,
 } from "@/lib/privyBridge";
 import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
+import { useRefreshChainData } from "@/lib/chainData";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
 
@@ -98,6 +99,7 @@ const Perfil = () => {
   const [linkingPasskey, setLinkingPasskey] = useState(false);
   const [linkingGoogle, setLinkingGoogle] = useState(false);
   const mountedAtRef = useRef(Date.now());
+  const refreshChainData = useRefreshChainData();
   const [activatingUsdc, setActivatingUsdc] = useState(false);
   // true si la wallet ya tiene trustline USDC (ya pasó por "Activar USDC"). Persiste entre
   // recargas (se lee on-chain). Se aplica a CUALQUIER wallet, no solo Privy.
@@ -464,6 +466,8 @@ const Perfil = () => {
         // Registra el mint en el historial local (el mint lo firma el admin, por eso
         // no aparece en las operaciones del usuario en Horizon).
         if (data.txHash) recordMint(walletAddress, mintedLevel, data.txHash, new Date().toISOString());
+        // Nivel, crédito e historial cambian: Inicio e Historial se actualizan solos.
+        refreshChainData(walletAddress);
         toast({
           title: t("profile.toast_minted_title"),
           description: t("profile.toast_minted_description", { level: mintedLevel }),

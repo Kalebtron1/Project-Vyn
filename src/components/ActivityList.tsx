@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import {
   ArrowUpRight, ArrowDownLeft, ArrowUpFromLine, Banknote, Award,
@@ -6,7 +5,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
-import { fetchActivity, type ActivityItem, type ActivityKind } from "@/stellar/activity";
+import { type ActivityKind } from "@/stellar/activity";
+import { useActivity } from "@/lib/chainData";
 
 // Estética por tipo de acción. Depósito/retiro de ahorro = USDC; préstamo/pago = XLM;
 // mint = nivel (sin moneda).
@@ -23,33 +23,12 @@ const KIND_META: Record<
 
 const ActivityList = () => {
   const { wallet: walletAddress } = useWallet();
-  const [movements, setMovements] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const { t } = useTranslation();
   const { formatAmount, formatDate } = useFormatters();
-
-  useEffect(() => {
-    if (!walletAddress) {
-      setLoading(false);
-      return;
-    }
-
-    const load = async () => {
-      try {
-        const items = await fetchActivity(walletAddress);
-        setMovements(items.slice(0, 5));
-      } catch (error) {
-        console.error("Error cargando actividad:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-    // Refresco silencioso para reflejar nuevas acciones sin recargar la página.
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
-  }, [walletAddress]);
+  // Actividad compartida con el resumen del periodo e Historial (en caché).
+  const { data: items = [], isPending } = useActivity(walletAddress);
+  const loading = !!walletAddress && isPending;
+  const movements = items.slice(0, 5);
 
   if (loading) {
     return (

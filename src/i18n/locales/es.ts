@@ -15,6 +15,7 @@ const es = {
     app_name: "Vyn",
     app_tagline: "Stellar Microcredits",
     loading: "Cargando...",
+    syncing: "Actualizando…",
     error: "Error",
     close: "Cerrar",
     copy: "Copiar",
@@ -142,6 +143,8 @@ const es = {
 
   // ─── Home / Index ────────────────────────────────────────────────────────────
   home: {
+    balance_title: "Mi ahorro",
+    balance_caption: "Saldo disponible en contrato",
     deposit_button: "Depositar Ganancias",
     wallet_disconnected_title: "Wallet desconectada",
     wallet_disconnected_description:

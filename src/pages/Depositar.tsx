@@ -18,6 +18,7 @@ import confetti from "canvas-confetti";
 import AppShell from "@/components/AppShell";
 import { useWalletSession } from "@/context/WalletSessionContext";
 import { PRIVY_PROVIDER, usePrivyBridge } from "@/lib/privyBridge";
+import { useRefreshChainData } from "@/lib/chainData";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
 import { depositToVault } from "@/stellar/deposit";
@@ -36,6 +37,7 @@ const Depositar = () => {
   const navigate = useNavigate();
   const { address, provider } = useWalletSession();
   const { email } = usePrivyBridge();
+  const refreshChainData = useRefreshChainData();
   const { sign } = useMobileWallet();
 
   const [vaulted, setVaulted] = useState(false); // true si el USDC se depositó al vault
@@ -172,6 +174,8 @@ const Depositar = () => {
             if (!cancelled) setVaulted(true);
           }
         } catch { /* USDC en la wallet; depósito manual disponible */ }
+        // Saldo, score e historial cambian: se refrescan (la lectura ya está en caché).
+        refreshChainData(address);
         if (cancelled) return;
         setStep("success");
         confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 } });
@@ -183,7 +187,7 @@ const Depositar = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [step, payin, address, sign]);
+  }, [step, payin, address, sign, refreshChainData]);
 
   const copyClabe = async () => {
     if (!payin) return;

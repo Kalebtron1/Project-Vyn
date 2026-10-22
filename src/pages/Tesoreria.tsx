@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   Landmark, Fingerprint, CheckCircle2, X, Coins, Wallet, Smartphone, ArrowDownToLine, PlusCircle,
@@ -10,7 +10,7 @@ import { useMobileWallet } from "@/hooks/useMobileWallet";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { LENDING_CONTRACT_ID, TREASURY_ADDRESS, RPC_URL } from "@/stellar/contracts";
-import { fetchAccruedInterest, fetchPoolBalance } from "@/stellar/treasury";
+import { useRefreshChainData, useTreasury } from "@/lib/chainData";
 
 // Acciones que la tesorería puede ejecutar contra vinculo_lending desde este panel:
 //  - interest: withdraw_interest → retira la ganancia (interés acumulado).
@@ -33,8 +33,12 @@ const Tesoreria = () => {
   const savedWallet = (localStorage.getItem("vinculo_wallet") || "").trim();
   const isTreasury = !!TREASURY_ADDRESS && savedWallet === TREASURY_ADDRESS.trim();
 
-  const [accrued, setAccrued] = useState<number>(0);
-  const [poolBalance, setPoolBalance] = useState<number>(0);
+  // Interés acumulado y liquidez del pool: en caché, se refrescan tras cada acción
+  // (antes cada 5 s).
+  const treasury = useTreasury(savedWallet, isTreasury);
+  const refreshChainData = useRefreshChainData();
+  const accrued = treasury.data?.accrued ?? 0;
+  const poolBalance = treasury.data?.pool ?? 0;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [action, setAction] = useState<TreasuryAction>("interest");
@@ -45,26 +49,6 @@ const Tesoreria = () => {
   // Liquidez libre = balance del pool − interés acumulado (lo único retirable como
   // capital; el interés se retira aparte con withdraw_interest).
   const freeLiquidity = Math.max(0, poolBalance - accrued);
-
-  const loadData = useCallback(async (address: string) => {
-    try {
-      const [interest, pool] = await Promise.all([
-        fetchAccruedInterest(address),
-        fetchPoolBalance(address),
-      ]);
-      setAccrued(interest);
-      setPoolBalance(pool);
-    } catch (error) {
-      console.error("Error al cargar datos de tesorería:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isTreasury || !savedWallet) return;
-    loadData(savedWallet);
-    const intervalId = setInterval(() => loadData(savedWallet), 5000);
-    return () => clearInterval(intervalId);
-  }, [isTreasury, savedWallet, loadData]);
 
   // Acceso restringido: cualquier wallet que no sea la tesorería se redirige al inicio.
   if (!isTreasury) return <Navigate to="/" replace />;
@@ -77,7 +61,6 @@ const Tesoreria = () => {
   const handleClose = () => {
     setStep("input"); setAmount(""); setErrorMsg("");
     setModalOpen(false);
-    loadData(savedWallet);
   };
 
   // Pipeline genérico de firma+envío: arma la operación con la función indicada,
@@ -123,7 +106,7 @@ const Tesoreria = () => {
       }
 
       if (txStatus === "SUCCESS") {
-        loadData(savedWallet);
+        refreshChainData(savedWallet);
         setStep("success");
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.65 } });
       } else {
