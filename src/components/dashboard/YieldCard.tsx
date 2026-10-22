@@ -1,13 +1,14 @@
 import { TrendingUp, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
-import { useYield } from "@/hooks/useYield";
+import { useYield } from "@/lib/chainData";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /** Rendimiento real generado en el vault DeFindex (dato on-chain). */
 const YieldCard = () => {
   const { t } = useTranslation();
   const { wallet } = useWallet();
-  const { yieldEarned } = useYield(wallet);
+  const { yieldEarned, loading, fetching } = useYield(wallet);
 
   return (
     <div className="card-elevated p-5">
@@ -22,7 +23,13 @@ const YieldCard = () => {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-emerald-500 tabular-nums">+{yieldEarned.toFixed(2)} USDC</p>
+          {loading ? (
+            <Skeleton className="h-5 w-24 ml-auto mb-1" />
+          ) : (
+            <p className={`text-sm font-bold text-emerald-500 tabular-nums ${fetching ? "animate-pulse" : ""}`}>
+              +{yieldEarned.toFixed(2)} USDC
+            </p>
+          )}
           <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1 justify-end">
             <Sparkles className="w-3 h-3 text-accent" /> {t("withdrawals.yield_label")}
           </p>

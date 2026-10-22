@@ -8,6 +8,7 @@ const en = {
     app_name: "Vyn",
     app_tagline: "Stellar Microcredits",
     loading: "Loading...",
+    syncing: "Updating…",
     error: "Error",
     close: "Close",
     copy: "Copy",
@@ -130,6 +131,8 @@ const en = {
   },
 
   home: {
+    balance_title: "My savings",
+    balance_caption: "Balance available in the contract",
     deposit_button: "Deposit Earnings",
     wallet_disconnected_title: "Wallet disconnected",
     wallet_disconnected_description:

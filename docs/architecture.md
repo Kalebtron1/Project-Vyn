@@ -98,6 +98,23 @@ provider above — no xBull-specific code exists or is needed. `useWallet`'s Fre
 FREIGHTER_ID`; other providers, including xBull, are not polled for availability and rely
 on the kit surfacing connection/signing errors directly.
 
+### On-chain data and caching (`src/lib/chainData.ts`, `src/lib/queryClient.ts`)
+
+Balances, credit/tier, score, activity and treasury figures are read through React Query
+hooks (`useSavings`, `useYield`, `useCredit`, `useScore`, `useActivity`, `useTreasury`).
+Each value is requested once per wallet and shared by every card that shows it. There is
+**no polling**: data is fresh for 60 s and is read again when the user returns to the tab
+or opens a page after that, or right after an action that changes it.
+
+After a deposit, withdrawal, loan, repayment, SBT mint or treasury action, call
+`useRefreshChainData()(address)`. It refreshes that wallet's data immediately, then the
+Horizon-backed data (history and score) once more a few seconds later, because Horizon
+indexes confirmed transactions with a short delay. Wait for the transaction to be confirmed
+first (`waitForConfirmation`); otherwise the network still returns the old values.
+
+While any of these reads is in flight, the header shows "Actualizando…" in place of the
+page subtitle, and cards show skeletons on their first load.
+
 ### Email login (Privy, `src/components/PrivyLayer.tsx`, `src/lib/privyBridge.ts`)
 
 Privy and its dependencies weigh about 2 MB, so they load only when needed. `PrivyGate`

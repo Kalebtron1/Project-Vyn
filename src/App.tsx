@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { ThemeProvider } from "next-themes";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/context/AppContext";
 import { WalletSessionProvider, useWalletSession } from "@/context/WalletSessionContext";
 import { PrivyGate } from "@/components/PrivyGate";
+import { createAppQueryClient } from "@/lib/queryClient";
 
 // Cada página se descarga al visitarla: el Stellar SDK y el kit de wallets que
 // usan sólo se cargan con las rutas que los necesitan.
@@ -23,7 +24,8 @@ const Notificaciones = lazy(() => import("./pages/Notificaciones.tsx"));
 const Ayuda = lazy(() => import("./pages/Ayuda.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
-const queryClient = new QueryClient();
+// Caché de datos on-chain: se leen al entrar y tras cada acción, sin polling.
+const queryClient = createAppQueryClient();
 
 const Spinner = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">

@@ -1,39 +1,15 @@
-import { useState, useEffect } from "react";
 import { ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
-import { fetchActivity, type ActivityItem } from "@/stellar/activity";
+import { useActivity } from "@/lib/chainData";
 
 /** Resumen del periodo (mes en curso) derivado de la actividad real on-chain. */
 const PeriodSummaryCard = () => {
   const { t } = useTranslation();
   const { wallet } = useWallet();
-  const [items, setItems] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!wallet) {
-      setLoading(false);
-      return;
-    }
-    let mounted = true;
-    const load = async () => {
-      try {
-        const activity = await fetchActivity(wallet);
-        if (mounted) setItems(activity);
-      } catch (error) {
-        console.error("Error cargando resumen del periodo:", error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    load();
-    const id = setInterval(load, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
-  }, [wallet]);
+  // Misma actividad que ActivityList (una sola lectura de Horizon, en caché).
+  const { data: items = [], isPending } = useActivity(wallet);
+  const loading = !!wallet && isPending;
 
   // Filtra al mes en curso.
   const now = new Date();

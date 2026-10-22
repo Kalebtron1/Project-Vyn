@@ -31,6 +31,8 @@ interface AppContextType extends AppState {
   addDeposit: (amount: number) => void;
   // -> simulateWeek eliminada
   withdrawCredit: () => void;
+  /** El préstamo se pagó: vuelve a la vista de crédito disponible. */
+  clearCreditWithdrawal: () => void;
   addWithdrawal: (amount: number, txHash: string) => void;
   showSuccess: boolean;
   setShowSuccess: (v: boolean) => void;
@@ -96,6 +98,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({ ...prev, creditWithdrawn: true }));
   }, []);
 
+  const clearCreditWithdrawal = useCallback(() => {
+    setState((prev) => ({ ...prev, creditWithdrawn: false }));
+  }, []);
+
   const addWithdrawal = useCallback((amount: number, txHash: string) => {
     setState((prev) => ({
       ...prev,
@@ -119,6 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addDeposit,
         // -> simulateWeek eliminada del Provider
         withdrawCredit,
+        clearCreditWithdrawal,
         addWithdrawal,
         showSuccess,
         setShowSuccess,

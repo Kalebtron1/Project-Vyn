@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowDownToLine, Fingerprint, CheckCircle2,
   X, TrendingUp, Sparkles, Smartphone,
@@ -13,17 +13,19 @@ import { useMobileWallet } from "@/hooks/useMobileWallet";
 
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
-import { fetchContractBalance, fetchTotalDeposited, fetchTotalWithdrawn } from "@/stellar/queries";
+import { useRefreshChainData, useYield } from "@/lib/chainData";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Retiros = () => {
   const { addWithdrawal } = useApp();
   const { isMobile, provider, connect, sign } = useMobileWallet();
   const { t } = useTranslation();
 
-  // Posición real en vivo (depósito + rendimiento del vault DeFindex).
-  const [realBalance, setRealBalance] = useState<number>(0);
-  const [netPrincipal, setNetPrincipal] = useState<number>(0);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  // Posición real en vivo (depósito + rendimiento del vault DeFindex): lectura compartida
+  // con Inicio, en caché; se refresca tras cada retiro (sin polling).
+  const { realBalance, yieldEarned, loading: balanceLoading, fetching: balanceFetching } = useYield(walletAddress);
+  const refreshChainData = useRefreshChainData();
 
   // Modal de Retiro
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,29 +68,9 @@ const Retiros = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadData = useCallback(async (address: string) => {
-    try {
-      const [position, deposited, withdrawn] = await Promise.all([
-        fetchContractBalance(address),
-        fetchTotalDeposited(address),
-        fetchTotalWithdrawn(address),
-      ]);
-      setRealBalance(position);
-      setNetPrincipal(Math.max(0, deposited - withdrawn));
-    } catch (error) { console.error("Error al cargar datos:", error); }
-  }, []);
-
-  useEffect(() => {
-    if (!walletAddress) return;
-    loadData(walletAddress);
-    const intervalId = setInterval(() => loadData(walletAddress), 5000);
-    return () => clearInterval(intervalId);
-  }, [walletAddress, loadData]);
-
   const handleClose = () => {
     setStep("input"); setAmount("25"); setErrorMsg("");
     setModalOpen(false);
-    if (walletAddress) loadData(walletAddress);
   };
 
   // Firma y envía una invocación de contrato; devuelve el resultado sin tocar la UI,
@@ -159,7 +141,7 @@ const Retiros = () => {
       nativeToScVal(valStroops, { type: "i128" }),
     ]);
     if (res.ok) {
-      if (walletAddress) loadData(walletAddress);
+      refreshChainData(walletAddress);
       addWithdrawal(val, res.hash);
       setStep("success");
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.65 } });
@@ -212,7 +194,7 @@ const Retiros = () => {
       nativeToScVal(valStroops, { type: "i128" }),
     ]);
     if (!res.ok) { setSpeiError(res.error || ""); setSpeiStep("error"); return; }
-    if (walletAddress) loadData(walletAddress);
+    refreshChainData(walletAddress);
     addWithdrawal(val, res.hash);
 
     setSpeiSigningLabel(t("withdrawals.spei.sending"));
@@ -269,11 +251,8 @@ const Retiros = () => {
     setSpeiError("");
     setQuote(null);
     setSpeiResult(null);
-    if (walletAddress) loadData(walletAddress);
   };
 
-  // Rendimiento real generado (posición − principal neto aportado).
-  const yieldEarned = Math.max(0, realBalance - netPrincipal);
 
   // Métodos de retiro: USDC real + roadmap MXN (próximamente).
   const methods = [
@@ -292,7 +271,13 @@ const Retiros = () => {
             <div className="flex items-center justify-between md:justify-start gap-5">
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-0.5">{t("withdrawals.available_balance")}</p>
-                <p className="text-2xl font-extrabold text-foreground tabular-nums">{realBalance.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">USDC</span></p>
+                {balanceLoading ? (
+                  <Skeleton className="h-8 w-32 my-0.5" data-testid="withdraw-balance-loading" />
+                ) : (
+                  <p className={`text-2xl font-extrabold text-foreground tabular-nums ${balanceFetching ? "animate-pulse" : ""}`}>
+                    {realBalance.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">USDC</span>
+                  </p>
+                )}
               </div>
               <button onClick={openWithdraw} disabled={realBalance <= 0} className="btn-emerald flex items-center gap-2 px-5 py-3 text-sm disabled:opacity-40 md:hidden">
                 <ArrowDownToLine className="w-4 h-4" /> {t("withdrawals.withdraw_button")}
@@ -368,7 +353,11 @@ const Retiros = () => {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-emerald-500">+{yieldEarned.toFixed(2)} USDC</p>
+                {balanceLoading ? (
+                  <Skeleton className="h-5 w-24" />
+                ) : (
+                  <p className={`text-sm font-bold text-emerald-500 ${balanceFetching ? "animate-pulse" : ""}`}>+{yieldEarned.toFixed(2)} USDC</p>
+                )}
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1 justify-end">
                   <Sparkles className="w-3 h-3 text-accent" /> {t("withdrawals.yield_label")}
                 </p>
