@@ -1,5 +1,9 @@
 # WebSocket Streams — Durable Replay on Reconnect
 
+> **Status (2026-10-22):** not deployed. Only the hub library and its tests exist; there is
+> no server, `contract_events` table, event producer or client. See
+> [WebSocket integration](integrations/websocket.md).
+
 ## Endpoint
 
 ```

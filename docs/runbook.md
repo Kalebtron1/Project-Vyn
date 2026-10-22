@@ -8,12 +8,12 @@ Use this document during an incident or deploy. For full setup instructions see 
 
 | Resource | URL |
 |---|---|
-| App | `https://<your-vercel-project>.vercel.app` |
-| Health check | `https://<your-vercel-project>.vercel.app/api/health` |
-| Readiness check | `https://<your-vercel-project>.vercel.app/api/readiness` |
+| App | `https://www.projectvyn.dev` |
+| Health check | `https://www.projectvyn.dev/api/health` |
+| Readiness check | `https://www.projectvyn.dev/api/readiness` |
 | Vercel dashboard | `https://vercel.com/dashboard` |
 
-Replace `<your-vercel-project>` with the actual Vercel project slug.
+The apex domain `projectvyn.dev` redirects to `www` with a `308`.
 
 ---
 
@@ -42,11 +42,12 @@ Run these checks immediately after any production deploy.
 ### 1. Health endpoints
 
 ```bash
-curl -s https://<your-vercel-project>.vercel.app/api/health
+curl -s https://www.projectvyn.dev/api/health
 # Expected: {"status":"ok"} or similar
 
-curl -s https://<your-vercel-project>.vercel.app/api/readiness
-# Expected: {"status":"ready"} or similar
+curl -s https://www.projectvyn.dev/api/readiness
+# Expected: {"status":"ready", ..., "checks":{"supabase":"ok"}}
+# 503 with "not_ready" means Supabase is down or paused (see docs/integrations/supabase.md).
 ```
 
 Locally (requires `backend/server.js` running on port 3000):
@@ -65,13 +66,13 @@ Open the production URL in a browser. Confirm:
 
 ```bash
 # Score calculation
-curl -s -X POST https://<your-vercel-project>.vercel.app/api/calculate-score \
+curl -s -X POST https://www.projectvyn.dev/api/calculate-score \
   -H "Content-Type: application/json" \
   -d '{"address":"G...","totalDeposited":0}'
 # Expected: JSON with a score field, not a 500.
 
 # Available credit
-curl -s -X POST https://<your-vercel-project>.vercel.app/api/get-available-credit \
+curl -s -X POST https://www.projectvyn.dev/api/get-available-credit \
   -H "Content-Type: application/json" \
   -d '{"userAddress":"G..."}'
 # Expected: JSON with tier and availableCredit fields, not a 500.
@@ -92,7 +93,7 @@ If any API route returns `500`, check the Vercel dashboard for missing env vars:
 
 `STAKING_CONTRACT_ID` and `VITE_STAKING_CONTRACT_ID` must hold the **same** contract ID. There is no fallback — a missing value returns a `500`.
 
-> See [deployment.md — Environment variables in Vercel](deployment.md#environment-variables-in-vercel) for the full variable list.
+> See [deployment.md — Environment variables in Vercel](deployment.md#environment-variables) for the full variable list.
 
 ---
 
@@ -144,7 +145,7 @@ After any rollback, re-run the [post-deploy verification](#post-deploy-verificat
 
 - Confirm the user has Freighter (desktop) or Albedo (mobile) installed.
 - Check that `VITE_STAKING_CONTRACT_ID` and `VITE_LENDING_CONTRACT_ID` are set — the frontend reads these at startup.
-- See [flows.md — Authentication](flows.md#1-authentication-and-wallet-setup) for the full auth flow.
+- See [flows.md — Authentication](flows.md#1-sign-in) for the full auth flow.
 
 ### NFT/SBT minting stuck
 
