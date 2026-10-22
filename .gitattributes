@@ -1,0 +1,2 @@
+# docs/ is an Obsidian vault and Obsidian saves with LF; keep LF on every OS
+docs/** text eol=lf
