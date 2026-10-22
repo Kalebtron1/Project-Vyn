@@ -21,11 +21,24 @@ export const E2E_PRIVY_PASSKEY_KEY = "e2e_privy_passkey";
 export const E2E_PRIVY_GOOGLE_KEY = "e2e_privy_google";
 /** When set, linking Google fails as "already linked to another user". */
 export const E2E_PRIVY_GOOGLE_TAKEN_KEY = "e2e_privy_google_taken";
+/** The stub's account has two Stellar wallets (the newer one listed first). */
+export const E2E_PRIVY_TWO_WALLETS_KEY = "e2e_privy_two_wallets";
 export const E2E_PRIVY_EMAIL = "e2e@vyn.test";
 
 /** Test-only wallet (testnet, never funded). Derived from a fixed seed so no secret is stored. */
 export function e2ePrivyKeypair(): Keypair {
   return Keypair.fromRawEd25519Seed(Buffer.alloc(32, 7));
+}
+
+/** Second test wallet, created after the first (see E2E_PRIVY_TWO_WALLETS_KEY). */
+export function e2ePrivySecondKeypair(): Keypair {
+  return Keypair.fromRawEd25519Seed(Buffer.alloc(32, 8));
+}
+
+/** The stub's keypair for one of its wallet addresses. */
+export function e2ePrivyKeypairFor(address: string): Keypair {
+  const second = e2ePrivySecondKeypair();
+  return second.publicKey() === address ? second : e2ePrivyKeypair();
 }
 
 export type PrivyCall = "login" | "logout" | "exportWallet" | "signRawHash" | "linkPasskey" | "linkGoogle";

@@ -5,13 +5,13 @@
  */
 
 import { Buffer } from "buffer";
-import { e2ePrivyKeypair, recordPrivyCall } from "./privy-wallet";
+import { e2ePrivyKeypair, e2ePrivyKeypairFor, recordPrivyCall } from "./privy-wallet";
 
 export function useSignRawHash() {
   return {
-    signRawHash: async ({ hash }: { address: string; chainType: string; hash: string }) => {
+    signRawHash: async ({ address, hash }: { address: string; chainType: string; hash: string }) => {
       recordPrivyCall("signRawHash");
-      const signature = e2ePrivyKeypair().sign(Buffer.from(hash.replace(/^0x/, ""), "hex"));
+      const signature = e2ePrivyKeypairFor(address).sign(Buffer.from(hash.replace(/^0x/, ""), "hex"));
       return { signature: `0x${Buffer.from(signature).toString("hex")}` };
     },
   };

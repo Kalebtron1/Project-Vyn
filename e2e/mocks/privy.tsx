@@ -15,13 +15,15 @@ import {
   E2E_PRIVY_LOGIN_FAILURE_KEY,
   E2E_PRIVY_PASSKEY_KEY,
   E2E_PRIVY_READY_DELAY_KEY,
+  E2E_PRIVY_TWO_WALLETS_KEY,
   e2ePrivyKeypair,
+  e2ePrivySecondKeypair,
   recordPrivyCall,
 } from "./privy-wallet";
 
 type PrivyUser = {
   email: { address: string };
-  linkedAccounts: Array<{ type: string; chainType: string; address: string }>;
+  linkedAccounts: Array<{ type: string; chainType: string; address: string; firstVerifiedAt?: string }>;
 };
 
 type PrivyValue = {
@@ -123,7 +125,21 @@ export function PrivyProvider({
         ? {
             email: { address: E2E_PRIVY_EMAIL },
             linkedAccounts: [
-              { type: "wallet", chainType: "stellar", address: e2ePrivyKeypair().publicKey() },
+              // Like Privy, linkedAccounts has no guaranteed order: the newer wallet comes first.
+              ...(localStorage.getItem(E2E_PRIVY_TWO_WALLETS_KEY)
+                ? [{
+                    type: "wallet",
+                    chainType: "stellar",
+                    address: e2ePrivySecondKeypair().publicKey(),
+                    firstVerifiedAt: "2026-06-28T11:22:05Z",
+                  }]
+                : []),
+              {
+                type: "wallet",
+                chainType: "stellar",
+                address: e2ePrivyKeypair().publicKey(),
+                firstVerifiedAt: "2026-06-28T11:22:01Z",
+              },
               ...(passkeyLinked ? [{ type: "passkey", chainType: "", address: "" }] : []),
               ...(googleLinked ? [{ type: "google_oauth", chainType: "", address: "" }] : []),
             ],
