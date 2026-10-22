@@ -1,0 +1,31 @@
+name: supabase-keepalive
+
+# Supabase pausa los proyectos del plan Free que tienen poca actividad en 7 días.
+# Cada 6 horas este job llama a /api/readiness en producción, que hace una lectura
+# mínima en Supabase: eso cuenta como actividad y, si Supabase no responde o falta su
+# configuración en Vercel, el job falla y GitHub avisa por correo.
+#
+# - Corre en el minuto 17 para evitar la carga de GitHub al inicio de cada hora.
+# - Otra URL (p. ej. un preview): variable de repositorio KEEPALIVE_BASE_URL.
+# - En un repo público, GitHub desactiva los workflows programados tras 60 días sin
+#   actividad en el repo; se reactiva desde la pestaña Actions.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /api/readiness
+        env:
+          BASE_URL: ${{ vars.KEEPALIVE_BASE_URL || 'https://www.projectvyn.dev' }}
+        run: |
+          body=$(curl -sS --fail-with-body --retry 3 --retry-delay 20 --max-time 30 "$BASE_URL/api/readiness")
+          echo "$body"
+          echo "$body" | jq -e '.checks.supabase == "ok"' > /dev/null
