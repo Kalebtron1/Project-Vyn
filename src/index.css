@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,102 +6,118 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 240 20% 16%;
+    /* Órbita claro: fondo #F4F6FD, tinta #0E1530, acción #1670CC, nivel #6236C8 */
+    --background: 227 68% 97%;
+    --foreground: 228 55% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 20% 16%;
+    --card-foreground: 228 55% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 20% 16%;
+    --popover-foreground: 228 55% 12%;
 
-    --primary: 201 100% 42%;
+    --primary: 210 81% 44%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 18% 93%;
-    --secondary-foreground: 240 20% 16%;
+    --secondary: 227 45% 93%;
+    --secondary-foreground: 228 55% 12%;
 
-    --muted: 220 15% 93%;
-    --muted-foreground: 220 8% 50%;
+    --muted: 227 45% 93%;
+    --muted-foreground: 226 23% 40%;
 
-    --accent: 272 54% 37%;
+    --accent: 258 57% 50%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 18% 89%;
-    --input: 220 18% 89%;
-    --ring: 201 100% 42%;
+    --border: 226 39% 89%;
+    --input: 226 39% 89%;
+    --ring: 210 81% 44%;
 
     --radius: 1rem;
 
+    /* Brillo del fondo, botón principal y tarjeta de nivel. */
+    --ambient: 250 72% 91%;
+    --action-from: 210 81% 44%;
+    --action-to: 258 57% 50%;
+    --metal: linear-gradient(135deg, #141B3D 0%, #2A1F66 100%);
+    --metal-ink: 0 0% 100%;
+    --metal-sub: 229 47% 85%;
+    --metal-shadow: 0 12px 28px rgba(42, 31, 102, 0.3);
+
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary: 210 81% 44%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 201 100% 42%;
+    --sidebar-ring: 210 81% 44%;
 
     /* Custom tokens */
-    --sky: 201 100% 42%;
-    --sky-light: 201 85% 52%;
+    --sky: 210 81% 44%;
+    --sky-light: 210 75% 54%;
     --deep: 215 80% 39%;
     --deep-light: 215 65% 50%;
-    --grape: 272 54% 37%;
-    --grape-light: 272 44% 50%;
+    --grape: 258 57% 50%;
+    --grape-light: 258 55% 62%;
     --surface-raised: 0 0% 100%;
   }
 
-  /* ─── Modo oscuro (paleta del rediseño: bg #0F1535, card #182246, borde #28335E, input #1F2A54) ─── */
+  /* ─── Órbita oscuro: fondo #0A0E24, tarjeta #151B3A, borde #2A3260, acento #6CCBFF ─── */
   .dark {
-    --background: 231 56% 13%;
-    --foreground: 213 27% 91%;
+    --background: 231 57% 9%;
+    --foreground: 228 71% 97%;
 
-    --card: 227 49% 18%;
-    --card-foreground: 213 27% 91%;
+    --card: 230 47% 15%;
+    --card-foreground: 228 71% 97%;
 
-    --popover: 227 49% 18%;
-    --popover-foreground: 213 27% 91%;
+    --popover: 230 47% 15%;
+    --popover-foreground: 228 71% 97%;
 
-    --primary: 201 100% 52%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 201 100% 71%;
+    --primary-foreground: 231 57% 9%;
 
-    --secondary: 227 46% 23%;
-    --secondary-foreground: 213 27% 91%;
+    --secondary: 231 39% 21%;
+    --secondary-foreground: 228 71% 97%;
 
-    --muted: 227 46% 23%;
-    --muted-foreground: 226 24% 70%;
+    --muted: 231 39% 21%;
+    --muted-foreground: 227 35% 75%;
 
-    --accent: 272 54% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 258 80% 76%;
+    --accent-foreground: 231 57% 9%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 80% 68%;
+    --destructive-foreground: 231 57% 9%;
 
-    --border: 228 40% 26%;
-    --input: 228 40% 26%;
-    --ring: 201 100% 52%;
+    --border: 231 39% 27%;
+    --input: 231 39% 27%;
+    --ring: 201 100% 71%;
 
-    --sidebar-background: 227 50% 16%;
-    --sidebar-foreground: 213 27% 91%;
-    --sidebar-primary: 201 100% 52%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 227 46% 23%;
-    --sidebar-accent-foreground: 213 27% 91%;
-    --sidebar-border: 228 40% 26%;
-    --sidebar-ring: 201 100% 52%;
+    --ambient: 250 55% 27%;
+    --metal: linear-gradient(135deg, #E9EDF5 0%, #BAC2D2 52%, #E1E5EE 100%);
+    --metal-ink: 228 53% 12%;
+    --metal-sub: 226 24% 30%;
+    --metal-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 
-    /* Custom tokens (un punto más claros para contraste en fondo oscuro) */
-    --sky: 201 100% 56%;
-    --sky-light: 201 85% 64%;
+    --sidebar-background: 230 47% 13%;
+    --sidebar-foreground: 228 71% 97%;
+    --sidebar-primary: 201 100% 71%;
+    --sidebar-primary-foreground: 231 57% 9%;
+    --sidebar-accent: 231 39% 21%;
+    --sidebar-accent-foreground: 228 71% 97%;
+    --sidebar-border: 231 39% 27%;
+    --sidebar-ring: 201 100% 71%;
+
+    /* Custom tokens (más claros para contraste en fondo oscuro) */
+    --sky: 201 100% 71%;
+    --sky-light: 201 85% 78%;
     --deep: 215 70% 54%;
     --deep-light: 215 65% 62%;
-    --grape: 272 52% 62%;
-    --grape-light: 272 46% 70%;
-    --surface-raised: 227 49% 18%;
+    --grape: 258 80% 76%;
+    --grape-light: 258 80% 82%;
+    --surface-raised: 230 47% 15%;
   }
 }
 
@@ -112,7 +128,9 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Figtree', system-ui, sans-serif;
+    background-image: radial-gradient(120% 420px at 80% 0, hsl(var(--ambient)) 0%, transparent 72%);
+    background-repeat: no-repeat;
   }
 }
 
@@ -132,18 +150,30 @@
   }
 
   .card-navy {
-    background: linear-gradient(135deg, hsl(var(--deep)) 0%, hsl(var(--sky)) 100%);
+    background: linear-gradient(135deg, hsl(var(--action-from)) 0%, hsl(var(--action-to)) 100%);
     @apply rounded-2xl text-white;
   }
 
+  /* Tarjeta de nivel: plata sobre fondo oscuro, azul noche sobre fondo claro. */
+  .card-metal {
+    background: var(--metal);
+    color: hsl(var(--metal-ink));
+    box-shadow: var(--metal-shadow);
+    @apply rounded-3xl;
+  }
+
+  .card-metal-sub {
+    color: hsl(var(--metal-sub));
+  }
+
   .btn-emerald {
-    background: linear-gradient(135deg, hsl(var(--deep)) 0%, hsl(var(--grape)) 100%);
+    background: linear-gradient(135deg, hsl(var(--action-from)) 0%, hsl(var(--action-to)) 100%);
     @apply text-white font-bold rounded-2xl px-6 py-3 transition-all duration-200 active:scale-[0.97];
-    box-shadow: 0 4px 12px hsla(var(--deep), 0.3);
+    box-shadow: 0 8px 24px hsla(var(--action-to), 0.35);
   }
 
   .btn-emerald:hover {
-    box-shadow: 0 6px 20px hsla(var(--deep), 0.4);
+    box-shadow: 0 10px 28px hsla(var(--action-to), 0.45);
   }
 
   .progress-ring {
