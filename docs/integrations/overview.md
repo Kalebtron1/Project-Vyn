@@ -16,7 +16,7 @@ calls, variables, data and failure modes. Everything runs on **testnet / sandbox
 | [Privy](privy.md) | Email / Google / passkey login with an embedded Stellar wallet | `PrivyGate`, `PrivyLayer`, `PrivyBridge`, `privyBridge.ts` | `VITE_PRIVY_APP_ID` | Email users can't sign in or sign |
 | [Stellar Wallets Kit](stellar-wallets-kit.md) | Freighter, Albedo, xBull, LOBSTR, Hana, Rabet, WalletConnect | `stellarWalletsKit.ts`, `mobileWalletConnectors.ts` | `VITE_WALLETCONNECT_PROJECT_ID` (optional) | Wallet users can't connect or sign |
 | [BlindPay](blindpay.md) | SPEI on-ramp (MXN → USDC) and off-ramp (USDC → MXN) | `Depositar`, `Retiros`, `Login`, `api/onramp.js`, `api/blindpay.js` | `BLINDPAY_*`, `SECRET_KEY_ADMIN` | `502` with BlindPay's message; funds may be half-moved |
-| [Supabase](supabase.md) | Wallet ↔ BlindPay mapping, faucet dedup, settlement idempotency | `api/_supabase.mjs` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_KEY` | On-ramp `502`; faucet fails open; readiness `503` |
+| [Supabase](supabase.md) | Wallet ↔ BlindPay mapping, faucet dedup, settlement idempotency | `api/_supabase.mjs` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | On-ramp and faucet `502`; readiness `503` |
 | [USDC faucet](usdc-faucet.md) | 2 test USDC per new wallet | Perfil, `api/faucet-usdc.js` | `SECRET_KEY_ADMIN`, `FAUCET_USDC_AMOUNT` | `502` (e.g. admin out of USDC) |
 | [Vercel](vercel.md) | Hosting, 10 API functions (Hobby limit 12) | `vercel.json`, `api/` | All server variables | Build fails above 12 functions |
 | [WebSocket](websocket.md) | Event replay hub | — (not connected) | `MAX_REPLAY_EVENTS` | — |

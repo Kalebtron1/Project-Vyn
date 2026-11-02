@@ -20,7 +20,6 @@ describe("ensureBlockchainWallet", () => {
     vi.stubEnv("BLINDPAY_DEMO_RECEIVER_ID", "re_test");
     vi.stubEnv("SUPABASE_URL", "");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
-    vi.stubEnv("SUPABASE_KEY", "");
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
   });

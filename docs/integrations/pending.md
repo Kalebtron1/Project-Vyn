@@ -32,7 +32,7 @@ Declared but never read:
 Read by the code but missing from `.env.example`:
 
 - `VITE_PRIVY_APP_ID` (required for email login),
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`,
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 - `FAUCET_USDC_AMOUNT`, `BLINDPAY_PARTNER_FEE_ID`, `BLINDPAY_NETWORK`,
   `BLINDPAY_ONRAMP_NETWORK`, `BLINDPAY_TOKEN`, `MAX_REPLAY_EVENTS`.
 

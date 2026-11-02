@@ -48,6 +48,7 @@ Why things are the way they are. Read before reverting something that looks odd.
 - [ADR-001: Load Privy only when needed](decisions/ADR-001-lazy-privy.md)
 - [ADR-002: Use the oldest Stellar wallet of a Privy account](decisions/ADR-002-oldest-privy-wallet.md)
 - [ADR-003: Cache on-chain reads, no polling](decisions/ADR-003-no-polling-cache.md)
+- [ADR-007: Supabase fails closed and reservations are atomic](decisions/ADR-007-supabase-fail-closed.md)
 
 ## Operating it
 
