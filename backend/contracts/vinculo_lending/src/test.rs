@@ -11,6 +11,7 @@ use soroban_sdk::{
     token, vec, Address, Env, Symbol, Vec,
 };
 use staking_pool::{StakingContract, StakingContractClient, VaultAsset};
+use vinculo_sbt::{ReputationConfig, TierRule, VinculoSBT, VinculoSBTClient};
 
 const WASM: &[u8] = include_bytes!("../../target/wasm32v1-none/release/vinculo_lending.wasm");
 
@@ -36,7 +37,7 @@ impl MockSbt {
         env.storage().persistent().set(&MockKey::Tier(user), &tier);
     }
 
-    pub fn get_tier(env: Env, user: Address) -> u32 {
+    pub fn compute_tier(env: Env, user: Address, _history: LoanHistory) -> u32 {
         env.storage()
             .persistent()
             .get(&MockKey::Tier(user))
@@ -849,4 +850,199 @@ fn upgrade_requires_admin_and_keeps_state() {
     assert_eq!(client.get_config(), config());
     assert_eq!(client.get_admin(), Some(s.admin.clone()));
     client.upgrade(&hash, &s.admin);
+}
+
+// ─── Deuda sin cubrir ────────────────────────────────────────────────────────
+
+#[test]
+fn uncovered_debt_can_be_paid_later() {
+    let s = setup();
+    s.fund(1_000 * USDC);
+    let user = s.saver(4, 125 * USDC);
+    s.client.request_loan(&user, &(100 * USDC), &12);
+    s.vault.set_rate(&5_000);
+    s.at(START + 12 * MONTH + GRACE);
+    s.client.liquidate(&user);
+    assert_eq!(s.client.get_history(&user).unpaid_debt, 495 * USDC / 10);
+    let pool = s.client.get_pool_balance();
+
+    s.env.set_auths(&[]);
+    assert!(s.client.try_repay_bad_debt(&user, &USDC).is_err());
+    s.env.mock_all_auths_allowing_non_root_auth();
+
+    assert_eq!(s.client.repay_bad_debt(&user, &(10 * USDC)), 10 * USDC);
+    assert_eq!(s.client.get_bad_debt(), 395 * USDC / 10);
+    assert_eq!(s.client.get_pool_balance(), pool + 10 * USDC);
+
+    // Pagar de más solo cobra lo que se debe.
+    assert_eq!(
+        s.client.repay_bad_debt(&user, &(90 * USDC)),
+        395 * USDC / 10
+    );
+    assert_eq!(s.client.get_bad_debt(), 0);
+    assert_eq!(s.client.get_history(&user).unpaid_debt, 0);
+    assert_eq!(
+        s.client.try_repay_bad_debt(&user, &1),
+        Err(Ok(Error::NoActiveLoan))
+    );
+}
+
+// ─── Flujo completo con el SBT real ──────────────────────────────────────────
+
+const DAY: u64 = 86_400;
+
+fn tier_rule(usdc: i128, days: u64, deposits: u32, on_time: u32, allow_defaults: bool) -> TierRule {
+    TierRule {
+        min_balance: usdc * USDC,
+        min_seconds: days * DAY,
+        min_valid_deposits: deposits,
+        min_repaid_on_time: on_time,
+        allow_defaults,
+    }
+}
+
+struct Full {
+    s: Setup,
+    sbt: VinculoSBTClient<'static>,
+    lending: VinculoLendingClient<'static>,
+}
+
+fn full_setup() -> Full {
+    let s = setup();
+    let reputation = ReputationConfig {
+        plata: tier_rule(10, 30, 3, 0, true),
+        oro: tier_rule(50, 90, 3, 1, true),
+        diamante: tier_rule(200, 180, 3, 3, false),
+        platino: tier_rule(1_000, 365, 3, 6, false),
+        default_cooldown: 90 * DAY,
+    };
+    let mut uris = soroban_sdk::vec![&s.env];
+    for name in ["bronce", "plata", "oro", "diamante", "platino"] {
+        uris.push_back(soroban_sdk::String::from_str(&s.env, name));
+    }
+    let sbt_id = s.env.register(
+        VinculoSBT,
+        (
+            s.admin.clone(),
+            s.pauser.clone(),
+            s.savings_id.clone(),
+            reputation,
+            uris,
+        ),
+    );
+    let sbt = VinculoSBTClient::new(&s.env, &sbt_id);
+    let lending_id = s.env.register(
+        VinculoLending,
+        (
+            s.admin.clone(),
+            s.pauser.clone(),
+            s.savings_id.clone(),
+            sbt_id,
+            s.treasury.clone(),
+            config(),
+        ),
+    );
+    let lending = VinculoLendingClient::new(&s.env, &lending_id);
+    sbt.set_lending(&lending_id);
+    s.savings
+        .grant_role(&lending_id, &Symbol::new(&s.env, "lending"), &s.admin);
+
+    let funder = Address::generate(&s.env);
+    s.token_admin.mint(&funder, &(10_000 * USDC));
+    lending.fund_pool(&funder, &(10_000 * USDC));
+    Full { s, sbt, lending }
+}
+
+impl Full {
+    fn saver(&self, deposits: u32, each: i128) -> Address {
+        let user = Address::generate(&self.s.env);
+        self.s
+            .token_admin
+            .mint(&user, &(i128::from(deposits) * each));
+        for _ in 0..deposits {
+            self.s.savings.deposit(&user, &each);
+        }
+        user
+    }
+}
+
+#[test]
+fn new_saver_cannot_borrow_until_the_time_passes() {
+    let f = full_setup();
+    let user = f.saver(3, 10 * USDC);
+    assert_eq!(f.sbt.preview_tier(&user), 0);
+    assert_eq!(
+        f.lending.try_request_loan(&user, &USDC, &1),
+        Err(Ok(Error::NotEligible))
+    );
+
+    f.s.at(START + 30 * DAY - 1);
+    assert_eq!(f.lending.get_max_principal(&user), 0);
+
+    f.s.at(START + 30 * DAY);
+    assert_eq!(f.sbt.preview_tier(&user), 1);
+    assert_eq!(f.lending.get_max_principal(&user), 15 * USDC);
+    f.lending.request_loan(&user, &(15 * USDC), &1);
+    assert_eq!(f.s.balance(&user), 15 * USDC);
+}
+
+#[test]
+fn many_tiny_deposits_never_unlock_credit() {
+    let f = full_setup();
+    let spammer = f.saver(31, USDC / 10);
+    f.s.at(START + 365 * DAY);
+    assert_eq!(f.sbt.refresh_tier(&spammer), 0);
+    assert_eq!(f.lending.get_max_principal(&spammer), 0);
+}
+
+#[test]
+fn repaying_on_time_raises_the_tier() {
+    let f = full_setup();
+    let user = f.saver(3, 50 * USDC);
+    f.s.at(START + 90 * DAY);
+    assert_eq!(f.sbt.refresh_tier(&user), 1);
+
+    f.lending.request_loan(&user, &(50 * USDC), &1);
+    f.s.token_admin.mint(&user, &USDC);
+    f.lending.repay(&user, &(51 * USDC));
+    assert_eq!(f.lending.get_history(&user).repaid_on_time, 1);
+    assert_eq!(f.sbt.refresh_tier(&user), 2);
+    assert_eq!(f.sbt.get_tier(&user), 2);
+    assert_eq!(f.lending.get_max_principal(&user), 90 * USDC);
+}
+
+#[test]
+fn default_closes_credit_for_the_cooldown_even_without_refresh() {
+    let f = full_setup();
+    let user = f.saver(3, 10 * USDC);
+    f.s.at(START + 30 * DAY);
+    f.sbt.refresh_tier(&user);
+    f.lending.request_loan(&user, &(10 * USDC), &1);
+
+    let default_at = START + 30 * DAY + MONTH + GRACE;
+    f.s.at(default_at);
+    f.lending.liquidate(&user);
+
+    // El nivel guardado sigue viejo, pero el crédito usa el vigente.
+    assert_eq!(f.sbt.get_tier(&user), 1);
+    assert_eq!(
+        f.lending.try_request_loan(&user, &USDC, &1),
+        Err(Ok(Error::NotEligible))
+    );
+    assert_eq!(f.sbt.refresh_tier(&user), 0);
+
+    f.s.at(default_at + 90 * DAY);
+    assert_eq!(f.sbt.preview_tier(&user), 1);
+    f.lending.request_loan(&user, &USDC, &1);
+}
+
+#[test]
+fn withdrawing_savings_lowers_credit_immediately() {
+    let f = full_setup();
+    let user = f.saver(3, 10 * USDC);
+    f.s.at(START + 30 * DAY);
+    assert_eq!(f.lending.get_max_principal(&user), 15 * USDC);
+    f.s.savings.withdraw(&user, &(25 * USDC), &0);
+    assert_eq!(f.sbt.preview_tier(&user), 0);
+    assert_eq!(f.lending.get_max_principal(&user), 0);
 }

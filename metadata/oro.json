@@ -1,22 +1,26 @@
 {
-  "name": "Vínculo - Nivel Oro",
-  "description": "SBT de reputación otorgado al superar los 150 puntos de Trust Score en la red Stellar.",
-  "image": "https://raw.githubusercontent.com/YORCH12/Stellar-Hack-vinculo-credito/main/images/oro.png",
-  "external_url": "https://vinculo.app",
+  "name": "Vyn - Nivel Oro",
+  "description": "SBT de reputación de Vyn. El nivel lo calcula el contrato con tu ahorro y tu historial de pagos en Stellar.",
+  "image": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/public/images/oro.png",
+  "external_url": "https://www.projectvyn.dev",
   "attributes": [
     {
       "trait_type": "Nivel",
       "value": "Oro"
     },
     {
-      "trait_type": "Beneficio de Crédito",
-      "value": 900,
+      "trait_type": "Crédito máximo",
+      "value": 250,
       "display_type": "number",
-      "unit": "XLM"
+      "unit": "USDC"
+    },
+    {
+      "trait_type": "LTV",
+      "value": "60%"
     },
     {
       "trait_type": "Plataforma",
-      "value": "Vínculo"
+      "value": "Vyn"
     }
   ]
 }

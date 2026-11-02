@@ -1,26 +1,26 @@
 {
-  "name": "Vínculo - Nivel Platino",
-  "description": "SBT de reputación otorgado al superar los 1000 puntos de Trust Score en la red Stellar.",
-  "image": "https://raw.githubusercontent.com/YORCH12/Stellar-Hack-vinculo-credito/main/images/platino.png",
-  "external_url": "https://vinculo.app",
+  "name": "Vyn - Nivel Platino",
+  "description": "SBT de reputación de Vyn. El nivel lo calcula el contrato con tu ahorro y tu historial de pagos en Stellar.",
+  "image": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/public/images/platino.png",
+  "external_url": "https://www.projectvyn.dev",
   "attributes": [
     {
       "trait_type": "Nivel",
       "value": "Platino"
     },
     {
-      "trait_type": "Beneficio de Crédito",
-      "value": 5000,
+      "trait_type": "Crédito máximo",
+      "value": 2000,
       "display_type": "number",
-      "unit": "XLM"
+      "unit": "USDC"
+    },
+    {
+      "trait_type": "LTV",
+      "value": "80%"
     },
     {
       "trait_type": "Plataforma",
-      "value": "Vínculo"
-    },
-    {
-      "trait_type": "Score mínimo",
-      "value": 1000
+      "value": "Vyn"
     }
   ]
 }

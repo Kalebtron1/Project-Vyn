@@ -1955,6 +1955,7 @@ dependencies = [
  "stellar-access",
  "stellar-contract-utils",
  "stellar-macros",
+ "vinculo_sbt",
 ]
 
 [[package]]

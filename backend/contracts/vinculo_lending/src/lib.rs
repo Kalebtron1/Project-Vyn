@@ -38,7 +38,7 @@ const MAX_DEBT_TO_COLLATERAL_BPS: i128 = 9_500;
 // eso exporta sus funciones dentro de este Wasm.
 #[contractclient(name = "SbtClient")]
 pub trait SbtInterface {
-    fn get_tier(e: Env, user: Address) -> u32;
+    fn compute_tier(e: Env, user: Address, history: LoanHistory) -> u32;
 }
 
 #[contractclient(name = "SavingsClient")]
@@ -138,6 +138,8 @@ pub struct LoanHistory {
     pub repaid_late: u32,
     pub defaults: u32,
     pub last_default_at: u64,
+    /// Lo que el colateral no cubrió y el usuario aún debe.
+    pub unpaid_debt: i128,
 }
 
 /// Lo que costaría un préstamo con la configuración actual.
@@ -388,6 +390,7 @@ impl VinculoLending {
         let mut history = read_history(&env, &user);
         history.defaults += 1;
         history.last_default_at = env.ledger().timestamp();
+        history.unpaid_debt += shortfall;
         write_history(&env, &user, &history);
         env.storage().persistent().remove(&loan_key);
         extend_instance(&env);
@@ -400,6 +403,32 @@ impl VinculoLending {
         }
         .publish(&env);
         Ok(recovered)
+    }
+
+    /// Paga lo que el colateral no cubrió en un incumplimiento. El dinero vuelve
+    /// al pool. Mientras quede deuda, el usuario sigue en Bronce. Nunca se pausa.
+    /// Devuelve lo cobrado; el excedente no se cobra.
+    pub fn repay_bad_debt(env: Env, user: Address, amount: i128) -> Result<i128, Error> {
+        user.require_auth();
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        let mut history = read_history(&env, &user);
+        if history.unpaid_debt <= 0 {
+            return Err(Error::NoActiveLoan);
+        }
+        let pay = amount.min(history.unpaid_debt);
+        token_client(&env).transfer(&user, env.current_contract_address(), &pay);
+        history.unpaid_debt -= pay;
+        write_history(&env, &user, &history);
+        add_i128(&env, &DataKey::BadDebt, -pay);
+        LoanRepaid {
+            user,
+            amount: pay,
+            remaining: history.unpaid_debt,
+        }
+        .publish(&env);
+        Ok(pay)
     }
 
     /// Retira ganancia (interés cobrado) hacia la wallet de tesorería.
@@ -473,7 +502,7 @@ impl VinculoLending {
         read_i128(&env, &DataKey::TotalBorrowed)
     }
 
-    /// Lo que el colateral no alcanzó a cubrir, acumulado.
+    /// Lo que el colateral no alcanzó a cubrir y sigue sin pagarse.
     pub fn get_bad_debt(env: Env) -> i128 {
         read_i128(&env, &DataKey::BadDebt)
     }
@@ -602,7 +631,8 @@ fn check_config(config: &LoanConfig) -> Result<(), Error> {
 
 fn terms_for_user(env: &Env, config: &LoanConfig, user: &Address) -> Result<TierTerms, Error> {
     let sbt: Address = env.storage().instance().get(&DataKey::Sbt).unwrap();
-    match SbtClient::new(env, &sbt).get_tier(user) {
+    let history = read_history(env, user);
+    match SbtClient::new(env, &sbt).compute_tier(user, &history) {
         1 => Ok(config.plata.clone()),
         2 => Ok(config.oro.clone()),
         3 => Ok(config.diamante.clone()),

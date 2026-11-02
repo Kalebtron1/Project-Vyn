@@ -9,7 +9,6 @@
 #                       The deployer keeps no power over the contracts.
 #   ADMIN_PUBLIC      — governance account (G...), a multisig outside this machine
 #   PAUSER_PUBLIC     — account that can pause, but not unpause
-#   MINTER_PUBLIC     — account that can write SBT tiers
 #   TREASURY_PUBLIC   — account that receives loan interest
 #   TOKEN_ADDRESS     — USDC SAC. Must be the same asset as the vault
 #   VAULT_ADDRESS     — DeFindex vault (USDC) behind staking_pool
@@ -20,14 +19,17 @@
 #   SECONDS_PER_MONTH     — length of a loan month. Default: 2592000 (30 days)
 #   GRACE_PERIOD          — seconds after the due date before liquidation.
 #                           Default: 604800 (7 days)
+#   REPUTATION_DAY_SECONDS — length of a reputation day. Default: 86400. Lower it
+#                           only for demos
 #   METADATA_BASE_URL     — base URL of the tier metadata JSON files
 #   NETWORK               — defaults to "testnet"
 #
 # Create the vault first with scripts/create_vault.sh. The loan terms below are
 # the approved values; the admin can change them later with set_config.
 #
-# After deploying, the admin must grant the "lending" role on staking_pool to
-# vinculo_lending. Without it, new loans fail.
+# After deploying, the admin must:
+#   1. Grant the "lending" role on staking_pool to vinculo_lending, or loans fail.
+#   2. Call set_lending on vinculo_sbt, or refresh_tier and preview_tier fail.
 
 set -euo pipefail
 
@@ -38,13 +40,13 @@ METADATA_BASE_URL="${METADATA_BASE_URL:-https://raw.githubusercontent.com/Kalebt
 : "${STELLAR_ACCOUNT:?Set STELLAR_ACCOUNT (deployer) before running this script}"
 : "${ADMIN_PUBLIC:?Set ADMIN_PUBLIC before running this script}"
 : "${PAUSER_PUBLIC:?Set PAUSER_PUBLIC before running this script}"
-: "${MINTER_PUBLIC:?Set MINTER_PUBLIC before running this script}"
 : "${TREASURY_PUBLIC:?Set TREASURY_PUBLIC before running this script}"
 : "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS (USDC SAC) before running this script}"
 : "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
 MIN_COUNTED_DEPOSIT="${MIN_COUNTED_DEPOSIT:-100000000}"
 SECONDS_PER_MONTH="${SECONDS_PER_MONTH:-2592000}"
 GRACE_PERIOD="${GRACE_PERIOD:-604800}"
+REPUTATION_DAY_SECONDS="${REPUTATION_DAY_SECONDS:-86400}"
 
 echo "==> Network: $NETWORK" >&2
 echo "==> Admin:   $ADMIN_PUBLIC" >&2
@@ -65,18 +67,26 @@ deploy_contract() {
 
 URIS="[\"$METADATA_BASE_URL/bronce.json\",\"$METADATA_BASE_URL/plata.json\",\"$METADATA_BASE_URL/oro.json\",\"$METADATA_BASE_URL/diamante.json\",\"$METADATA_BASE_URL/platino.json\"]"
 
-SBT_CONTRACT_ID=$(deploy_contract vinculo_sbt \
-  --admin "$ADMIN_PUBLIC" \
-  --pauser "$PAUSER_PUBLIC" \
-  --minter "$MINTER_PUBLIC" \
-  --uris "$URIS")
-
 STAKING_CONTRACT_ID=$(deploy_contract staking_pool \
   --admin "$ADMIN_PUBLIC" \
   --pauser "$PAUSER_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
   --vault "$VAULT_ADDRESS" \
   --min_counted_deposit "$MIN_COUNTED_DEPOSIT")
+
+# Amounts in stroops: 10, 50, 200 and 1,000 USDC.
+tier_rule() {
+  local balance="$1" days="$2" deposits="$3" on_time="$4" allow_defaults="$5"
+  echo "{\"min_balance\":\"$balance\",\"min_seconds\":$((days * REPUTATION_DAY_SECONDS)),\"min_valid_deposits\":$deposits,\"min_repaid_on_time\":$on_time,\"allow_defaults\":$allow_defaults}"
+}
+REPUTATION_CONFIG="{\"plata\":$(tier_rule 100000000 30 3 0 true),\"oro\":$(tier_rule 500000000 90 3 1 true),\"diamante\":$(tier_rule 2000000000 180 3 3 false),\"platino\":$(tier_rule 10000000000 365 3 6 false),\"default_cooldown\":$((90 * REPUTATION_DAY_SECONDS))}"
+
+SBT_CONTRACT_ID=$(deploy_contract vinculo_sbt \
+  --admin "$ADMIN_PUBLIC" \
+  --pauser "$PAUSER_PUBLIC" \
+  --savings "$STAKING_CONTRACT_ID" \
+  --config "$REPUTATION_CONFIG" \
+  --uris "$URIS")
 
 # Amounts in stroops: 100, 250, 750 and 2,000 USDC.
 LOAN_CONFIG="{\"apy_bps\":1200,\"seconds_per_month\":$SECONDS_PER_MONTH,\"grace_period\":$GRACE_PERIOD,\

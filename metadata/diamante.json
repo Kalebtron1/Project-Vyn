@@ -1,22 +1,26 @@
 {
-  "name": "Vínculo - Nivel Diamante",
-  "description": "SBT de reputación otorgado al superar los 500 puntos de Trust Score en la red Stellar.",
-  "image": "https://raw.githubusercontent.com/YORCH12/Stellar-Hack-vinculo-credito/main/images/diamante.png",
-  "external_url": "https://vinculo.app",
+  "name": "Vyn - Nivel Diamante",
+  "description": "SBT de reputación de Vyn. El nivel lo calcula el contrato con tu ahorro y tu historial de pagos en Stellar.",
+  "image": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/public/images/diamante.png",
+  "external_url": "https://www.projectvyn.dev",
   "attributes": [
     {
       "trait_type": "Nivel",
       "value": "Diamante"
     },
     {
-      "trait_type": "Beneficio de Crédito",
-      "value": 2500,
+      "trait_type": "Crédito máximo",
+      "value": 750,
       "display_type": "number",
-      "unit": "XLM"
+      "unit": "USDC"
+    },
+    {
+      "trait_type": "LTV",
+      "value": "70%"
     },
     {
       "trait_type": "Plataforma",
-      "value": "Vínculo"
+      "value": "Vyn"
     }
   ]
 }

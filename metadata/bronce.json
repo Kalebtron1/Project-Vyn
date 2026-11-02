@@ -1,0 +1,26 @@
+{
+  "name": "Vyn - Nivel Bronce",
+  "description": "SBT de reputación de Vyn. El nivel lo calcula el contrato con tu ahorro y tu historial de pagos en Stellar.",
+  "image": "https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/public/images/bronce.png",
+  "external_url": "https://www.projectvyn.dev",
+  "attributes": [
+    {
+      "trait_type": "Nivel",
+      "value": "Bronce"
+    },
+    {
+      "trait_type": "Crédito máximo",
+      "value": 0,
+      "display_type": "number",
+      "unit": "USDC"
+    },
+    {
+      "trait_type": "LTV",
+      "value": "0%"
+    },
+    {
+      "trait_type": "Plataforma",
+      "value": "Vyn"
+    }
+  ]
+}

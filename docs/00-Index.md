@@ -50,6 +50,7 @@ Why things are the way they are. Read before reverting something that looks odd.
 - [ADR-003: Cache on-chain reads, no polling](decisions/ADR-003-no-polling-cache.md)
 - [ADR-004: Upgradeable contracts with roles and pause](decisions/ADR-004-upgradeable-contracts.md)
 - [ADR-005: Credit backed by the user's savings, in USDC](decisions/ADR-005-collateralized-credit.md)
+- [ADR-006: The contract calculates the reputation tier](decisions/ADR-006-onchain-reputation.md)
 
 ## Operating it
 
