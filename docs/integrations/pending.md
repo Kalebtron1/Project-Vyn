@@ -42,7 +42,6 @@ Read by the code but missing from `.env.example`:
 
 | Shortcut | Where | Real behavior missing |
 |---|---|---|
-| "Simular envío SPEI" | `Depositar.tsx`, `settle` with `simulate` | Accepted from any client on testnet (issue #92). |
 | "Simular KYC" | `Retiros.tsx` | A 3.5 s animation; no KYC call. |
 | Fixed destination CLABE and bank account | `Retiros.tsx` (`DEMO_CLABE`), `BLINDPAY_DEMO_BANK_ACCOUNT_ID` | The user's own account is never collected. |
 | Shared BlindPay receiver | `BLINDPAY_DEMO_RECEIVER_ID` | One KYC for every user. |

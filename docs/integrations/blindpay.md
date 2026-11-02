@@ -61,7 +61,7 @@ Hobby function limit ([Vercel](vercel.md)).
 | `POST /api/onramp?action=quote` | `{ walletAddress, amountMxn, email? }` | Payin quote, no CLABE. |
 | `POST /api/onramp?action=payin` | same | Fresh quote + payin; returns the `clabe`. |
 | `GET /api/onramp?action=status&id=pi_…` | | Payin status. |
-| `POST /api/onramp?action=settle` | `{ payinId, simulate? }` | Sends USDC from the admin account to the payin's wallet. |
+| `POST /api/onramp?action=settle` | `{ payinId }` | Sends USDC from the admin account to the payin's wallet. |
 | `POST /api/blindpay?action=quote` | `{ amount }` (USD) | Payout quote to the demo bank account. |
 | `POST /api/blindpay?action=payout` | `{ amount }` | Fresh quote + authorize + sign + payout. |
 | `GET /api/blindpay?action=status&id=…` | | Payout status. The UI never calls it. |
@@ -81,10 +81,10 @@ Login (Privy) ─▶ onramp init ─▶ BlindPay: POST /customers/{shared}/block
                                  Supabase: onramp_users (wallet → bw_…)
 Depositar: amount MXN ─(debounced 500 ms)─▶ onramp quote ─▶ POST /payin-quotes (spei, USDB, sender amount)
 "Generar CLABE" ─▶ onramp payin ─▶ POST /payin-quotes + POST /payins/evm ─▶ { payinId, clabe }
-UI polls onramp status every 4 s until status "completed"   (or the user taps "Simular envío SPEI")
+UI polls onramp status every 4 s until status "completed"  
 settling (in the browser):
   1. USDC trustline if missing (user signs, Horizon)
-  2. onramp settle ─▶ settlePayin: GET /payins/{id}; if paid (or simulate) and not yet settled
+  2. onramp settle ─▶ settlePayin: GET /payins/{id}; if paid and not yet settled
         ─▶ admin pays receiver_amount USDC to payin.address (Horizon) ─▶ Supabase onramp_settlements
   3. depositToVault(usd) ─▶ staking_pool.deposit (user signs). Best effort: if it fails the USDC stays in the wallet.
   4. refresh chain data, success screen
@@ -94,11 +94,9 @@ What BlindPay itself delivers is USDB to the user's address, which the user's wa
 not trust. The app ignores that leg and pays the equivalent **USDC from the admin account**
 instead, so on testnet the admin account funds every deposit.
 
-**Simulate.** BlindPay offers no endpoint to force a payin as paid, so `settle` accepts
-`simulate: true` and settles an unpaid payin when the token is `USDB` or the network name
-contains `testnet`. The "Simular envío SPEI" button is always visible on the CLABE screen.
-In development BlindPay auto-completes payins about 30 seconds after creation anyway
-([payins docs](https://blindpay.com/docs/essentials/payins)).
+**Testing.** Development instances complete every payin about 30 seconds after creation, so
+the app only settles what BlindPay reports as paid. `settle` no longer accepts `simulate`. See
+[payins docs](https://blindpay.com/docs/payins).
 
 **Attribution model.** One shared receiver with one blockchain wallet per user avoids a
 human TOS acceptance per user in sandbox. Production needs a KYC'd receiver per user.
@@ -142,7 +140,7 @@ Retiros → SPEI: "Simular KYC" (UI animation only, 3.5 s) ─▶ amount ≥ 10 
 |---|---|
 | Missing API key / instance / receiver | `502` with "BlindPay no configurado…"; Depositar shows the message under the quote. Missing demo bank account: `500`. |
 | BlindPay error | `bpFetch` throws with BlindPay's `message`/`errors`; endpoints return `502` with it. |
-| Payin `failed` or `refunded` | The UI only checks for `completed`, so it keeps polling forever. "Simular envío SPEI" would still settle it. |
+| Payin `failed` or `refunded` | The UI stops waiting and shows an error; `settle` does not pay it. |
 | Withdrawal succeeds, payout fails | The user's USDC is already out of the vault (in their wallet); the UI shows an error. Nothing is rolled back. |
 | Settlement sent, Supabase write fails | `502` although USDC was sent; a retry pays again. |
 | Auto-deposit to the vault fails | USDC stays in the wallet; success screen says so. |
@@ -151,9 +149,7 @@ Retiros → SPEI: "Simular KYC" (UI animation only, 3.5 s) ─▶ amount ≥ 10 
 
 - **#91** `action=payout` only validates `amount`. Anyone can call it and spend the payout
   wallet's USDB without having withdrawn anything.
-- **#92** `settle` checks then writes, so parallel calls can both pay; and `simulate` comes
-  from the request body, so on testnet anyone can create a payin of any size and have the
-  admin account pay it in USDC.
+- **#92** `settle` checks then writes, so parallel calls can both pay.
 - No endpoint checks who is calling: there is no session or signature on the backend.
 - No webhooks: status is polled every 4 s and `BLINDPAY_WEBHOOK_SECRET` is unused.
 

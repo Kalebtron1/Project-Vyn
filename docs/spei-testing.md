@@ -78,8 +78,7 @@ mapping and settlements in memory until the server restarts.
    after half a second: rate, BlindPay fee and USDC to receive.
 4. Tap **Generar CLABE**. A payin is created and the CLABE is shown. The page polls the
    status every 4 seconds.
-5. Wait about 30 seconds for the sandbox to complete the payin, or tap
-   **Simular envío SPEI** to settle immediately.
+5. Wait about 30 seconds for the sandbox to complete the payin. The app settles it after that.
 6. Approve the signatures the wallet asks for:
    - the USDC trustline, the first time;
    - the deposit into the vault, after the admin sends the USDC.
@@ -93,8 +92,7 @@ Check the result:
 
 ### Failure cases worth trying
 
-- **666 MXN** → the payin fails. Today the page keeps polling forever because it only looks
-  for `completed`. Pressing "Simular envío SPEI" would still pay the user (issue #92).
+- **666 MXN** → the payin fails, and the page stops waiting and shows an error.
 - Close the tab while "Liquidando…": the USDC may already be in the wallet without being
   deposited. Deposit it manually from Home.
 
@@ -138,7 +136,7 @@ curl -s -X POST "$BASE/api/blindpay?action=quote" -H 'Content-Type: application/
 curl -s "$BASE/api/blindpay?action=status&id=PAYOUT_ID"
 ```
 
-Do **not** call `action=settle` with `simulate` or `action=payout` by hand against a shared
+Do **not** call `action=settle` or `action=payout` by hand against a shared
 environment: both move funds (admin USDC, payout-wallet USDB) without any check of who
 asked. That is exactly what issues #91 and #92 describe.
 
@@ -148,14 +146,13 @@ asked. That is exactly what issues #91 and #92 describe.
 |---|---|---|
 | Payout not tied to a withdrawal | `action=payout` only checks the amount. Anyone can drain the payout wallet's USDB. | #91 |
 | Double settlement | `settle` reads then writes; two parallel calls can both pay. A Supabase write failure after paying also leads to paying again on retry. | #92 |
-| `simulate` from the client | On testnet any caller can settle any payin they create, of any size, paid in USDC by the admin account. | #92 |
 | Shared admin key | The admin account also signs SBT mints and funds the faucet. | — |
 | Shared receiver and bank account | All users share one KYC'd receiver and all payouts go to one CLABE. Fine for a demo, not for production. | — |
 | No webhooks | Status is only known by polling; `BLINDPAY_WEBHOOK_SECRET` is unused. | — |
 
 ## Before mainnet
 
-- Fix #91 and #92, and remove or server-gate "Simular envío SPEI" and "Simular KYC".
+- Fix #91 and #92, and remove or server-gate "Simular KYC".
 - Production instance: `BLINDPAY_NETWORK` / `BLINDPAY_ONRAMP_NETWORK = stellar`,
   `BLINDPAY_TOKEN = USDC`.
 - Replace the hard-coded `Networks.TESTNET` in `executeStellarPayout` and re-check the

@@ -157,22 +157,21 @@ export async function getPayin(payinId) {
 // usuario no confía), la tesorería/admin envía el USDC equivalente directo a su wallet —
 // misma idea que el off-ramp (el USDB es un artefacto invisible). Idempotente por payin.
 // El frontend luego deposita ese USDC al vault (lo firma la wallet del usuario con Privy).
-export async function settlePayin({ payinId, simulate = false }) {
-  if (!payinId) throw new Error("settlePayin: falta payinId");
-  const payin = await getPayin(payinId);
-
-  const paid =
+// BlindPay confirma el pago. Un estado final sin pago manda sobre los pasos de `tracking_*`:
+// un payin reembolsado puede tener el paso de pago completado, y no debe liquidarse.
+export function isPayinPaid(payin) {
+  if (payin?.status === "failed" || payin?.status === "refunded") return false;
+  return (
     payin?.status === "completed" ||
     payin?.tracking_payment?.step === "completed" ||
-    payin?.tracking_transaction?.step === "completed";
+    payin?.tracking_transaction?.step === "completed"
+  );
+}
 
-  // Modo simulación (solo sandbox/testnet): BlindPay no expone un endpoint para "forzar"
-  // la confirmación del SPEI en dev (auto-acredita ~30s después de iniciar el payin), así
-  // que para demos permitimos liquidar sin esperar esa confirmación. Esto ejercita la pata
-  // on-chain real (tesorería/admin → wallet del usuario → vault), que es lo verificable.
-  const canSimulate = ONRAMP_TOKEN === "USDB" || ONRAMP_NETWORK.includes("testnet");
-  const forced = simulate && canSimulate && !paid;
-  if (!paid && !forced) return { settled: false, reason: "not_paid", status: payin?.status || null };
+export async function settlePayin({ payinId }) {
+  if (!payinId) throw new Error("settlePayin: falta payinId");
+  const payin = await getPayin(payinId);
+  if (!isPayinPaid(payin)) return { settled: false, reason: "not_paid", status: payin?.status || null };
 
   if (await hasSettledPayin(payinId)) return { settled: false, reason: "already_settled" };
 
@@ -182,7 +181,7 @@ export async function settlePayin({ payinId, simulate = false }) {
 
   const hash = await sendUsdcFromAdmin({ to, amount: amountUsd.toFixed(7) });
   await recordSettlement(payinId, { walletAddress: to, amountUsd, hash });
-  return { settled: true, to, amountUsd, hash, simulated: forced };
+  return { settled: true, to, amountUsd, hash };
 }
 
 // Recorta un payin-quote a lo que la UI necesita. Para on-ramp el SENDER es MXN y el
