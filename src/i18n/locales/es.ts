@@ -42,7 +42,7 @@ const es = {
     view_on_explorer: "Ver en el explorador",
   },
 
-  // ─── Depositar por SPEI (on-ramp Accesly) ────────────────────────────────────
+  // ─── Depositar por SPEI (on-ramp Privy) ────────────────────────────────────
   deposit_spei: {
     title: "Depositar por SPEI",
     subtitle: "Transfiere pesos y recibe USDC en tu cuenta",

@@ -3,9 +3,9 @@
 //   - api/onramp-init.js / onramp-quote.js / onramp-payin.js / onramp-status.js  (Vercel ESM)
 //   - backend/server.js                                                          (Express, await import())
 //
-// Modelo del on-ramp (ver memoria "blindpay-integration" + plan Accesly):
+// Modelo del on-ramp (ver memoria "blindpay-integration"):
 //   Un RECEIVER COMPARTIDO (BLINDPAY_DEMO_RECEIVER_ID, ya con TOS+KYC aprobados en sandbox)
-//   con UNA blockchain wallet por usuario (su dirección Stellar de Accesly). La atribución
+//   con UNA blockchain wallet por usuario (su dirección Stellar de Privy). La atribución
 //   "este SPEI es de tal usuario" vive en el blockchain_wallet_id + el mapping en Supabase.
 //   Crear un receiver por usuario chocaría con la aceptación humana del TOS; este modelo la
 //   evita y conserva la atribución por usuario. En producción: un receiver KYC por usuario.
@@ -61,7 +61,7 @@ async function bpFetch(path, { method = "GET", body } = {}) {
   return data;
 }
 
-// Garantiza que el usuario (identificado por su dirección Stellar de Accesly) tenga una
+// Garantiza que el usuario (identificado por su dirección Stellar de Privy) tenga una
 // blockchain wallet registrada en el receiver compartido. Cachea el id en Supabase.
 // Devuelve { receiverId, blockchainWalletId, reused }.
 export async function ensureBlockchainWallet({ walletAddress, email }) {

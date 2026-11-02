@@ -1,5 +1,5 @@
 /**
- * Depositar (on-ramp SPEI) — el usuario que entró con correo (Accesly) deposita MXN por
+ * Depositar (on-ramp SPEI) — el usuario que entró con correo (Privy) deposita MXN por
  * SPEI y, tras confirmarse, el USDC sube a su saldo. La UI habla en MXN (lo que paga) y
  * USDC (lo que recibe); el USDB es un artefacto invisible de testnet (igual que el off-ramp).
  *

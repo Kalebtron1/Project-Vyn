@@ -715,7 +715,7 @@ const Perfil = () => {
             </div>
           </div>
 
-          {/* Tu wallet: ver balances. Accesly abre su panel; otras, su extensión. */}
+          {/* Tu wallet: ver balances. Privy abre su panel; otras, su extensión. */}
           <div className="card-elevated p-6 animate-fade-up">
             <div className="flex items-center gap-2 mb-4">
               <Wallet className="w-5 h-5 text-primary" />

@@ -60,4 +60,4 @@ echo "════════════════════════�
 echo " STRATEGY (fixed_apr) = $STRAT"
 echo " VAULT (DeFindex)     = $VAULT"
 echo "════════════════════════════════════════"
-echo " Úsalo en el init del staking_pool (--vault) y en src/stellar/contracts.ts (VAULT_ID)."
+echo " Úsalo en el init del staking_pool (--vault)."

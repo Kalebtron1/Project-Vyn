@@ -115,7 +115,7 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
 }
 
 // Lee los contadores del staking_pool por simulación de Soroban (mismo patrón que
-// api/get-user-data.js). Devuelve los agregados ya convertidos a unidades del token.
+// calculate-score). Devuelve los agregados ya convertidos a unidades del token.
 // `contractId` es OBLIGATORIO: sin él no hay forma de saber qué contrato leer, y leer
 // uno equivocado (o ninguno) es justo lo que mostraba historial de un contrato viejo.
 export async function getOnChainAggregates(userAddress, { contractId, rpcUrl = DEFAULT_RPC_URL } = {}) {

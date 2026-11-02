@@ -17,13 +17,7 @@ against the code on 2026-10-22. Open issue numbers are given where one exists; "
 |---|---|---|
 | WebSocket replay hub | `src/ws/hub.ts`, `src/db/repositories/contractEventRepository.ts` | No server, table, producer or client. See [WebSocket](websocket.md). |
 | `POST /api/nonce` | `api/nonce.js`, `backend/server.js` | No frontend caller. `consumeNonce` is exported but `evaluate-and-mint` never checks a nonce, and the store is in memory, which doesn't survive between serverless invocations (issues #89, #90). Uses one of the 12 Vercel functions. |
-| `GET /api/get-user-data` | `api/get-user-data.js` | No caller. Approximates a tier from the position, which disagrees with the real score. Uses a Vercel function. |
 | `GET /api/blindpay?action=status` | `api/blindpay.js` | The off-ramp UI never checks the payout status after the success screen. |
-| `fetchTotalDeposited`, `fetchTotalWithdrawn` | `src/stellar/queries.ts` | Replaced by `readSavingsSnapshot`. |
-| `VAULT_ID` | `src/stellar/contracts.ts` | Reference constant; the real vault is read on-chain. |
-| `src/stellar/nft-metadata.json` | | Not imported; describes an older mint interface. |
-| `acceslyBridge.ts`, `AcceslySignerBridge.tsx` | `src/lib/`, `src/components/` | Empty files kept "for old imports"; nothing imports them. |
-| `@albedo-link/intent` | `package.json` | Not imported; the wallet kit has its own Albedo module. |
 | `vinculo_lending.get_loan` | contract | The app never reads the active loan; see "In-memory state" below. |
 | `vinculo_sbt.revoke`, `name`, `symbol`, `token_uri` | contract | Not used by the app. `token_uri` points to a third-party repo and tier 0 returns a 404 URL ([other services](other-services.md)); PR #129 moves the metadata into this repo. |
 
@@ -89,7 +83,6 @@ Read by the code but missing from `.env.example`:
 - Score curve: `score = retention × log10(txCount + 1) × 100`. With full retention, Plata
   needs 3 transactions and Oro 31, but Diamante needs about 100,000 and Platino about
   10 billion, so tiers 3–4 are unreachable (issue #95).
-- `scripts/stress-test.js` still uses the old Horizon-based formula.
 - UI copy and comments still say "Accesly" (the email login before Privy), and some
   metadata says "Vínculo".
 
