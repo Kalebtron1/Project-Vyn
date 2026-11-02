@@ -1,0 +1,51 @@
+name: frontend-ci
+
+# Revisa tipos, lint, tests y build del frontend y la API. `main` ya tiene errores viejos:
+# los topes de abajo no dejan agregar nuevos. Al corregir errores, bájalos en el mismo PR.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  MAX_TYPE_ERRORS: 23
+  MAX_LINT_ERRORS: 9
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (no new errors)
+        run: |
+          count=$( (npx tsc --noEmit -p tsconfig.app.json || true) | grep -c 'error TS' || true)
+          echo "TypeScript errors: $count (max $MAX_TYPE_ERRORS)"
+          test "$count" -le "$MAX_TYPE_ERRORS"
+
+      - name: Lint (no new errors)
+        run: |
+          count=$( (npx eslint . -f json || true) | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).reduce((n,f)=>n+f.errorCount,0)))")
+          echo "Lint errors: $count (max $MAX_LINT_ERRORS)"
+          test "$count" -le "$MAX_LINT_ERRORS"
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
