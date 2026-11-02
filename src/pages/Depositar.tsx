@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle, Send,
+  ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import confetti from "canvas-confetti";
@@ -50,8 +50,6 @@ const Depositar = () => {
   const [payin, setPayin] = useState<null | { payinId: string; clabe: string; receiverUsd: number }>(null);
   const [copied, setCopied] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Modo demo: el usuario fuerza el "envío SPEI" sin esperar la confirmación de BlindPay.
-  const simulateRef = useRef(false);
 
   const isPrivy = provider === PRIVY_PROVIDER;
 
@@ -132,6 +130,12 @@ const Depositar = () => {
       try {
         const r = await fetch(`/api/onramp?action=status&id=${encodeURIComponent(payin.payinId)}`);
         const data = await r.json();
+        // Estados finales sin pago: seguir esperando dejaría la pantalla colgada.
+        if (r.ok && (data.status === "failed" || data.status === "refunded")) {
+          setError(t(`deposit_spei.payin_${data.status}`));
+          setStep("error");
+          return;
+        }
         const confirmed = r.ok && (data.status === "completed" || data?.payment?.step === "completed");
         if (confirmed) {
           setStep("settling"); // SPEI confirmado → liquidar USDC + depositar al vault
@@ -141,7 +145,7 @@ const Depositar = () => {
     pollRef.current = setInterval(poll, 4000);
     poll();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [step, payin]);
+  }, [step, payin, t]);
 
   // Liquidación (Fase 6): SPEI confirmado → asegurar trustline USDC → backend acredita el
   // USDC a la wallet del usuario → se deposita al vault firmando con la wallet (Privy).
@@ -161,10 +165,13 @@ const Depositar = () => {
         const sr = await fetch("/api/onramp?action=settle", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payinId: payin.payinId, simulate: simulateRef.current }),
+          body: JSON.stringify({ payinId: payin.payinId }),
         });
         const sd = await sr.json();
         if (!sr.ok) throw new Error(sd.error || "No se pudo acreditar el USDC");
+        if (!sd.settled && sd.reason !== "already_settled") {
+          throw new Error(t("deposit_spei.generic_error"));
+        }
         const usd = (sd.amountUsd ?? payin.receiverUsd ?? 0) as number;
         // 3) Auto-depósito al vault (firma la wallet del usuario). Best-effort: si falla,
         //    el USDC queda en la wallet y el usuario puede depositar desde el flujo normal.
@@ -187,7 +194,7 @@ const Depositar = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [step, payin, address, sign, refreshChainData]);
+  }, [step, payin, address, sign, refreshChainData, t]);
 
   const copyClabe = async () => {
     if (!payin) return;
@@ -204,13 +211,6 @@ const Depositar = () => {
     setError("");
     setQuote(null);
     setVaulted(false);
-    simulateRef.current = false;
-  };
-
-  // Demo: forzar el "envío SPEI" sin esperar a BlindPay → dispara la liquidación on-chain.
-  const simulateSend = () => {
-    simulateRef.current = true;
-    setStep("settling");
   };
 
   return (
@@ -328,17 +328,8 @@ const Depositar = () => {
               <Clock className="w-4 h-4 animate-pulse" />
               {t("deposit_spei.waiting_payment")}
             </div>
-
-            {/* Demo: simular el envío SPEI sin esperar la confirmación de BlindPay (sandbox). */}
-            <button
-              onClick={simulateSend}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 text-primary px-5 py-3 text-xs font-bold active:scale-[0.98] transition-all"
-            >
-              <Send className="w-4 h-4" />
-              {t("deposit_spei.simulate_cta")}
-            </button>
-            <p className="text-[10px] text-center text-muted-foreground -mt-2">
-              {t("deposit_spei.simulate_hint")}
+            <p className="text-xs text-center text-muted-foreground -mt-2">
+              {t("deposit_spei.test_mode_hint")}
             </p>
           </div>
         )}

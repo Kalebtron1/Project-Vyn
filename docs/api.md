@@ -143,13 +143,10 @@ least 10 USD, and the API rejects less than 175 MXN. See [BlindPay](integrations
 | `quote` | POST | `{ walletAddress, amountMxn, email? }` | `{ quoteId, senderMxn, receiverUsd, flatFeeUsd, partnerFeeUsd, rateMxnPerUsd, commercialRateMxnPerUsd, expiresAt }` |
 | `payin` | POST | same as `quote` | `{ payinId, status, clabe, senderMxn, receiverUsd, address, network, tracking, payment, txHash, quote: {…} }` |
 | `status` | GET | `&id=<payinId>` | Same fields as `payin` without `quote` |
-| `settle` | POST | `{ payinId, simulate? }` | `{ settled: true, to, amountUsd, hash, simulated }`, or `{ settled: false, reason: "not_paid", status }`, or `{ settled: false, reason: "already_settled" }` |
+| `settle` | POST | `{ payinId }` | `{ settled: true, to, amountUsd, hash }`, or `{ settled: false, reason: "not_paid", status }`, or `{ settled: false, reason: "already_settled" }` |
 
 Errors: `400` for an unknown action, validation or a missing `payinId`; `405` for the wrong
 method; `502` with `{ error }` for BlindPay, Supabase or Horizon failures.
-
-`settle` with `simulate: true` pays an unpaid payin on testnet, and nothing checks the caller
-(issue #92).
 
 ## /api/blindpay
 

@@ -62,7 +62,6 @@ The modal refuses a different address than the session's. See [DeFindex](integra
 /depositar: amount in MXN ─▶ (500 ms) POST /api/onramp?action=quote ─▶ USDC to receive
 "Generar CLABE" ─▶ POST /api/onramp?action=payin ─▶ CLABE
 poll GET /api/onramp?action=status every 4 s until "completed" (sandbox: ~30 s)
-   or "Simular envío SPEI"
 settle: USDC trustline if missing (user signs)
         POST /api/onramp?action=settle ─▶ admin sends the USDC to the user
         depositToVault (user signs; best effort) ─▶ refresh ─▶ success
