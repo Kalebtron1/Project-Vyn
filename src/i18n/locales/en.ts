@@ -494,40 +494,164 @@ const en = {
   },
 
   help: {
-    title: "Help Center",
-    support_title: "Have technical questions?",
-    support_description:
-      "If you have issues with Freighter or your transactions, write to us.",
-    faq_section_label: "Frequently Asked Questions",
-    resources_section_label: "Network Resources",
+    title: "Help center",
+    subtitle: "Answers about your savings, level and credit",
+    testnet_title: "Vyn is on a test network",
+    testnet_description:
+      "Everything runs on test money with no real value. The contracts have no external audit yet, so do not send real funds.",
+    search_label: "Search help",
+    search_placeholder: "Search, for example: withdraw, level, Freighter",
+    no_results_title: "We found no answers",
+    no_results_description: "Try another word or open a report.",
+    contact_title: "Didn't find your answer?",
+    contact_description:
+      "Open a report on GitHub with what you were trying to do and what happened. It is public: do not include your email, seed phrase or secret key. Nobody from Vyn will ask for them.",
+    contact_cta: "Open a report",
+    copy_details: "Copy details for support",
+    copied_details: "Details copied",
+    copy_failed: "Could not copy",
+    details_hint: "Includes your public address and the network. Never includes keys. Paste them in your report.",
+    resources_section_label: "Useful links",
     stellar_expert_title: "Stellar Expert",
-    stellar_expert_subtitle: "Testnet Explorer",
-    freighter_title: "Freighter Wallet",
-    freighter_subtitle: "Official help center",
-    faqs: [
+    stellar_expert_subtitle: "Look up your transactions on the test network",
+    freighter_title: "Freighter",
+    freighter_subtitle: "Official wallet site",
+    categories: [
       {
-        q: "What is Vyn?",
-        a: "Vyn (Vínculo) is a DeFi platform that builds your financial identity on the blockchain. By saving in our smart contract, you generate a reputation score that gives you access to microcredits without traditional bureaucracy.",
+        id: "start",
+        title: "Getting started",
+        items: [
+          {
+            q: "What is Vyn?",
+            a: "Vyn helps you build a financial history from your own behavior. You save in digital dollars (USDC), your consistency earns you a level, and that level opens access to credit.",
+          },
+          {
+            q: "Do I need a wallet to start?",
+            a: "No. You can sign in with email, Google or a passkey, and Vyn creates a Stellar wallet for you. If you already have one, you can also connect Freighter, xBull, Lobstr, Hana, Rabet or Albedo.",
+          },
+          {
+            q: "What does \"Activate USDC\" mean?",
+            a: "On Stellar, an account must accept an asset before receiving it. When you activate USDC in Profile, you sign that approval and get 2 test USDC, once per wallet.",
+            link: "/perfil",
+            link_label: "Go to Profile",
+          },
+          {
+            q: "What is the test network?",
+            a: "It is a version of Stellar for trying things without risk. Its money has no value and cannot be exchanged for real money. That network resets from time to time, so your balances and level could be erased.",
+          },
+        ],
       },
       {
-        q: "How do I level up?",
-        a: "Your level (Bronze, Silver, Gold...) depends on your Reputation Score. It is calculated by an algorithm that rewards the consistency of your deposits and the time you keep your funds in the contract. The higher the score, the higher the credit limit.",
+        id: "savings",
+        title: "Savings and yield",
+        items: [
+          {
+            q: "How do I deposit?",
+            a: "On Home, tap \"Deposit\" and choose your wallet or SPEI. From your wallet, you sign the transaction and your balance updates once the network confirms it.",
+            link: "/",
+            link_label: "Go to Home",
+          },
+          {
+            q: "Where does the yield come from?",
+            a: "Your savings go into a DeFindex vault and grow as that vault gains value. On the test network it uses a test strategy, so the yield you see is a demonstration, not a promise of earnings.",
+          },
+          {
+            q: "How do I withdraw my savings?",
+            a: "In Withdrawals, choose your wallet, with a minimum of 1 USDC, or SPEI, with a minimum of 10 USDC. The money leaves the vault when you sign the transaction.",
+            link: "/retiros",
+            link_label: "Go to Withdrawals",
+          },
+          {
+            q: "Do SPEI deposits and withdrawals use real pesos?",
+            a: "No. SPEI runs in test mode: the deposit is simulated and the withdrawal goes to a demo account. Before confirming, you see that quote's exchange rate and fee.",
+          },
+        ],
       },
       {
-        q: "What are NFT levels?",
-        a: "Each level is a Soulbound Token (SBT). It is a special NFT linked to your wallet that cannot be transferred or sold. It is your 'badge' of good payer and saver on the Stellar network.",
+        id: "level",
+        title: "Your level",
+        items: [
+          {
+            q: "How is my level calculated?",
+            a: "It uses your operations and how much of what you deposited you keep saved. You need at least 3 operations. The points for each level are: Silver 50, Gold 150, Diamond 500 and Platinum 1,000. Withdrawing nearly all your savings lowers your score a lot.",
+          },
+          {
+            q: "I have the points. Why doesn't my level go up?",
+            a: "You have to claim it. When your score reaches a new level, you will see the \"Claim NFT\" option in Profile. You need a balance in your savings.",
+            link: "/perfil",
+            link_label: "Go to Profile",
+          },
+          {
+            q: "What is the level NFT?",
+            a: "It is a token tied to your wallet (SBT) that records your level on the network. It cannot be sold or transferred.",
+          },
+        ],
       },
       {
-        q: "What network does Vyn operate on?",
-        a: "We currently operate on Stellar Testnet (Test Network). This lets you try all features without using real money while we complete the audit phase.",
+        id: "credit",
+        title: "Credit",
+        items: [
+          {
+            q: "How much can I borrow?",
+            a: "It depends on your level: Silver up to 300 XLM, Gold up to 600, Diamond up to 1,500 and Platinum up to 5,000. Bronze has no credit. Today's loans are in XLM, even though your savings are in USDC.",
+          },
+          {
+            q: "How much does a loan cost?",
+            a: "There is a fixed 5% interest on what you borrow. If you borrow 300 XLM, you pay 315 XLM.",
+          },
+          {
+            q: "When do I have to pay?",
+            a: "In this test version, time runs very fast: a month lasts 60 seconds, so you can try the whole cycle. The screen shows the time left.",
+          },
+          {
+            q: "I reloaded the page and my loan is gone",
+            a: "Your loan is still recorded on the network, but the app does not show it again after a reload yet, and it won't let you request another. This is a known issue we are fixing. If you need to pay it, open a report with your support details.",
+          },
+        ],
       },
       {
-        q: "How do I withdraw my credit?",
-        a: "Once you reach Silver Level (50 reputation pts), the 'Withdraw Credit' option will be automatically enabled in your profile. The amount will be sent directly to your Freighter wallet.",
+        id: "safety",
+        title: "Security",
+        items: [
+          {
+            q: "Is my money safe?",
+            a: "No real money is at risk today, because Vyn runs on a test network. Your signature approves each movement from your wallet, but no smart contract is free of risk: Vyn's have no external audit yet, and the team keeps admin permissions while they are tested.",
+          },
+          {
+            q: "Can Vyn ask for my seed phrase?",
+            a: "Never. Nobody from Vyn will ask for it or for your secret key. Anyone who does is trying to steal your wallet, even if they say they are support.",
+          },
+          {
+            q: "I signed in with email. Can I take my wallet with me?",
+            a: "Yes. You can export your wallet's key from Profile. Keep it offline: whoever has it controls that wallet.",
+            link: "/perfil",
+            link_label: "Go to Profile",
+          },
+        ],
       },
       {
-        q: "Are my funds safe?",
-        a: "Absolutely. Vyn uses Smart Contracts on Soroban (Stellar). Funds are locked under cryptographic rules that only you control with your digital signature in Freighter.",
+        id: "problems",
+        title: "If something fails",
+        items: [
+          {
+            q: "My wallet says I have no funds, or the transaction fails",
+            a: "Check that your wallet is on the test network (Testnet), that you activated USDC and that you have enough balance. Network fees are paid in test XLM.",
+          },
+          {
+            q: "I see a warning that I changed accounts",
+            a: "Your wallet has a different account selected than your session's. Go back to the account you signed in with and you will keep your session.",
+          },
+          {
+            q: "I made a transaction and my balance does not change",
+            a: "The network takes a few seconds to confirm, and history can take a little longer. After a few minutes, reload the page and look for it in History.",
+            link: "/historial",
+            link_label: "Go to History",
+          },
+          {
+            q: "I can't sign in with email or Google",
+            a: "Use the same method you created your account with. If an error appears, close the sign-in window and try again. If Google says it belongs to another Vyn account, sign in with that account.",
+          },
+        ],
       },
     ],
   },

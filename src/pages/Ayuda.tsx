@@ -1,151 +1,159 @@
-import { useState } from "react";
-import { ArrowLeft, ChevronDown, MessageCircle, ExternalLink, ShieldCheck, Globe } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Check, Copy, ExternalLink, FlaskConical, Globe, MessageCircle, Search, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import AppShell from "@/components/AppShell";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useWallet } from "@/hooks/useWallet";
+import { searchHelp, type HelpCategory } from "@/lib/helpSearch";
 
-const faqs = [
-  {
-    q: "¿Qué es Vyn?",
-    a: "Vyn (Vínculo) es una plataforma DeFi que construye tu identidad financiera en la blockchain. Al ahorrar en nuestro contrato inteligente, generas un puntaje de reputación que te permite acceder a microcréditos sin burocracia tradicional.",
-  },
-  {
-    q: "¿Cómo subo de nivel?",
-    a: "Tu nivel (Bronce, Plata, Oro...) depende de tu Puntaje de Reputación. Este se calcula mediante un algoritmo que premia la constancia de tus depósitos y el tiempo que mantienes tus fondos en el contrato. A mayor puntaje, mayor límite de crédito.",
-  },
-  {
-    q: "¿Qué son los niveles NFT?",
-    a: "Cada nivel es un Soulbound Token (SBT). Es un NFT especial vinculado a tu wallet que no se puede transferir ni vender. Es tu 'medalla' de buen pagador y ahorrador en la red Stellar.",
-  },
-  {
-    q: "¿En qué red opera Vyn?",
-    a: "Actualmente operamos en Stellar Testnet (Red de Pruebas). Esto permite que pruebes todas las funcionalidades sin usar dinero real mientras terminamos la fase de auditoría.",
-  },
-  {
-    q: "¿Cómo retiro mi crédito?",
-    a: "Una vez alcances el Nivel Plata (50 pts de reputación), la opción de 'Retirar Crédito' se habilitará automáticamente en tu perfil. El monto se enviará directo a tu wallet Freighter.",
-  },
-  {
-    q: "¿Mis fondos están seguros?",
-    a: "Absolutamente. Vyn utiliza Smart Contracts en Soroban (Stellar). Los fondos están bloqueados bajo reglas criptográficas que solo tú controlas con tu firma digital en Freighter.",
-  },
-];
+// Canal provisional: Vyn aún no tiene correo propio.
+const SUPPORT_URL = "https://github.com/Kalebtron1/Project-Vyn/issues/new";
 
 const Ayuda = () => {
-  const navigate = useNavigate();
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const { t } = useTranslation();
+  const { wallet } = useWallet();
+  const [query, setQuery] = useState("");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  const categories = t("help.categories", { returnObjects: true }) as HelpCategory[];
+  const results = useMemo(() => searchHelp(categories, query), [categories, query]);
+  const searching = query.trim().length > 0;
+
+  const copyDetails = async () => {
+    const details = [`Wallet: ${wallet || "-"}`, "Red: Stellar Testnet", `Página: ${window.location.origin}`].join("\n");
+    try {
+      await navigator.clipboard.writeText(details);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-background pb-24 font-nunito">
-      <header className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex items-center gap-3">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90 transition-all"
-        >
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-        </button>
-        <h1 className="text-xl font-bold text-foreground tracking-tight">Centro de Ayuda</h1>
-      </header>
-
-      <main className="px-5 max-w-md md:max-w-2xl mx-auto space-y-5">
-        {/* Contact Support Card */}
-        <div className="card-elevated p-5 bg-primary/5 border border-primary/10 opacity-0 animate-fade-up">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground mb-1">¿Tienes dudas técnicas?</p>
-              <p className="text-xs text-muted-foreground mb-3">
-                Si tienes problemas con Freighter o con tus transacciones, escríbenos.
-              </p>
-              <a
-                href="mailto:soporte@vyn.app"
-                className="inline-flex items-center gap-2 text-xs font-bold text-primary px-3 py-2 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
-              >
-                soporte@vyn.app
-              </a>
-            </div>
+    <AppShell title={t("help.title")} subtitle={t("help.subtitle")}>
+      <div className="max-w-2xl mx-auto space-y-5">
+        <div className="card-elevated p-4 flex items-start gap-3" data-testid="help-testnet-notice">
+          <FlaskConical className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold">{t("help.testnet_title")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("help.testnet_description")}</p>
           </div>
         </div>
 
-        {/* FAQ Section */}
-        <div className="opacity-0 animate-fade-up" style={{ animationDelay: "100ms" }}>
-          <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground mb-3 px-1">
-            Preguntas Frecuentes
-          </p>
-          <div className="card-elevated divide-y divide-border overflow-hidden">
-            {faqs.map((faq, i) => {
-              const isOpen = openIndex === i;
-              return (
-                <div key={i} className="group">
-                  <button
-                    onClick={() => setOpenIndex(isOpen ? null : i)}
-                    className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors"
-                  >
-                    <p className="text-sm font-bold text-foreground pr-4 leading-snug">{faq.q}</p>
-                    <ChevronDown
-                      className={`w-4 h-4 text-muted-foreground transition-transform duration-500 ${
-                        isOpen ? "rotate-180 text-primary" : ""
-                      }`}
-                    />
-                  </button>
-                  <div
-                    className={`transition-all duration-500 ease-in-out overflow-hidden ${
-                      isOpen ? "max-h-60 bg-secondary/20" : "max-h-0"
-                    }`}
-                  >
-                    <div className="px-5 pb-5 pt-1">
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {faq.a}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="relative">
+          <Search className="w-5 h-5 text-muted-foreground absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label={t("help.search_label")}
+            placeholder={t("help.search_placeholder")}
+            className="w-full h-12 pl-12 pr-4 rounded-2xl bg-card border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
 
-        {/* Resources Section */}
-        <div className="opacity-0 animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground mb-3 px-1">
-            Recursos de la Red
-          </p>
-          <div className="card-elevated divide-y divide-border">
+        {results.length === 0 ? (
+          <div className="text-center py-8" role="status" data-testid="help-no-results">
+            <p className="text-base font-bold">{t("help.no_results_title")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("help.no_results_description")}</p>
+          </div>
+        ) : (
+          results.map((category) => (
+            <section key={category.id} data-testid="help-category">
+              <h2 className="text-xs font-semibold tracking-widest uppercase text-muted-foreground mb-2 px-1">
+                {category.title}
+              </h2>
+              <div className="card-elevated overflow-hidden">
+                {/* Al buscar, los resultados se abren para leerlos sin más toques. */}
+                <Accordion
+                  key={searching ? `${category.id}-search` : category.id}
+                  type="multiple"
+                  defaultValue={searching ? category.items.map((item) => item.q) : []}
+                >
+                  {category.items.map((item) => (
+                    <AccordionItem key={item.q} value={item.q} className="last:border-b-0 px-4">
+                      <AccordionTrigger className="text-sm font-semibold text-left min-h-12 hover:no-underline">
+                        {item.q}
+                      </AccordionTrigger>
+                      <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                        <p>{item.a}</p>
+                        {item.link && (
+                          <Link to={item.link} className="inline-flex items-center min-h-11 font-bold text-primary">
+                            {item.link_label}
+                          </Link>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+            </section>
+          ))
+        )}
+
+        <section className="card-elevated p-5" data-testid="help-contact">
+          <h2 className="text-base font-bold">{t("help.contact_title")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{t("help.contact_description")}</p>
+          <div className="flex flex-wrap gap-2 mt-4">
             <a
-              href="https://stellar.expert/explorer/testnet/"
+              href={SUPPORT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 px-5 py-4 hover:bg-secondary/50 transition-colors group"
+              className="btn-emerald min-h-11 !py-2 inline-flex items-center gap-2 text-sm"
             >
-              <Globe className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Stellar Expert</p>
-                <p className="text-[10px] text-muted-foreground">Explorador de la Testnet</p>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />
+              <MessageCircle className="w-4 h-4" /> {t("help.contact_cta")}
             </a>
-            
+            <button
+              onClick={copyDetails}
+              className="min-h-11 px-4 rounded-2xl bg-secondary text-sm font-semibold inline-flex items-center gap-2"
+            >
+              {copyState === "copied" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copyState === "copied"
+                ? t("help.copied_details")
+                : copyState === "failed"
+                  ? t("help.copy_failed")
+                  : t("help.copy_details")}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">{t("help.details_hint")}</p>
+        </section>
+
+        <section>
+          <h2 className="text-xs font-semibold tracking-widest uppercase text-muted-foreground mb-2 px-1">
+            {t("help.resources_section_label")}
+          </h2>
+          <div className="card-elevated divide-y divide-border">
+            <a
+              href={wallet ? `https://stellar.expert/explorer/testnet/account/${wallet}` : "https://stellar.expert/explorer/testnet/"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-5 py-4 hover:bg-secondary/50 transition-colors"
+            >
+              <Globe className="w-5 h-5 text-muted-foreground shrink-0" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-bold">{t("help.stellar_expert_title")}</span>
+                <span className="block text-xs text-muted-foreground">{t("help.stellar_expert_subtitle")}</span>
+              </span>
+              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+            </a>
             <a
               href="https://www.freighter.app/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 px-5 py-4 hover:bg-secondary/50 transition-colors group"
+              className="flex items-center gap-3 px-5 py-4 hover:bg-secondary/50 transition-colors"
             >
-              <ShieldCheck className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Freighter Wallet</p>
-                <p className="text-[10px] text-muted-foreground">Centro de ayuda oficial</p>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />
+              <ShieldCheck className="w-5 h-5 text-muted-foreground shrink-0" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-bold">{t("help.freighter_title")}</span>
+                <span className="block text-xs text-muted-foreground">{t("help.freighter_subtitle")}</span>
+              </span>
+              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
             </a>
           </div>
-        </div>
-
-        <p className="text-center text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest pt-4">
-          Protocolo Vyn · Descentralizado
-        </p>
-      </main>
-    </div>
+        </section>
+      </div>
+    </AppShell>
   );
 };
 
