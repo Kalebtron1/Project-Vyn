@@ -119,7 +119,7 @@ compiled into the frontend at build time: change them and redeploy.
 In order of cost:
 
 1. **Delete the unused function**, `nonce.js` (no caller in the
-   frontend). Frees 2.
+   frontend). Frees 1.
 2. **Merge `health.js` into `readiness.js`** (for example `GET /api/readiness?deep=0` for a
    shallow check) and update `scripts/healthcheck.js` and the runbook. Frees 1.
 3. **Add actions, not files**: new endpoints in an existing domain go behind `?action=`
