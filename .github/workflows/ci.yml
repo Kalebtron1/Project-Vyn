@@ -1,11 +1,10 @@
 name: contracts-ci
 
-# Compila y prueba los contratos Soroban. fmt/clippy se aplican a staking_pool
-# (el contrato refactorizado para DeFindex); build + test corren sobre los tres.
+# Compila y prueba los contratos Soroban del workspace backend/contracts.
 
 on:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]
   pull_request:
 
 jobs:
@@ -18,36 +17,29 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
+          targets: wasm32v1-none
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            backend/contracts/staking_pool
-            backend/contracts/vinculo_sbt
-            backend/contracts/vinculo_lending
+          workspaces: backend/contracts
 
-      - name: Format check (staking_pool)
-        working-directory: backend/contracts/staking_pool
-        run: cargo fmt --check
-
-      - name: Clippy (staking_pool)
-        working-directory: backend/contracts/staking_pool
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Unit tests (all contracts)
+      - name: Format check
         working-directory: backend/contracts
-        run: |
-          for c in staking_pool vinculo_sbt vinculo_lending; do
-            echo "== cargo test: $c =="
-            (cd "$c" && cargo test)
-          done
+        run: cargo fmt --all --check
 
-      - name: Build wasm release (all contracts)
+      - name: Clippy
         working-directory: backend/contracts
-        run: |
-          for c in staking_pool vinculo_sbt vinculo_lending; do
-            echo "== cargo build (wasm release): $c =="
-            (cd "$c" && cargo build --release --target wasm32-unknown-unknown)
-          done
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Unit tests
+        working-directory: backend/contracts
+        run: cargo test --workspace
+
+      # soroban-sdk 28 solo compila a Wasm con `stellar contract build`.
+      - name: Install Stellar CLI
+        uses: stellar/stellar-cli@v28.1.0
+
+      - name: Build wasm release
+        working-directory: backend/contracts
+        run: stellar contract build

@@ -25,8 +25,7 @@ CONTRACTS_DIR="backend/contracts"
 : "${CONTRACT_ID:?Set CONTRACT_ID}"
 : "${CONTRACT_NAME:?Set CONTRACT_NAME (vinculo_sbt | staking_pool | vinculo_lending)}"
 
-DIR="$CONTRACTS_DIR/$CONTRACT_NAME"
-WASM="$DIR/target/wasm32-unknown-unknown/release/${CONTRACT_NAME}.wasm"
+WASM="$CONTRACTS_DIR/target/wasm32v1-none/release/${CONTRACT_NAME}.wasm"
 
 echo "==> Upgrading $CONTRACT_NAME ($CONTRACT_ID) on $NETWORK"
 
@@ -36,7 +35,7 @@ stellar contract info --id "$CONTRACT_ID" --network "$NETWORK" 2>/dev/null || tr
 
 # 2. Build
 echo "── Building $CONTRACT_NAME ──"
-(cd "$DIR" && cargo build --release --target wasm32-unknown-unknown --quiet)
+(cd "$CONTRACTS_DIR" && stellar contract build --package "$CONTRACT_NAME")
 
 # 3. Upload new wasm
 echo "── Uploading wasm ──"

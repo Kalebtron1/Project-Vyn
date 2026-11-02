@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["staking_pool", "vinculo_lending", "vinculo_sbt"]
+
+[workspace.dependencies]
+# Misma versión que pide OpenZeppelin Stellar Contracts 0.8.0.
+soroban-sdk = { version = "28.0.0", features = ["alloc"] }
+
+# Cargo solo respeta los perfiles definidos en la raíz del workspace.
+[profile.release]
+opt-level = "z"      # Optimizar para tamaño (menor que "s" en binario Wasm)
+overflow-checks = true
+debug = 0
+strip = "symbols"
+codegen-units = 1    # Maximizar inlining entre unidades de compilación
+panic = "abort"      # Sin unwinding → binario más pequeño
+lto = true           # Link-Time Optimization: reduce código muerto
+
+[profile.release-with-logs]
+# Perfil alternativo para debugging con logs en stellar-cli.
+inherits = "release"
+debug-assertions = true

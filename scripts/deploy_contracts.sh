@@ -47,14 +47,14 @@ echo "==> Admin:   $ADMIN_PUBLIC"
 # ── Helper: build + deploy + return contract ID ───────────────────────────────
 deploy_contract() {
   local name="$1"
-  local dir="$CONTRACTS_DIR/$name"
 
-  echo ""
-  echo "── Building $name ──"
-  (cd "$dir" && cargo build --release --target wasm32-unknown-unknown --quiet)
+  # Los mensajes van a stderr: quien llama captura el stdout como contract ID.
+  echo "" >&2
+  echo "── Building $name ──" >&2
+  (cd "$CONTRACTS_DIR" && stellar contract build --package "$name") >&2
 
-  local wasm="$dir/target/wasm32-unknown-unknown/release/${name}.wasm"
-  echo "── Deploying $name ──"
+  local wasm="$CONTRACTS_DIR/target/wasm32v1-none/release/${name}.wasm"
+  echo "── Deploying $name ──" >&2
   stellar contract deploy \
     --wasm "$wasm" \
     --source "$ADMIN_SECRET" \
@@ -64,8 +64,7 @@ deploy_contract() {
 # ── Helper: upload wasm and return hash ───────────────────────────────────────
 upload_wasm() {
   local name="$1"
-  local dir="$CONTRACTS_DIR/$name"
-  local wasm="$dir/target/wasm32-unknown-unknown/release/${name}.wasm"
+  local wasm="$CONTRACTS_DIR/target/wasm32v1-none/release/${name}.wasm"
 
   stellar contract upload \
     --wasm "$wasm" \

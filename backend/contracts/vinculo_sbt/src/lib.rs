@@ -19,8 +19,13 @@ impl VinculoSBT {
             panic!("El contrato ya fue inicializado");
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::Name, &String::from_str(&env, "Vinculo Credito SBT"));
-        env.storage().instance().set(&DataKey::Symbol, &String::from_str(&env, "VINC"));
+        env.storage().instance().set(
+            &DataKey::Name,
+            &String::from_str(&env, "Vinculo Credito SBT"),
+        );
+        env.storage()
+            .instance()
+            .set(&DataKey::Symbol, &String::from_str(&env, "VINC"));
     }
 
     pub fn name(env: Env) -> String {
@@ -32,7 +37,11 @@ impl VinculoSBT {
     }
 
     pub fn token_uri(env: Env, user: Address) -> String {
-        let tier = env.storage().persistent().get(&DataKey::Tier(user)).unwrap_or(0u32);
+        let tier = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Tier(user))
+            .unwrap_or(0u32);
         match tier {
             1 => String::from_str(&env, "https://raw.githubusercontent.com/YORCH12/Stellar-Hack-vinculo-credito/main/metadata/plata.json"),
             2 => String::from_str(&env, "https://raw.githubusercontent.com/YORCH12/Stellar-Hack-vinculo-credito/main/metadata/oro.json"),
@@ -72,6 +81,9 @@ impl VinculoSBT {
     }
 
     pub fn get_tier(env: Env, user: Address) -> u32 {
-        env.storage().persistent().get(&DataKey::Tier(user)).unwrap_or(0)
+        env.storage()
+            .persistent()
+            .get(&DataKey::Tier(user))
+            .unwrap_or(0)
     }
 }

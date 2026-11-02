@@ -15,9 +15,9 @@ All commands target **Stellar Testnet** (`--network testnet`). Swap `testnet` fo
 
 ```bash
 # Rust + wasm target
-rustup target add wasm32-unknown-unknown
+rustup target add wasm32v1-none
 
-# Stellar CLI (must be ≥ 21.x to match soroban-sdk 21.7.6)
+# Stellar CLI (must be ≥ 25.2 to build with soroban-sdk 28)
 cargo install --locked stellar-cli --features opt
 
 # Confirm versions
@@ -59,16 +59,16 @@ stellar keys fund $ADMIN_PUBLIC --network $NETWORK
 
 ```bash
 cd backend/contracts/vinculo_sbt
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 ```
 
-Wasm output: `target/wasm32-unknown-unknown/release/vinculo_sbt.wasm`
+Wasm output: `../target/wasm32v1-none/release/vinculo_sbt.wasm`
 
 ### Deploy (first time)
 
 ```bash
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/vinculo_sbt.wasm \
+  --wasm ../target/wasm32v1-none/release/vinculo_sbt.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK
 ```
@@ -96,11 +96,11 @@ stellar contract invoke \
 
 ```bash
 # 1. Build the new wasm
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 
 # 2. Upload the new wasm blob and capture the hash
 WASM_HASH=$(stellar contract upload \
-  --wasm target/wasm32-unknown-unknown/release/vinculo_sbt.wasm \
+  --wasm ../target/wasm32v1-none/release/vinculo_sbt.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK)
 
@@ -123,16 +123,16 @@ stellar contract invoke \
 
 ```bash
 cd backend/contracts/staking_pool
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 ```
 
-Wasm output: `target/wasm32-unknown-unknown/release/staking_pool.wasm`
+Wasm output: `../target/wasm32v1-none/release/staking_pool.wasm`
 
 ### Deploy (first time)
 
 ```bash
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/staking_pool.wasm \
+  --wasm ../target/wasm32v1-none/release/staking_pool.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK
 ```
@@ -161,10 +161,10 @@ stellar contract invoke \
 
 ```bash
 cd backend/contracts/staking_pool
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 
 WASM_HASH=$(stellar contract upload \
-  --wasm target/wasm32-unknown-unknown/release/staking_pool.wasm \
+  --wasm ../target/wasm32v1-none/release/staking_pool.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK)
 
@@ -188,16 +188,16 @@ Depends on `vinculo_sbt` — `$SBT_CONTRACT_ID` must be set before deploying.
 
 ```bash
 cd backend/contracts/vinculo_lending
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 ```
 
-Wasm output: `target/wasm32-unknown-unknown/release/vinculo_lending.wasm`
+Wasm output: `../target/wasm32v1-none/release/vinculo_lending.wasm`
 
 ### Deploy (first time)
 
 ```bash
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/vinculo_lending.wasm \
+  --wasm ../target/wasm32v1-none/release/vinculo_lending.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK
 ```
@@ -235,10 +235,10 @@ stellar contract invoke \
 
 ```bash
 cd backend/contracts/vinculo_lending
-cargo build --release --target wasm32-unknown-unknown
+stellar contract build
 
 WASM_HASH=$(stellar contract upload \
-  --wasm target/wasm32-unknown-unknown/release/vinculo_lending.wasm \
+  --wasm ../target/wasm32v1-none/release/vinculo_lending.wasm \
   --source $ADMIN_SECRET \
   --network $NETWORK)
 

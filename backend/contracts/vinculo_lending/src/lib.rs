@@ -7,8 +7,14 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
-use vinculo_sbt::VinculoSBTClient;
+use soroban_sdk::{contract, contractclient, contractimpl, contracttype, token, Address, Env};
+
+// Interfaz mínima del SBT. No se depende del crate `vinculo_sbt` porque eso
+// exporta sus funciones (`init`, `mint`, `revoke`...) dentro de este Wasm.
+#[contractclient(name = "VinculoSBTClient")]
+pub trait SbtInterface {
+    fn get_tier(e: Env, user: Address) -> u32;
+}
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +76,7 @@ impl VinculoLending {
             .get(&DataKey::Token)
             .expect("init not called");
         let client = token::Client::new(&env, &token_addr);
-        client.transfer(&from, &env.current_contract_address(), &amount);
+        client.transfer(&from, env.current_contract_address(), &amount);
     }
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
@@ -146,7 +152,7 @@ impl VinculoLending {
 
         let pay = amount.min(loan.total_owed);
         let token_client = token::Client::new(&env, &token_addr);
-        token_client.transfer(&user, &env.current_contract_address(), &pay);
+        token_client.transfer(&user, env.current_contract_address(), &pay);
 
         loan.total_owed -= pay;
         if loan.total_owed == 0 {
@@ -258,10 +264,10 @@ impl VinculoLending {
 
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
-        1 => 300_000_0000,   // Plata
-        2 => 600_000_0000,   // Oro
-        3 => 1_500_000_0000, // Diamante
-        4 => 5_000_000_0000, // Platino
+        1 => 3_000_000_000,  // Plata: 300 unidades (7 decimales)
+        2 => 6_000_000_000,  // Oro: 600
+        3 => 15_000_000_000, // Diamante: 1,500
+        4 => 50_000_000_000, // Platino: 5,000
         _ => 0,
     }
 }

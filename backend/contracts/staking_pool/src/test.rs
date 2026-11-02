@@ -54,7 +54,7 @@ impl MockVault {
         let token_addr: Address = env.storage().instance().get(&VaultKey::Token).unwrap();
         token::Client::new(&env, &token_addr).transfer(
             &from,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
         // Mintea shares 1:1 con el monto depositado.

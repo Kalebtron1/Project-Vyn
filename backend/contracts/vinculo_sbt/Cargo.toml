@@ -10,23 +10,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # soroban-sdk provee todos los tipos y macros necesarios para contratos Soroban.
-soroban-sdk = { version = "21.7.6", features = ["alloc"] }
+soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 # Habilitar utilidades de testing (testutils) solo durante pruebas locales.
-soroban-sdk = { version = "21.7.6", features = ["testutils", "alloc"] }
-
-[profile.release]
-# Optimizaciones críticas para reducir el tamaño del binario Wasm:
-opt-level = "z"      # Optimizar para tamaño (menor que "s" en binario Wasm)
-overflow-checks = true
-debug = 0
-strip = "symbols"
-codegen-units = 1    # Maximizar inlining entre unidades de compilación
-panic = "abort"      # Sin unwinding → binario más pequeño
-lto = true           # Link-Time Optimization: reduce código muerto
-
-[profile.release-with-logs]
-# Perfil alternativo para debugging con logs en stellar-cli.
-inherits = "release"
-debug-assertions = true
+soroban-sdk = { workspace = true, features = ["testutils"] }
