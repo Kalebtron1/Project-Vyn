@@ -374,7 +374,6 @@ const en = {
     passkey_add_another: "Add another device",
     passkey_error: "Couldn't open fingerprint setup. Try again in a few seconds.",
     menu_notifications: "Notifications",
-    menu_notifications_detail: "Enabled",
     menu_help: "Help center",
     menu_logout: "Log out",
     toast_minted_title: "NFT minted successfully",
@@ -469,24 +468,29 @@ const en = {
 
   notifications: {
     title: "Notifications",
-    subtitle_unread: "{{count}} new today",
-    mark_all_read: "Mark all as read",
-    empty_title: "Empty inbox",
+    subtitle_unread: "{{count}} unread",
+    subtitle_read: "You're up to date",
+    unread_label: "Unread",
+    mark_all_read: "Mark as read",
+    clear_all: "Delete all notifications",
+    delete: "Delete notification",
+    empty_title: "No news",
     empty_description:
-      "No news for now. We'll notify you of any changes!",
+      "Your deposits, withdrawals, loans and payments will show here once confirmed.",
     confirm_clear_all: "Delete all notifications?",
-    mock_deposit_title: "Deposit confirmed",
-    mock_deposit_message:
-      "Your 50 USDC are already in the smart contract building reputation.",
-    mock_deposit_time: "2 hours ago",
-    mock_tier_title: "Silver Level available! 🥈",
-    mock_tier_message:
-      "Your score exceeded 50 pts. You can now claim your Silver Level NFT.",
-    mock_tier_time: "1 day ago",
-    mock_welcome_title: "Welcome to Vyn",
-    mock_welcome_message:
-      "Connect your Freighter to start building your financial history.",
-    mock_welcome_time: "3 days ago",
+    error_title: "We couldn't check your activity",
+    error_description: "You may be missing notifications. Your money is not affected.",
+    retry: "Try again",
+    deposit_title: "Deposit confirmed",
+    deposit_message: "{{amount}} {{currency}} went into your savings.",
+    withdraw_title: "Withdrawal confirmed",
+    withdraw_message: "{{amount}} {{currency}} left your savings.",
+    loan_title: "Loan received",
+    loan_message: "You received {{amount}} {{currency}}.",
+    repay_title: "Payment recorded",
+    repay_message: "You paid {{amount}} {{currency}} toward your loan.",
+    mint_title: "New level",
+    mint_message: "You now have the {{level}} level.",
   },
 
   help: {

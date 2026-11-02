@@ -121,31 +121,28 @@ export async function fetchActivity(userAddress: string): Promise<ActivityItem[]
   if (!CONTRACT_ID && !LENDING_CONTRACT_ID) return [];
 
   const items: ActivityItem[] = [];
-  try {
-    const res = await fetch(
-      `${HORIZON_URL}/accounts/${userAddress}/operations?limit=100&order=desc&include_failed=false`
-    );
-    // Cuenta aún no creada en la red (p. ej. wallet Privy recién hecha, sin fondear):
-    // Horizon responde 404. No es un error: simplemente no hay actividad on-chain todavía.
-    if (res.status !== 404) {
-      if (!res.ok) throw new Error("Error leyendo Horizon");
-      const data = await res.json();
+  // Si la lectura falla, se propaga: "no pude leer" no es lo mismo que "no hay actividad".
+  const res = await fetch(
+    `${HORIZON_URL}/accounts/${userAddress}/operations?limit=100&order=desc&include_failed=false`
+  );
+  // Cuenta aún no creada en la red (p. ej. wallet Privy recién hecha, sin fondear):
+  // Horizon responde 404. No es un error: simplemente no hay actividad on-chain todavía.
+  if (res.status !== 404) {
+    if (!res.ok) throw new Error("Error leyendo Horizon");
+    const data = await res.json();
 
-      for (const op of data._embedded?.records || []) {
-        if (op.type !== "invoke_host_function") continue;
-        const changes: BalanceChange[] = op.asset_balance_changes || [];
-        for (const change of changes) {
-          const item = classify(change, userAddress);
-          if (!item) continue;
-          item.id = op.id;
-          item.txHash = op.transaction_hash;
-          item.date = op.created_at ? new Date(op.created_at) : new Date();
-          items.push(item);
-        }
+    for (const op of data._embedded?.records || []) {
+      if (op.type !== "invoke_host_function") continue;
+      const changes: BalanceChange[] = op.asset_balance_changes || [];
+      for (const change of changes) {
+        const item = classify(change, userAddress);
+        if (!item) continue;
+        item.id = op.id;
+        item.txHash = op.transaction_hash;
+        item.date = op.created_at ? new Date(op.created_at) : new Date();
+        items.push(item);
       }
     }
-  } catch (error) {
-    console.error("Error cargando actividad on-chain:", error);
   }
 
   items.push(...readLocalMints(userAddress));
