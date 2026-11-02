@@ -544,7 +544,7 @@ const Perfil = () => {
   };
 
   const menuItems = [
-    { icon: Bell, label: t("profile.menu_notifications"), detail: t("profile.menu_notifications_detail"), action: () => navigate("/notificaciones") },
+    { icon: Bell, label: t("profile.menu_notifications"), detail: "", action: () => navigate("/notificaciones") },
     { icon: HelpCircle, label: t("profile.menu_help"), detail: "", action: () => navigate("/ayuda") },
     { icon: LogOut, label: t("profile.menu_logout"), detail: "", destructive: true, action: handleLogout },
   ];
