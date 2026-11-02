@@ -7,7 +7,19 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractclient, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{
+    contract, contractclient, contractimpl, contracttype, token, Address, BytesN, Env, Symbol, Vec,
+};
+use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_contract_utils::{
+    pausable::{self as pausable, Pausable},
+    upgradeable::{self as upgradeable, Upgradeable},
+};
+use stellar_macros::{only_admin, only_role, when_not_paused};
+
+const DAY_IN_LEDGERS: u32 = 17_280;
+pub const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const TTL_EXTEND_TO: u32 = 90 * DAY_IN_LEDGERS;
 
 // Interfaz mínima del SBT. No se depende del crate `vinculo_sbt` porque eso
 // exporta sus funciones (`init`, `mint`, `revoke`...) dentro de este Wasm.
@@ -47,22 +59,33 @@ pub struct VinculoLending;
 
 #[contractimpl]
 impl VinculoLending {
-    /// Guarda dirección del token (SAC / Soroban token), del contrato `VinculoSBT`
-    /// y de la wallet de tesorería (la única que podrá retirar el interés).
-    ///
-    /// La tesorería se fija aquí, en el deploy, y no en una función aparte: así se
-    /// evita un *front-running* en el que un atacante la reclame antes que el dueño.
-    pub fn init_lending(env: Env, token: Address, sbt: Address, treasury: Address) {
-        // Guard de re-inicialización: sin esto, cualquiera podría volver a llamar
-        // `init_lending` y re-apuntar el token, el SBT o la tesorería a uno malicioso
-        // (p.ej. un SBT que devuelva tier 4 para el atacante) y drenar el pool vía
-        // `request_loan`.
-        if env.storage().instance().has(&DataKey::Token) {
-            panic!("El contrato ya fue inicializado");
-        }
+    /// El deploy y la inicialización ocurren en la misma transacción, así que
+    /// nadie puede adelantarse a fijar el admin, el token, el SBT o la tesorería.
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        pauser: Address,
+        token: Address,
+        sbt: Address,
+        treasury: Address,
+    ) {
+        access_control::set_admin(&env, &admin);
+        access_control::grant_role_no_auth(&env, &pauser, &Symbol::new(&env, "pauser"), &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
+        extend_instance(&env);
+    }
+
+    /// Cambia la tesorería. Firman el admin y la cuenta nueva, para que un error
+    /// de dedo no deje las ganancias en una dirección que nadie controla.
+    #[only_admin]
+    pub fn set_treasury(env: Env, new_treasury: Address) {
+        new_treasury.require_auth();
+        env.storage()
+            .instance()
+            .set(&DataKey::Treasury, &new_treasury);
+        extend_instance(&env);
     }
 
     /// Aporta liquidez al pool de préstamos (el `from` transfiere al contrato).
@@ -77,9 +100,11 @@ impl VinculoLending {
             .expect("init not called");
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, env.current_contract_address(), &amount);
+        extend_instance(&env);
     }
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
+    #[when_not_paused]
     pub fn request_loan(env: Env, user: Address, amount: i128, months: u64) {
         user.require_auth();
         assert!(amount > 0, "amount must be > 0");
@@ -115,8 +140,10 @@ impl VinculoLending {
 
         let token_client = token::Client::new(&env, &token_addr);
         let this = env.current_contract_address();
-        let pool_balance = token_client.balance(&this);
-        assert!(pool_balance >= amount, "insufficient pool liquidity");
+        // El interés acumulado es de la tesorería: no se puede prestar.
+        let accrued: i128 = storage.get(&DataKey::AccruedInterest).unwrap_or(0);
+        let free_liquidity = token_client.balance(&this) - accrued;
+        assert!(free_liquidity >= amount, "insufficient pool liquidity");
 
         token_client.transfer(&this, &user, &amount);
 
@@ -127,7 +154,7 @@ impl VinculoLending {
             months,
             apy_bps: 500,
         };
-        env.storage().persistent().set(&loan_key, &loan);
+        write_loan(&env, &loan_key, &loan);
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -165,7 +192,7 @@ impl VinculoLending {
             storage.set(&DataKey::AccruedInterest, &(accrued + interest));
             loan = Loan::default();
         }
-        env.storage().persistent().set(&loan_key, &loan);
+        write_loan(&env, &loan_key, &loan);
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -173,6 +200,7 @@ impl VinculoLending {
     /// más que el interés acumulado ni más que el balance disponible, de modo que
     /// el principal del pool permanece intacto para seguir otorgando préstamos.
     /// Devuelve el monto efectivamente retirado.
+    #[when_not_paused]
     pub fn withdraw_interest(env: Env, amount: i128) -> i128 {
         assert!(amount > 0, "amount must be > 0");
 
@@ -194,6 +222,7 @@ impl VinculoLending {
 
         token_client.transfer(&this, &treasury, &withdrawable);
         storage.set(&DataKey::AccruedInterest, &(accrued - withdrawable));
+        extend_instance(&env);
         withdrawable
     }
 
@@ -205,6 +234,7 @@ impl VinculoLending {
     /// el balance nunca cae por debajo del interés reservado a la tesorería.
     /// Solo la tesorería puede llamarla (`treasury.require_auth()`).
     /// Devuelve el monto efectivamente retirado.
+    #[when_not_paused]
     pub fn withdraw_pool(env: Env, amount: i128) -> i128 {
         assert!(amount > 0, "amount must be > 0");
 
@@ -224,6 +254,7 @@ impl VinculoLending {
         assert!(withdrawable > 0, "nothing to withdraw");
 
         token_client.transfer(&this, &treasury, &withdrawable);
+        extend_instance(&env);
         withdrawable
     }
 
@@ -262,6 +293,50 @@ impl VinculoLending {
     }
 }
 
+#[contractimpl]
+impl Pausable for VinculoLending {
+    fn paused(e: &Env) -> bool {
+        pausable::paused(e)
+    }
+
+    #[only_role(caller, "pauser")]
+    fn pause(e: &Env, caller: Address) {
+        pausable::pause(e);
+    }
+
+    /// Despausar es del admin: una llave de pausa robada no puede reanudar.
+    #[only_admin]
+    fn unpause(e: &Env, caller: Address) {
+        let _ = caller;
+        pausable::unpause(e);
+    }
+}
+
+#[contractimpl]
+impl Upgradeable for VinculoLending {
+    #[only_admin]
+    fn upgrade(e: &Env, new_wasm_hash: BytesN<32>, operator: Address) {
+        let _ = operator;
+        upgradeable::upgrade(e, &new_wasm_hash);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for VinculoLending {}
+
+fn write_loan(env: &Env, key: &DataKey, loan: &Loan) {
+    let storage = env.storage().persistent();
+    storage.set(key, loan);
+    storage.extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    extend_instance(env);
+}
+
+fn extend_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {
         1 => 3_000_000_000,  // Plata: 300 unidades (7 decimales)
@@ -271,3 +346,6 @@ fn max_principal_for_tier(tier: u32) -> i128 {
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod test;

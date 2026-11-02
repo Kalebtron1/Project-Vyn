@@ -1,126 +1,85 @@
 #!/usr/bin/env bash
-# deploy_contracts.sh — full deploy + init sequence for all three Soroban contracts.
-# Run from the repo root after setting the required environment variables.
+# deploy_contracts.sh — build and deploy the three Soroban contracts.
+# Each constructor runs in the deploy transaction, so there is no init window.
+# Run from the repo root.
 #
 # Required env vars:
-#   ADMIN_SECRET          — deployer secret key (S...)
-#   ADMIN_PUBLIC          — matching public key  (G...)
-#   TOKEN_ADDRESS         — SAC del activo del staking_pool: el USDC del vault DeFindex.
-#                           Debe ser el MISMO activo del vault.
-#   VAULT_ADDRESS         — dirección del vault DeFindex (USDC) que respalda el staking_pool
-#   TREASURY_ADDRESS      — wallet (G...) dueña de las ganancias por interés del lending.
-#                           Única que podrá llamar `withdraw_interest`.
+#   STELLAR_ACCOUNT   — deployer identity or secret. Read by the Stellar CLI from
+#                       the environment so it never appears in the command line.
+#                       The deployer keeps no power over the contracts.
+#   ADMIN_PUBLIC      — governance account (G...), a multisig outside this machine
+#   PAUSER_PUBLIC     — account that can pause, but not unpause
+#   MINTER_PUBLIC     — account that can write SBT tiers
+#   TREASURY_PUBLIC   — account that receives loan interest
+#   TOKEN_ADDRESS     — USDC SAC. Must be the same asset as the vault
+#   VAULT_ADDRESS     — DeFindex vault (USDC) behind staking_pool
 #
 # Optional:
-#   LENDING_TOKEN_ADDRESS — SAC del activo que PRESTA vinculo_lending. Default: SAC nativo
-#                           de XLM en testnet. Es DISTINTO del USDC del staking_pool.
+#   LENDING_TOKEN_ADDRESS — asset lent by vinculo_lending. Default: TOKEN_ADDRESS
+#   METADATA_BASE_URL     — base URL of the tier metadata JSON files
 #   NETWORK               — defaults to "testnet"
 #
-# Usage:
-#   export ADMIN_SECRET="S..."
-#   export ADMIN_PUBLIC="G..."
-#   export TOKEN_ADDRESS="CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU"   # SAC del USDC (GATALTGT)
-#   export VAULT_ADDRESS="CBPO3E7IFJRVP6MVNS4YJOVHEOEMNMUHV7AVAQ47IL53ERVCEJ6UIS76"     # vault DeFindex propio (fixed_apr)
-#   export TREASURY_ADDRESS="G..."
-#   bash scripts/deploy_contracts.sh
-#
-# El vault DeFindex propio se crea aparte vía el factory con la estrategia fixed_apr.
-# Ver scripts/create_vault.sh y scripts/harvest_keeper.sh.
+# Create the vault first with scripts/create_vault.sh.
 
 set -euo pipefail
 
 NETWORK="${NETWORK:-testnet}"
 CONTRACTS_DIR="backend/contracts"
-# SAC nativo de XLM en testnet (activo que presta vinculo_lending; distinto del USDC).
-LENDING_TOKEN_ADDRESS="${LENDING_TOKEN_ADDRESS:-CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC}"
+METADATA_BASE_URL="${METADATA_BASE_URL:-https://raw.githubusercontent.com/Kalebtron1/Project-Vyn/main/metadata}"
 
-# ── Validate required vars ────────────────────────────────────────────────────
-: "${ADMIN_SECRET:?Set ADMIN_SECRET before running this script}"
+: "${STELLAR_ACCOUNT:?Set STELLAR_ACCOUNT (deployer) before running this script}"
 : "${ADMIN_PUBLIC:?Set ADMIN_PUBLIC before running this script}"
-: "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS before running this script}"
+: "${PAUSER_PUBLIC:?Set PAUSER_PUBLIC before running this script}"
+: "${MINTER_PUBLIC:?Set MINTER_PUBLIC before running this script}"
+: "${TREASURY_PUBLIC:?Set TREASURY_PUBLIC before running this script}"
+: "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS (USDC SAC) before running this script}"
 : "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
-: "${TREASURY_ADDRESS:?Set TREASURY_ADDRESS (treasury wallet for loan interest) before running this script}"
+LENDING_TOKEN_ADDRESS="${LENDING_TOKEN_ADDRESS:-$TOKEN_ADDRESS}"
 
-echo "==> Network: $NETWORK"
-echo "==> Admin:   $ADMIN_PUBLIC"
+echo "==> Network: $NETWORK" >&2
+echo "==> Admin:   $ADMIN_PUBLIC" >&2
 
-# ── Helper: build + deploy + return contract ID ───────────────────────────────
+echo "── Building contracts ──" >&2
+(cd "$CONTRACTS_DIR" && stellar contract build) >&2
+
+# Prints only the contract ID on stdout. Constructor args go after the name.
 deploy_contract() {
   local name="$1"
-
-  # Los mensajes van a stderr: quien llama captura el stdout como contract ID.
-  echo "" >&2
-  echo "── Building $name ──" >&2
-  (cd "$CONTRACTS_DIR" && stellar contract build --package "$name") >&2
-
-  local wasm="$CONTRACTS_DIR/target/wasm32v1-none/release/${name}.wasm"
+  shift
   echo "── Deploying $name ──" >&2
   stellar contract deploy \
-    --wasm "$wasm" \
-    --source "$ADMIN_SECRET" \
-    --network "$NETWORK"
+    --wasm "$CONTRACTS_DIR/target/wasm32v1-none/release/${name}.wasm" \
+    --network "$NETWORK" \
+    -- "$@"
 }
 
-# ── Helper: upload wasm and return hash ───────────────────────────────────────
-upload_wasm() {
-  local name="$1"
-  local wasm="$CONTRACTS_DIR/target/wasm32v1-none/release/${name}.wasm"
+URIS="[\"$METADATA_BASE_URL/bronce.json\",\"$METADATA_BASE_URL/plata.json\",\"$METADATA_BASE_URL/oro.json\",\"$METADATA_BASE_URL/diamante.json\",\"$METADATA_BASE_URL/platino.json\"]"
 
-  stellar contract upload \
-    --wasm "$wasm" \
-    --source "$ADMIN_SECRET" \
-    --network "$NETWORK"
-}
-
-# ── 1. vinculo_sbt ────────────────────────────────────────────────────────────
-SBT_CONTRACT_ID=$(deploy_contract "vinculo_sbt")
-echo "SBT_CONTRACT_ID=$SBT_CONTRACT_ID"
-
-stellar contract invoke \
-  --id "$SBT_CONTRACT_ID" \
-  --source "$ADMIN_SECRET" \
-  --network "$NETWORK" \
-  -- init \
-  --admin "$ADMIN_PUBLIC"
-echo "==> vinculo_sbt initialized"
-
-# ── 2. staking_pool ───────────────────────────────────────────────────────────
-STAKING_CONTRACT_ID=$(deploy_contract "staking_pool")
-echo "STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
-
-stellar contract invoke \
-  --id "$STAKING_CONTRACT_ID" \
-  --source "$ADMIN_SECRET" \
-  --network "$NETWORK" \
-  -- init \
+SBT_CONTRACT_ID=$(deploy_contract vinculo_sbt \
   --admin "$ADMIN_PUBLIC" \
+  --pauser "$PAUSER_PUBLIC" \
+  --minter "$MINTER_PUBLIC" \
+  --uris "$URIS")
+
+STAKING_CONTRACT_ID=$(deploy_contract staking_pool \
+  --admin "$ADMIN_PUBLIC" \
+  --pauser "$PAUSER_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
-  --vault "$VAULT_ADDRESS"
-echo "==> staking_pool initialized (admin + token + DeFindex vault)"
-echo "    (el admin puede migrar el vault luego con: invoke -- set_vault --new_vault <C...>)"
+  --vault "$VAULT_ADDRESS")
 
-# ── 3. vinculo_lending ────────────────────────────────────────────────────────
-LENDING_CONTRACT_ID=$(deploy_contract "vinculo_lending")
-echo "LENDING_CONTRACT_ID=$LENDING_CONTRACT_ID"
-
-stellar contract invoke \
-  --id "$LENDING_CONTRACT_ID" \
-  --source "$ADMIN_SECRET" \
-  --network "$NETWORK" \
-  -- init_lending \
+LENDING_CONTRACT_ID=$(deploy_contract vinculo_lending \
+  --admin "$ADMIN_PUBLIC" \
+  --pauser "$PAUSER_PUBLIC" \
   --token "$LENDING_TOKEN_ADDRESS" \
   --sbt "$SBT_CONTRACT_ID" \
-  --treasury "$TREASURY_ADDRESS"
-echo "==> vinculo_lending initialized (XLM token + SBT + treasury)"
+  --treasury "$TREASURY_PUBLIC")
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-echo ""
-echo "════════════════════════════════════════"
-echo " Deployment complete. Add to .env.local:"
-echo "════════════════════════════════════════"
+echo "" >&2
+echo "════════════════════════════════════════" >&2
+echo " Deployment complete. Environment values:" >&2
+echo "════════════════════════════════════════" >&2
 echo "NFT_CONTRACT_ID=$SBT_CONTRACT_ID"
 echo "VITE_LENDING_CONTRACT_ID=$LENDING_CONTRACT_ID"
 echo "VITE_STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
 echo "STAKING_CONTRACT_ID=$STAKING_CONTRACT_ID"
-echo "VITE_TREASURY_ADDRESS=$TREASURY_ADDRESS"
-echo "════════════════════════════════════════"
+echo "VITE_TREASURY_ADDRESS=$TREASURY_PUBLIC"

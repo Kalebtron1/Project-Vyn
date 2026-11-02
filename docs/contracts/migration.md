@@ -1,6 +1,11 @@
 # Contract Migration & Upgrade Guide
 
-> ⚠️ **Read first (2026-10-22).** None of the three contracts exposes an `upgrade`
+> ⚠️ **Next version.** The code on this branch is not storage compatible with the deployed
+> contracts. It replaces `init` with constructors and adds roles, pause and `upgrade`
+> ([ADR-004](../decisions/ADR-004-upgradeable-contracts.md)), so it needs a redeploy with new
+> contract IDs. The steps below still describe the deployed version.
+>
+> ⚠️ **Read first (2026-10-22).** None of the three deployed contracts exposes an `upgrade`
 > function. In Soroban a contract can only replace its own Wasm if it implements a function
 > that calls `update_current_contract_wasm`, so the **Upgrade** sections below (and
 > `scripts/upgrade_contract.sh`) fail against the deployed contracts. Today a change means

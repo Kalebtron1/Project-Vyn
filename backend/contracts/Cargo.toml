@@ -5,6 +5,9 @@ members = ["staking_pool", "vinculo_lending", "vinculo_sbt"]
 [workspace.dependencies]
 # Misma versión que pide OpenZeppelin Stellar Contracts 0.8.0.
 soroban-sdk = { version = "28.0.0", features = ["alloc"] }
+stellar-access = "=0.8.0"
+stellar-contract-utils = "=0.8.0"
+stellar-macros = "=0.8.0"
 
 # Cargo solo respeta los perfiles definidos en la raíz del workspace.
 [profile.release]

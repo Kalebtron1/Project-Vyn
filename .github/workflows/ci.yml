@@ -28,6 +28,15 @@ jobs:
         working-directory: backend/contracts
         run: cargo fmt --all --check
 
+      # soroban-sdk 28 solo compila a Wasm con `stellar contract build`.
+      - name: Install Stellar CLI
+        uses: stellar/stellar-cli@v28.1.0
+
+      # Va antes de los tests: los de upgrade incluyen estos Wasm.
+      - name: Build wasm release
+        working-directory: backend/contracts
+        run: stellar contract build
+
       - name: Clippy
         working-directory: backend/contracts
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -35,11 +44,3 @@ jobs:
       - name: Unit tests
         working-directory: backend/contracts
         run: cargo test --workspace
-
-      # soroban-sdk 28 solo compila a Wasm con `stellar contract build`.
-      - name: Install Stellar CLI
-        uses: stellar/stellar-cli@v28.1.0
-
-      - name: Build wasm release
-        working-directory: backend/contracts
-        run: stellar contract build

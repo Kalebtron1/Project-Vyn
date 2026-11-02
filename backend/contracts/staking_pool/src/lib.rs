@@ -16,9 +16,19 @@
 
 use soroban_sdk::auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, token, vec, Address, Env,
-    IntoVal, Symbol, Val, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, token, vec, Address,
+    BytesN, Env, IntoVal, Symbol, Val, Vec,
 };
+use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_contract_utils::{
+    pausable::{self as pausable, Pausable},
+    upgradeable::{self as upgradeable, Upgradeable},
+};
+use stellar_macros::{only_admin, only_role, when_not_paused};
+
+const DAY_IN_LEDGERS: u32 = 17_280;
+pub const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+pub const TTL_EXTEND_TO: u32 = 90 * DAY_IN_LEDGERS;
 
 // ─── Cliente del vault DeFindex ────────────────────────────────────────────────
 //
@@ -53,7 +63,6 @@ pub trait VaultInterface {
 #[repr(u32)]
 pub enum Error {
     NotInitialized = 1,
-    AlreadyInitialized = 2,
     InvalidAmount = 3,
     InsufficientPosition = 4,
 }
@@ -63,11 +72,9 @@ pub enum Error {
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    /// Admin que puede migrar el vault (`set_vault`).
-    Admin,
     /// Token subyacente (USDC SAC).
     Token,
-    /// Dirección del vault DeFindex (configurable vía `init` y `set_vault`).
+    /// Dirección del vault DeFindex (configurable vía constructor y `set_vault`).
     Vault,
     /// Shares (dfTokens) del usuario custodiadas por el contrato.
     Shares(Address),
@@ -84,16 +91,20 @@ pub struct StakingContract;
 
 #[contractimpl]
 impl StakingContract {
-    /// Inicializa el contrato con el admin, el token subyacente y el vault DeFindex.
-    /// Rechaza una segunda inicialización.
-    pub fn init(env: Env, admin: Address, token: Address, vault: Address) -> Result<(), Error> {
-        if env.storage().instance().has(&DataKey::Token) {
-            return Err(Error::AlreadyInitialized);
-        }
-        env.storage().instance().set(&DataKey::Admin, &admin);
+    /// El deploy y la inicialización ocurren en la misma transacción, así que
+    /// nadie puede adelantarse a fijar el admin, el token o el vault.
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        pauser: Address,
+        token: Address,
+        vault: Address,
+    ) {
+        access_control::set_admin(&env, &admin);
+        access_control::grant_role_no_auth(&env, &pauser, &Symbol::new(&env, "pauser"), &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
-        Ok(())
+        Self::extend_instance(&env);
     }
 
     /// Migra el vault DeFindex que respalda el apartado. Solo el admin.
@@ -104,11 +115,10 @@ impl StakingContract {
     /// ANTERIOR. Cámbialo solo cuando no haya posiciones vivas (o migra los
     /// fondos por separado), o `get_position` consultaría shares de un vault que
     /// ya no las reconoce.
-    pub fn set_vault(env: Env, new_vault: Address) -> Result<(), Error> {
-        let admin = Self::read_admin(&env)?;
-        admin.require_auth();
+    #[only_admin]
+    pub fn set_vault(env: Env, new_vault: Address) {
         env.storage().instance().set(&DataKey::Vault, &new_vault);
-        Ok(())
+        Self::extend_instance(&env);
     }
 
     /// Vault DeFindex actualmente configurado.
@@ -117,7 +127,8 @@ impl StakingContract {
     }
 
     /// Deposita `amount` del token en el vault y acredita las shares al usuario.
-    /// Devuelve las shares (dfTokens) minteadas.
+    /// Devuelve las shares (dfTokens) minteadas. Se bloquea durante la pausa.
+    #[when_not_paused]
     pub fn deposit(env: Env, user: Address, amount: i128) -> Result<i128, Error> {
         user.require_auth();
         if amount <= 0 {
@@ -167,12 +178,11 @@ impl StakingContract {
         // 3. Contabilidad interna por usuario.
         let shares_key = DataKey::Shares(user.clone());
         let prev_shares: i128 = env.storage().persistent().get(&shares_key).unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&shares_key, &(prev_shares + minted));
+        Self::write_persistent(&env, &shares_key, &(prev_shares + minted));
 
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
+        Self::extend_instance(&env);
 
         Ok(minted)
     }
@@ -180,6 +190,7 @@ impl StakingContract {
     /// Retira hasta `amount` del token redimiendo shares del vault.
     /// Si `amount` supera la posición, retira todo. Devuelve el monto realmente
     /// entregado al usuario (puede diferir levemente por redondeo del vault).
+    /// Nunca se pausa: el usuario siempre puede sacar su dinero.
     pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<i128, Error> {
         user.require_auth();
         if amount <= 0 {
@@ -225,12 +236,11 @@ impl StakingContract {
 
         // Entrega al usuario y actualiza contabilidad.
         token_client.transfer(&this, &user, &received);
-        env.storage()
-            .persistent()
-            .set(&shares_key, &(user_shares - shares_to_burn));
+        Self::write_persistent(&env, &shares_key, &(user_shares - shares_to_burn));
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
+        Self::extend_instance(&env);
 
         Ok(received)
     }
@@ -290,13 +300,6 @@ impl StakingContract {
 
     // ─── Helpers internos ──────────────────────────────────────────────────────
 
-    fn read_admin(env: &Env) -> Result<Address, Error> {
-        env.storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)
-    }
-
     fn read_token(env: &Env) -> Result<Address, Error> {
         env.storage()
             .instance()
@@ -313,15 +316,58 @@ impl StakingContract {
 
     fn bump_counter(env: &Env, key: &DataKey, delta: i128) {
         let prev: i128 = env.storage().persistent().get(key).unwrap_or(0);
-        env.storage().persistent().set(key, &(prev + delta));
+        Self::write_persistent(env, key, &(prev + delta));
     }
 
     fn increment_tx(env: &Env, user: &Address) {
         let key = DataKey::TxCount(user.clone());
         let prev: u32 = env.storage().persistent().get(&key).unwrap_or(0);
-        env.storage().persistent().set(&key, &(prev + 1));
+        Self::write_persistent(env, &key, &(prev + 1));
+    }
+
+    fn write_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &DataKey, value: &V) {
+        let storage = env.storage().persistent();
+        storage.set(key, value);
+        storage.extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    fn extend_instance(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 }
+
+#[contractimpl]
+impl Pausable for StakingContract {
+    fn paused(e: &Env) -> bool {
+        pausable::paused(e)
+    }
+
+    #[only_role(caller, "pauser")]
+    fn pause(e: &Env, caller: Address) {
+        pausable::pause(e);
+    }
+
+    /// Despausar es del admin: una llave de pausa robada no puede reanudar.
+    #[only_admin]
+    fn unpause(e: &Env, caller: Address) {
+        let _ = caller;
+        pausable::unpause(e);
+    }
+}
+
+#[contractimpl]
+impl Upgradeable for StakingContract {
+    #[only_admin]
+    fn upgrade(e: &Env, new_wasm_hash: BytesN<32>, operator: Address) {
+        let _ = operator;
+        upgradeable::upgrade(e, &new_wasm_hash);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for StakingContract {}
 
 #[cfg(test)]
 mod test;

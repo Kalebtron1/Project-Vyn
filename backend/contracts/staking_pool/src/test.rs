@@ -1,10 +1,14 @@
 #![cfg(test)]
 extern crate std;
 
-use crate::{Error, StakingContract, StakingContractClient};
+use crate::{DataKey, Error, StakingContract, StakingContractClient, TTL_EXTEND_TO};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, token, vec, Address, Env, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{storage::Instance as _, storage::Persistent as _, Address as _},
+    token, vec, Address, Env, Vec,
 };
+
+const WASM: &[u8] = include_bytes!("../../target/wasm32v1-none/release/staking_pool.wasm");
 
 // ─── Mock vault DeFindex ───────────────────────────────────────────────────────
 //
@@ -101,7 +105,9 @@ impl MockVault {
 struct Setup {
     env: Env,
     staking: StakingContractClient<'static>,
+    id: Address,
     admin: Address,
+    pauser: Address,
     token_addr: Address,
     token_admin: soroban_sdk::token::StellarAssetClient<'static>,
     vault_addr: Address,
@@ -123,28 +129,31 @@ fn setup() -> Setup {
     let vault = MockVaultClient::new(&env, &vault_addr);
     vault.init(&token_addr);
 
-    // Staking pool inicializado con admin + token + vault.
+    // Staking pool creado con admin + pauser + token + vault.
     let admin = Address::generate(&env);
-    let staking_addr = env.register(StakingContract, ());
-    let staking = StakingContractClient::new(&env, &staking_addr);
-    staking.init(&admin, &token_addr, &vault_addr);
+    let pauser = Address::generate(&env);
+    let id = env.register(
+        StakingContract,
+        (
+            admin.clone(),
+            pauser.clone(),
+            token_addr.clone(),
+            vault_addr.clone(),
+        ),
+    );
+    let staking = StakingContractClient::new(&env, &id);
 
     Setup {
         env,
         staking,
+        id,
         admin,
+        pauser,
         token_addr,
         token_admin,
         vault_addr,
         vault,
     }
-}
-
-#[test]
-fn test_init_rejects_reinit() {
-    let s = setup();
-    let res = s.staking.try_init(&s.admin, &s.token_addr, &s.vault_addr);
-    assert_eq!(res, Err(Ok(Error::AlreadyInitialized)));
 }
 
 #[test]
@@ -161,14 +170,12 @@ fn test_set_vault_migrates_vault() {
 }
 
 #[test]
-fn test_set_vault_not_initialized() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let staking_addr = env.register(StakingContract, ());
-    let staking = StakingContractClient::new(&env, &staking_addr);
-    let some_vault = Address::generate(&env);
-    let res = staking.try_set_vault(&some_vault);
-    assert_eq!(res, Err(Ok(Error::NotInitialized)));
+fn test_set_vault_needs_admin() {
+    let s = setup();
+    let other = Address::generate(&s.env);
+    s.env.set_auths(&[]);
+    assert!(s.staking.try_set_vault(&other).is_err());
+    assert_eq!(s.staking.get_vault(), s.vault_addr);
 }
 
 #[test]
@@ -259,20 +266,94 @@ fn test_withdraw_without_position() {
 }
 
 #[test]
-fn test_not_initialized() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let staking_addr = env.register(StakingContract, ());
-    let staking = StakingContractClient::new(&env, &staking_addr);
-    let user = Address::generate(&env);
-    let res = staking.try_deposit(&user, &100);
-    assert_eq!(res, Err(Ok(Error::NotInitialized)));
-}
-
-#[test]
 fn test_get_position_zero_for_new_user() {
     let s = setup();
     let user = Address::generate(&s.env);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_deposit_and_withdraw_need_user_signature() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &500);
+
+    s.env.set_auths(&[]);
+    assert!(s.staking.try_deposit(&user, &100).is_err());
+    assert!(s.staking.try_withdraw(&user, &100).is_err());
+    assert_eq!(s.staking.get_shares(&user), 500);
+}
+
+#[test]
+fn test_only_pauser_pauses_and_only_admin_unpauses() {
+    let s = setup();
+    let stranger = Address::generate(&s.env);
+    assert!(s.staking.try_pause(&stranger).is_err());
+    assert!(s.staking.try_pause(&s.admin).is_err());
+
+    s.staking.pause(&s.pauser);
+    assert!(s.staking.paused());
+
+    s.env.set_auths(&[]);
+    assert!(s.staking.try_unpause(&s.pauser).is_err());
+    assert!(s.staking.paused());
+
+    s.env.mock_all_auths_allowing_non_root_auth();
+    s.staking.unpause(&s.admin);
+    assert!(!s.staking.paused());
+}
+
+#[test]
+fn test_pause_blocks_deposit_but_never_withdraw() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &600);
+
+    s.staking.pause(&s.pauser);
+    assert!(s.staking.try_deposit(&user, &100).is_err());
+    assert_eq!(s.staking.withdraw(&user, &600), 600);
+    assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+#[test]
+fn test_writes_extend_ttl() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+    s.env.as_contract(&s.id, || {
+        let storage = s.env.storage();
+        for key in [
+            DataKey::Shares(user.clone()),
+            DataKey::TotalDeposited(user.clone()),
+            DataKey::TxCount(user.clone()),
+        ] {
+            assert_eq!(storage.persistent().get_ttl(&key), TTL_EXTEND_TO);
+        }
+        assert_eq!(storage.instance().get_ttl(), TTL_EXTEND_TO);
+    });
+}
+
+#[test]
+fn test_upgrade_requires_admin_and_keeps_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    let vault = Address::generate(&env);
+    let id = env.register(WASM, (admin.clone(), admin.clone(), token, vault.clone()));
+    let client = StakingContractClient::new(&env, &id);
+    let hash = env.deployer().upload_contract_wasm(WASM);
+
+    env.set_auths(&[]);
+    assert!(client.try_upgrade(&hash, &vault).is_err());
+
+    env.mock_all_auths();
+    client.upgrade(&hash, &admin);
+    assert_eq!(client.get_vault(), vault);
+    assert_eq!(client.get_admin(), Some(admin.clone()));
+    client.upgrade(&hash, &admin);
 }
