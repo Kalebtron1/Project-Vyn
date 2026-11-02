@@ -16,6 +16,8 @@
 #
 # Optional:
 #   LENDING_TOKEN_ADDRESS — asset lent by vinculo_lending. Default: TOKEN_ADDRESS
+#   MIN_COUNTED_DEPOSIT   — smallest deposit that counts for reputation, in stroops.
+#                           Default: 100000000 (10 USDC)
 #   METADATA_BASE_URL     — base URL of the tier metadata JSON files
 #   NETWORK               — defaults to "testnet"
 #
@@ -35,6 +37,7 @@ METADATA_BASE_URL="${METADATA_BASE_URL:-https://raw.githubusercontent.com/Kalebt
 : "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS (USDC SAC) before running this script}"
 : "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
 LENDING_TOKEN_ADDRESS="${LENDING_TOKEN_ADDRESS:-$TOKEN_ADDRESS}"
+MIN_COUNTED_DEPOSIT="${MIN_COUNTED_DEPOSIT:-100000000}"
 
 echo "==> Network: $NETWORK" >&2
 echo "==> Admin:   $ADMIN_PUBLIC" >&2
@@ -65,7 +68,7 @@ STAKING_CONTRACT_ID=$(deploy_contract staking_pool \
   --admin "$ADMIN_PUBLIC" \
   --pauser "$PAUSER_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
-  --vault "$VAULT_ADDRESS")
+  --vault "$VAULT_ADDRESS" \n  --min_counted_deposit "$MIN_COUNTED_DEPOSIT")
 
 LENDING_CONTRACT_ID=$(deploy_contract vinculo_lending \
   --admin "$ADMIN_PUBLIC" \

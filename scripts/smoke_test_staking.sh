@@ -59,7 +59,7 @@ stellar contract invoke --id "$STAKING_CONTRACT_ID" --source "$SOURCE" --network
 
 echo ""
 echo "── 4. Retirar todo (withdraw, monto alto = todo) ──"
-stellar contract invoke --send=yes --id "$STAKING_CONTRACT_ID" --source "$SOURCE" --network "$NETWORK" -- withdraw --user "$USER_ADDR" --amount 1000000000000
+stellar contract invoke --send=yes --id "$STAKING_CONTRACT_ID" --source "$SOURCE" --network "$NETWORK" -- withdraw --user "$USER_ADDR" --amount 1000000000000 --min_out 0
 
 echo ""
 echo "── 5. Posición final (get_position) ──"
