@@ -77,7 +77,7 @@ uses older checks (≥ 5).
 ## On-ramp flow
 
 ```
-Login (Privy) ─▶ onramp init ─▶ BlindPay: POST /receivers/{shared}/blockchain-wallets
+Login (Privy) ─▶ onramp init ─▶ BlindPay: POST /customers/{shared}/blockchain-wallets
                                  Supabase: onramp_users (wallet → bw_…)
 Depositar: amount MXN ─(debounced 500 ms)─▶ onramp quote ─▶ POST /payin-quotes (spei, USDB, sender amount)
 "Generar CLABE" ─▶ onramp payin ─▶ POST /payin-quotes + POST /payins/evm ─▶ { payinId, clabe }

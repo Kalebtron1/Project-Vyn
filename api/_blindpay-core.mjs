@@ -40,6 +40,8 @@ async function bpFetch(path, { method = "GET", body } = {}) {
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
+    // Un 301 convierte el POST en GET: la API responde 200 sin haber creado nada.
+    redirect: "error",
   });
   const text = await res.text();
   let data = null;

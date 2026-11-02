@@ -47,6 +47,8 @@ async function bpFetch(path, { method = "GET", body } = {}) {
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
+    // Un 301 convierte el POST en GET: la API responde 200 sin haber creado nada.
+    redirect: "error",
   });
   const text = await res.text();
   let data = null;
@@ -78,17 +80,20 @@ export async function ensureBlockchainWallet({ walletAddress, email }) {
   }
 
   const wallet = await bpFetch(
-    `/instances/${instanceId}/receivers/${receiverId}/blockchain-wallets`,
+    `/instances/${instanceId}/customers/${receiverId}/blockchain-wallets`,
     {
       method: "POST",
       body: {
         name: email ? `Vyn · ${email}` : `Vyn · ${walletAddress.slice(0, 8)}`,
         network: ONRAMP_NETWORK,
+        // Es el registro por dirección directa: la única opción en Stellar, pese al nombre.
         is_account_abstraction: true,
         address: walletAddress,
       },
     }
   );
+  // Sin id no hay forma de cotizar: mejor fallar aquí que guardar una fila incompleta.
+  if (!wallet?.id) throw new Error("BlindPay no devolvió el id de la blockchain wallet");
 
   await upsertOnrampUser({
     wallet_address: walletAddress,
