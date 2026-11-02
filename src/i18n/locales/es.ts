@@ -512,40 +512,164 @@ const es = {
 
   // ─── Help / Ayuda page ───────────────────────────────────────────────────────
   help: {
-    title: "Centro de Ayuda",
-    support_title: "¿Tienes dudas técnicas?",
-    support_description:
-      "Si tienes problemas con Freighter o con tus transacciones, escríbenos.",
-    faq_section_label: "Preguntas Frecuentes",
-    resources_section_label: "Recursos de la Red",
+    title: "Centro de ayuda",
+    subtitle: "Respuestas sobre tu ahorro, tu nivel y tu crédito",
+    testnet_title: "Vyn está en red de pruebas",
+    testnet_description:
+      "Todo funciona con dinero de prueba, sin valor real. Los contratos aún no tienen una auditoría externa, así que no envíes fondos reales.",
+    search_label: "Buscar en la ayuda",
+    search_placeholder: "Busca, por ejemplo: retirar, nivel, Freighter",
+    no_results_title: "No encontramos respuestas",
+    no_results_description: "Prueba con otra palabra o abre un reporte.",
+    contact_title: "¿No encontraste tu respuesta?",
+    contact_description:
+      "Abre un reporte en GitHub con lo que intentabas hacer y lo que pasó. Es público: no incluyas tu correo, tu frase semilla ni tu llave secreta. Nadie de Vyn te las pedirá.",
+    contact_cta: "Abrir un reporte",
+    copy_details: "Copiar datos para soporte",
+    copied_details: "Datos copiados",
+    copy_failed: "No se pudo copiar",
+    details_hint: "Incluye tu dirección pública y la red. Nunca incluye llaves. Pégalos en tu reporte.",
+    resources_section_label: "Enlaces útiles",
     stellar_expert_title: "Stellar Expert",
-    stellar_expert_subtitle: "Explorador de la Testnet",
-    freighter_title: "Freighter Wallet",
-    freighter_subtitle: "Centro de ayuda oficial",
-    faqs: [
+    stellar_expert_subtitle: "Consulta tus transacciones en la red de pruebas",
+    freighter_title: "Freighter",
+    freighter_subtitle: "Sitio oficial de la wallet",
+    categories: [
       {
-        q: "¿Qué es Vyn?",
-        a: "Vyn (Vínculo) es una plataforma DeFi que construye tu identidad financiera en la blockchain. Al ahorrar en nuestro contrato inteligente, generas un puntaje de reputación que te permite acceder a microcréditos sin burocracia tradicional.",
+        id: "start",
+        title: "Primeros pasos",
+        items: [
+          {
+            q: "¿Qué es Vyn?",
+            a: "Vyn te ayuda a construir historial financiero con tu propio comportamiento. Ahorras en dólares digitales (USDC), tu constancia te da un nivel, y ese nivel te abre acceso a crédito.",
+          },
+          {
+            q: "¿Necesito una wallet para empezar?",
+            a: "No. Puedes entrar con tu correo, Google o una passkey, y Vyn te crea una wallet Stellar. Si ya tienes una, también puedes conectar Freighter, xBull, Lobstr, Hana, Rabet o Albedo.",
+          },
+          {
+            q: "¿Qué significa «Activar USDC»?",
+            a: "En Stellar, una cuenta debe aceptar un activo antes de recibirlo. Al activar USDC desde Perfil firmas esa autorización y recibes 2 USDC de prueba, una sola vez por wallet.",
+            link: "/perfil",
+            link_label: "Ir a Perfil",
+          },
+          {
+            q: "¿Qué es la red de pruebas?",
+            a: "Es una versión de Stellar para probar sin riesgo. Su dinero no tiene valor y no se puede cambiar por dinero real. Esa red se reinicia de vez en cuando, así que tus saldos y tu nivel podrían borrarse.",
+          },
+        ],
       },
       {
-        q: "¿Cómo subo de nivel?",
-        a: "Tu nivel (Bronce, Plata, Oro...) depende de tu Puntaje de Reputación. Este se calcula mediante un algoritmo que premia la constancia de tus depósitos y el tiempo que mantienes tus fondos en el contrato. A mayor puntaje, mayor límite de crédito.",
+        id: "savings",
+        title: "Ahorro y rendimiento",
+        items: [
+          {
+            q: "¿Cómo deposito?",
+            a: "En Inicio pulsa «Depositar» y elige desde tu wallet o por SPEI. Desde tu wallet firmas la transacción y tu saldo se actualiza cuando la red la confirma.",
+            link: "/",
+            link_label: "Ir a Inicio",
+          },
+          {
+            q: "¿De dónde sale el rendimiento?",
+            a: "Tu ahorro se coloca en un vault de DeFindex y crece conforme ese vault gana valor. En la red de pruebas usa una estrategia de prueba, así que el rendimiento que ves es una demostración, no una promesa de ganancia.",
+          },
+          {
+            q: "¿Cómo retiro mi ahorro?",
+            a: "En Retiros elige a tu wallet, con mínimo de 1 USDC, o por SPEI, con mínimo de 10 USDC. El dinero sale del vault cuando firmas la transacción.",
+            link: "/retiros",
+            link_label: "Ir a Retiros",
+          },
+          {
+            q: "¿El depósito y el retiro por SPEI usan pesos reales?",
+            a: "No. SPEI funciona en modo de prueba: el depósito se simula y el retiro va a una cuenta de demostración. Antes de confirmar verás el tipo de cambio y la comisión de esa cotización.",
+          },
+        ],
       },
       {
-        q: "¿Qué son los niveles NFT?",
-        a: "Cada nivel es un Soulbound Token (SBT). Es un NFT especial vinculado a tu wallet que no se puede transferir ni vender. Es tu 'medalla' de buen pagador y ahorrador en la red Stellar.",
+        id: "level",
+        title: "Tu nivel",
+        items: [
+          {
+            q: "¿Cómo se calcula mi nivel?",
+            a: "Se calcula con tus operaciones y con cuánto de lo depositado mantienes ahorrado. Necesitas al menos 3 operaciones. Los puntos para cada nivel son: Plata 50, Oro 150, Diamante 500 y Platino 1,000. Retirar casi todo tu ahorro baja mucho tu puntaje.",
+          },
+          {
+            q: "Ya tengo los puntos. ¿Por qué no subo de nivel?",
+            a: "Tienes que reclamarlo. Cuando tu puntaje alcance un nivel nuevo, verás la opción «Reclamar NFT» en Perfil. Necesitas tener saldo en tu ahorro.",
+            link: "/perfil",
+            link_label: "Ir a Perfil",
+          },
+          {
+            q: "¿Qué es el NFT de nivel?",
+            a: "Es un token ligado a tu wallet (SBT) que registra tu nivel en la red. No se puede vender ni transferir.",
+          },
+        ],
       },
       {
-        q: "¿En qué red opera Vyn?",
-        a: "Actualmente operamos en Stellar Testnet (Red de Pruebas). Esto permite que pruebes todas las funcionalidades sin usar dinero real mientras terminamos la fase de auditoría.",
+        id: "credit",
+        title: "Crédito",
+        items: [
+          {
+            q: "¿Cuánto me pueden prestar?",
+            a: "Depende de tu nivel: Plata hasta 300 XLM, Oro hasta 600, Diamante hasta 1,500 y Platino hasta 5,000. Bronce no tiene crédito. Los préstamos de hoy son en XLM, aunque tu ahorro esté en USDC.",
+          },
+          {
+            q: "¿Cuánto cuesta un préstamo?",
+            a: "Se cobra un interés fijo de 5% sobre lo que pides. Si pides 300 XLM, pagas 315 XLM.",
+          },
+          {
+            q: "¿Cuándo tengo que pagar?",
+            a: "En esta versión de prueba el plazo corre muy rápido: un mes dura 60 segundos, para que puedas probar todo el ciclo. La pantalla te muestra el tiempo restante.",
+          },
+          {
+            q: "Recargué la página y ya no veo mi préstamo",
+            a: "Tu préstamo sigue registrado en la red, pero la app todavía no lo vuelve a mostrar después de recargar, y no te dejará pedir otro. Es una falla conocida que estamos corrigiendo. Si necesitas pagarlo, abre un reporte con tus datos de soporte.",
+          },
+        ],
       },
       {
-        q: "¿Cómo retiro mi crédito?",
-        a: "Una vez alcances el Nivel Plata (50 pts de reputación), la opción de 'Retirar Crédito' se habilitará automáticamente en tu perfil. El monto se enviará directo a tu wallet Freighter.",
+        id: "safety",
+        title: "Seguridad",
+        items: [
+          {
+            q: "¿Mi dinero está seguro?",
+            a: "Hoy no hay dinero real en riesgo, porque Vyn funciona en red de pruebas. Tu firma autoriza cada movimiento desde tu wallet, pero ningún contrato inteligente está libre de riesgo: los de Vyn aún no tienen una auditoría externa y el equipo conserva permisos de administración mientras se prueban.",
+          },
+          {
+            q: "¿Vyn me puede pedir mi frase semilla?",
+            a: "Nunca. Nadie de Vyn te la pedirá, ni tu llave secreta. Quien te la pida está intentando robar tu wallet, aunque diga que es de soporte.",
+          },
+          {
+            q: "Entré con mi correo. ¿Puedo sacar mi wallet?",
+            a: "Sí. Desde Perfil puedes exportar la llave de tu wallet. Guárdala fuera de línea: quien la tenga controla esa wallet.",
+            link: "/perfil",
+            link_label: "Ir a Perfil",
+          },
+        ],
       },
       {
-        q: "¿Mis fondos están seguros?",
-        a: "Absolutamente. Vyn utiliza Smart Contracts en Soroban (Stellar). Los fondos están bloqueados bajo reglas criptográficas que solo tú controlas con tu firma digital en Freighter.",
+        id: "problems",
+        title: "Si algo falla",
+        items: [
+          {
+            q: "Mi wallet dice que no tengo fondos o la transacción falla",
+            a: "Revisa que tu wallet esté en la red de pruebas (Testnet), que hayas activado USDC y que tengas saldo suficiente. Las comisiones de red se pagan en XLM de prueba.",
+          },
+          {
+            q: "Veo un aviso de que cambié de cuenta",
+            a: "Tu wallet tiene seleccionada una cuenta distinta a la de tu sesión. Vuelve a la cuenta que usaste para entrar y no perderás tu sesión.",
+          },
+          {
+            q: "Hice un movimiento y mi saldo no cambia",
+            a: "La red tarda unos segundos en confirmar, y el historial puede tardar un poco más. Si pasan unos minutos, recarga la página y busca el movimiento en Historial.",
+            link: "/historial",
+            link_label: "Ir a Historial",
+          },
+          {
+            q: "No puedo entrar con mi correo o con Google",
+            a: "Usa el mismo método con el que creaste tu cuenta. Si aparece un error, intenta otra vez cerrando la ventana de acceso. Si Google dice que pertenece a otra cuenta de Vyn, entra con esa cuenta.",
+          },
+        ],
       },
     ],
   },
