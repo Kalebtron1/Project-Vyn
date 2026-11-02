@@ -1,6 +1,6 @@
 ---
 tags: [integration, supabase, backend]
-updated: 2026-10-22
+updated: 2026-11-02
 files:
   - api/_supabase.mjs
   - api/_faucet-core.mjs
@@ -23,9 +23,34 @@ back only to keep three idempotency and mapping tables for the faucet and the SP
 | `faucet_claims` | `wallet_address` | `recordFaucetClaim` | One faucet claim per wallet. |
 | `onramp_settlements` | `payin_id` | `recordSettlement` | One USDC settlement per BlindPay payin (with amount and tx hash). |
 
-Only `onramp_users` has its `create table` statement in a code comment (`api/_supabase.mjs`).
-The other two tables exist in the project but their DDL is not in the repo. There are no
-migrations; if the project is recreated, the tables must be created by hand.
+## Migrations
+
+The schema lives in `supabase/migrations`. They are pasted into the SQL Editor of the
+Supabase dashboard, in order, once each. `src/test/supabase-migrations.test.ts` runs them
+on an embedded Postgres ([PGlite](https://pglite.dev)), so `npm test` covers the real SQL.
+
+| File | What it does |
+|---|---|
+| `0001_baseline_close_access.sql` | The three tables above and the closed access. Safe to repeat. |
+| `0002_ramp_schema.sql` | New tables and atomic functions. Runs once. The code does not use them yet. |
+| `0003_backfill.sql` | Copies current rows to the new tables, without emails. Safe to repeat. |
+
+New tables:
+
+| Table | Purpose |
+|---|---|
+| `ramp_customers`, `ramp_payins` | Wallet ↔ BlindPay mapping, and each payin with its amount. |
+| `ramp_settlements`, `ramp_payouts` | One settlement per payin, one payout per funding transaction. |
+| `faucet_grants` | One grant per wallet, with a hashed IP for the daily limit. |
+| `daily_budgets` | Amount spent per budget and UTC day, to enforce global caps. |
+| `webhook_events` | Webhook deliveries already received. |
+| `used_auth_challenges`, `rate_limits` | Session challenges already used, and hits per time window. |
+
+Amounts are integer cents. `reserve_settlement` and `reserve_faucet` check limits and write
+in one transaction, with a lock per wallet, before any money moves; `finish_*` closes the
+reservation. Only a declared failure can be retried. A reservation that never finishes stays
+blocked, because the USDC may have been sent, and needs a manual review. See
+[ADR-007](../decisions/ADR-007-supabase-fail-closed.md).
 
 ## How it works
 
@@ -43,22 +68,21 @@ the `apikey` and `Authorization: Bearer` headers. Upserts use
 | `hasSettledPayin(payinId)` | `settlePayin` (`_blindpay-onramp.mjs`) | `GET onramp_settlements?payin_id=eq.…` |
 | `recordSettlement(payinId, …)` | `settlePayin` | `POST onramp_settlements?on_conflict=payin_id` |
 | `pingSupabase()` | `api/readiness.js` | `GET faucet_claims?select=claimed_at&limit=1` (5 s timeout) |
+| `reserveSettlement`, `finishSettlement`, `reserveFaucet`, `finishFaucet`, `hitRateLimit`, `consumeAuthChallenge` | Nothing yet | `POST rpc/<function>` |
 
-**Fallback without configuration.** If `SUPABASE_URL` or a key is missing, every function
-uses an in-memory `Map`/`Set` instead. That keeps local development working, but on Vercel
-each function instance has its own memory, so dedup and idempotency effectively disappear.
-Production must have the variables set; `/api/readiness` reports `"not_configured"` when
-they are missing.
+**Without configuration.** If `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the
+table functions use an in-memory `Map`/`Set` so local development and previews keep working.
+In production (`VERCEL_ENV=production`) they throw instead, because each function instance
+would have its own memory and the same payment could go out twice. The `rpc` functions throw
+in every environment. `/api/readiness` reports `"not_configured"` when the variables are
+missing.
 
 ## Environment variables
-
-None of these are in `.env.example` yet (see [pending integrations](pending.md)).
 
 | Variable | Where | Notes |
 |---|---|---|
 | `SUPABASE_URL` | Vercel (server only) | Project URL. A trailing `/` is stripped. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Vercel (server only) | Preferred. Bypasses RLS, so the tables can deny `anon`. |
-| `SUPABASE_KEY` | Vercel (server only) | Fallback (anon / publishable key). Only works if RLS policies let `anon` read and write. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Vercel (server only) | Secret key (`sb_secret_…`). Bypasses RLS, so the tables deny `anon`. |
 
 Never prefix them with `VITE_`: they would end up in the browser bundle.
 
@@ -92,19 +116,19 @@ If the repo goes quiet, re-enable it from the Actions tab.
 
 | Situation | What happens |
 |---|---|
-| Project paused or down | `pingSupabase` throws → readiness `503`, keep-alive job fails. Faucet: dedup check fails open (logs a warning and still sends USDC). On-ramp: `ensureBlockchainWallet` and `settlePayin` throw → `502` to the client, no funds move. |
-| Variables missing in Vercel | Silent in-memory fallback (see above). Readiness shows `"not_configured"`; the keep-alive job fails. |
+| Project paused or down | `pingSupabase` throws → readiness `503`, keep-alive job fails. Faucet and on-ramp throw → `502` to the client, no funds move. |
+| Variables missing in production | Faucet and on-ramp answer `502`, no funds move. Readiness shows `"not_configured"`; the keep-alive job fails. |
 | `recordFaucetClaim` fails after sending | USDC was already sent; the claim is not recorded, so the wallet can claim again. |
 | `recordSettlement` fails after sending | USDC was already sent but the endpoint returns `502`; a retry sends it again. |
 | Two `settle` calls at the same time | Both can pass `hasSettledPayin` before either records (issue #92). |
 
 ## Security notes
 
-- Use the service-role key on the server and keep RLS on, with no policies for `anon` or
+- Use the secret key on the server and keep RLS on, with no policies for `anon` or
   `authenticated`. A permissive policy makes these tables writable by anyone who has the
   publishable key, which would let them delete a settlement or claim row and repeat a payout.
-- The reservation for settlements should be an insert that fails on conflict **before** the
-  transfer, not a read followed by a write (issue #92).
+- Until `settlePayin` moves to `reserve_settlement`, parallel `settle` calls can still both
+  pass the check (issue #92).
 
 ## Related
 

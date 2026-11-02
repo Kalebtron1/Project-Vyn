@@ -3,24 +3,16 @@
 // de PostgREST con la service-role key (solo backend, nunca en el bundle Vite).
 //
 // Si SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY no están configuradas, cae a un Map en
-// memoria (igual que los nonces de dev) para no bloquear el flujo local; la persistencia
-// y la atribución entre sesiones requieren Supabase configurado.
+// memoria (igual que los nonces de dev) para no bloquear el flujo local. En producción
+// lanza error: cada instancia tendría su propia memoria y se podría pagar dos veces.
 //
-// Tabla esperada (crear una vez):
-//   create table if not exists onramp_users (
-//     wallet_address text primary key,
-//     email text,
-//     blindpay_receiver_id text,
-//     blindpay_blockchain_wallet_id text,
-//     created_at timestamptz default now()
-//   );
+// El esquema está en supabase/migrations.
 
 const TABLE = "onramp_users";
 
 function getConfig() {
   const url = process.env.SUPABASE_URL;
-  // service_role (ideal en prod) o anon/publishable key (demo, con policy RLS permisiva).
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return { url: url.replace(/\/$/, ""), key };
 }
@@ -31,6 +23,14 @@ export function isSupabaseConfigured() {
 
 // ── Fallback en memoria (dev sin Supabase) ──────────────────────────────────
 const memory = new Map(); // wallet_address -> row
+
+function usesMemory() {
+  if (isSupabaseConfigured()) return false;
+  if (process.env.VERCEL_ENV === "production") {
+    throw new Error("Supabase no está configurado en producción");
+  }
+  return true;
+}
 
 async function sbFetch(path, { method = "GET", body, headers = {}, signal } = {}) {
   const cfg = getConfig();
@@ -75,7 +75,7 @@ export async function pingSupabase() {
 
 /** Busca el mapping por dirección de wallet (identidad estable del usuario Privy). */
 export async function getOnrampUserByWallet(walletAddress) {
-  if (!isSupabaseConfigured()) return memory.get(walletAddress) || null;
+  if (usesMemory()) return memory.get(walletAddress) || null;
   const rows = await sbFetch(
     `${TABLE}?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=*&limit=1`
   );
@@ -87,7 +87,7 @@ const faucetMemory = new Set(); // fallback dev: wallets que ya reclamaron
 
 /** ¿Esta wallet ya reclamó el faucet de USDC? */
 export async function hasClaimedFaucet(walletAddress) {
-  if (!isSupabaseConfigured()) return faucetMemory.has(walletAddress);
+  if (usesMemory()) return faucetMemory.has(walletAddress);
   const rows = await sbFetch(
     `faucet_claims?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=wallet_address&limit=1`
   );
@@ -96,7 +96,7 @@ export async function hasClaimedFaucet(walletAddress) {
 
 /** Registra que esta wallet reclamó el faucet (idempotente). */
 export async function recordFaucetClaim(walletAddress) {
-  if (!isSupabaseConfigured()) {
+  if (usesMemory()) {
     faucetMemory.add(walletAddress);
     return;
   }
@@ -112,7 +112,7 @@ const settlementMemory = new Set();
 
 /** ¿Este payin ya fue liquidado (USDC enviado al usuario)? */
 export async function hasSettledPayin(payinId) {
-  if (!isSupabaseConfigured()) return settlementMemory.has(payinId);
+  if (usesMemory()) return settlementMemory.has(payinId);
   const rows = await sbFetch(
     `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id&limit=1`
   );
@@ -121,7 +121,7 @@ export async function hasSettledPayin(payinId) {
 
 /** Registra la liquidación de un payin (idempotente). */
 export async function recordSettlement(payinId, { walletAddress, amountUsd, hash }) {
-  if (!isSupabaseConfigured()) {
+  if (usesMemory()) {
     settlementMemory.add(payinId);
     return;
   }
@@ -134,7 +134,7 @@ export async function recordSettlement(payinId, { walletAddress, amountUsd, hash
 
 /** Inserta/actualiza el mapping (upsert por wallet_address). */
 export async function upsertOnrampUser(row) {
-  if (!isSupabaseConfigured()) {
+  if (usesMemory()) {
     const existing = memory.get(row.wallet_address) || {};
     const merged = { ...existing, ...row };
     memory.set(row.wallet_address, merged);
@@ -146,4 +146,54 @@ export async function upsertOnrampUser(row) {
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
   });
   return Array.isArray(rows) && rows.length ? rows[0] : row;
+}
+
+// ── Funciones atómicas (supabase/migrations/0002_ramp_schema.sql) ───────────
+// Sin fallback en memoria: el límite que protegen no existiría entre instancias.
+
+function rpc(name, args) {
+  if (!isSupabaseConfigured()) throw new Error("Supabase no está configurado");
+  return sbFetch(`rpc/${name}`, { method: "POST", body: args });
+}
+
+/** Devuelve "reserved" | "already_reserved" | "wallet_cap" | "global_cap". */
+export function reserveSettlement({ payinId, walletAddress, amountCents, walletDailyCapCents, globalDailyCapCents }) {
+  return rpc("reserve_settlement", {
+    p_payin_id: payinId,
+    p_wallet: walletAddress,
+    p_amount_cents: amountCents,
+    p_wallet_daily_cap_cents: walletDailyCapCents,
+    p_global_daily_cap_cents: globalDailyCapCents,
+  });
+}
+
+/** Con txHash queda enviada; sin txHash queda fallida y se puede reintentar. */
+export function finishSettlement(payinId, { txHash = null, error = null } = {}) {
+  return rpc("finish_settlement", { p_payin_id: payinId, p_tx_hash: txHash, p_error: error });
+}
+
+/** Devuelve "reserved" | "already_claimed" | "ip_cap" | "global_cap". */
+export function reserveFaucet({ walletAddress, ipHash, amountCents, ipDailyMax, globalDailyCapCents }) {
+  return rpc("reserve_faucet", {
+    p_wallet: walletAddress,
+    p_ip_hash: ipHash,
+    p_amount_cents: amountCents,
+    p_ip_daily_max: ipDailyMax,
+    p_global_daily_cap_cents: globalDailyCapCents,
+  });
+}
+
+/** Con txHash queda enviado; sin txHash la wallet puede volver a reclamar. */
+export function finishFaucet(walletAddress, txHash = null) {
+  return rpc("finish_faucet", { p_wallet: walletAddress, p_tx_hash: txHash });
+}
+
+/** true si la petición entra en el límite de la ventana. */
+export function hitRateLimit(key, windowSeconds, max) {
+  return rpc("hit_rate_limit", { p_key: key, p_window_seconds: windowSeconds, p_max: max });
+}
+
+/** true la primera vez que se usa el desafío; false si ya se había usado. */
+export function consumeAuthChallenge(challengeHash, expiresAt) {
+  return rpc("consume_auth_challenge", { p_challenge_hash: challengeHash, p_expires_at: expiresAt });
 }

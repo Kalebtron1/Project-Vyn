@@ -60,7 +60,7 @@ The asset (code `USDC`, issuer starting with `GATALTGT`) is hard-coded in `api/_
 | Failure | Behavior |
 |---|---|
 | Admin account out of USDC | `502` with `op_underfunded`; Perfil shows the reason and offers a retry. |
-| Supabase down or not configured | **Fails open**: the claim check is skipped and USDC is sent anyway. Without Supabase on Vercel, the "once per wallet" rule only holds within one warm function instance. |
+| Supabase down, or not configured in production | **Fails closed**: the claim check throws, no USDC is sent and the endpoint answers `502`. Outside production, missing variables use an in-memory store. |
 | Claim not recorded after sending | The same wallet can claim again. |
 | Trustline not yet visible | `no_trustline`; the user retries. |
 

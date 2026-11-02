@@ -30,7 +30,7 @@ function mockRes() {
   return res;
 }
 
-const ENV_KEYS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY"] as const;
+const ENV_KEYS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"] as const;
 const savedEnv: Record<string, string | undefined> = {};
 
 describe("GET /api/readiness", () => {
@@ -65,7 +65,7 @@ describe("GET /api/readiness", () => {
 
   it("reads one row from Supabase and is ready when it answers", async () => {
     process.env.SUPABASE_URL = "https://example.supabase.co/";
-    process.env.SUPABASE_KEY = "test-key";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     const res = mockRes();
@@ -82,7 +82,7 @@ describe("GET /api/readiness", () => {
 
   it("returns 503 when Supabase fails (e.g. a paused project)", async () => {
     process.env.SUPABASE_URL = "https://example.supabase.co";
-    process.env.SUPABASE_KEY = "test-key";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
     const res = mockRes();
 

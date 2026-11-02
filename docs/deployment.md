@@ -81,7 +81,7 @@ preview can move the same test funds as production.
 | `STAKING_CONTRACT_ID` | yes | `_scoring-core.mjs` via `calculate-score`, `evaluate-and-mint` |
 | `NFT_CONTRACT_ID` | yes | `evaluate-and-mint`, `get-available-credit` |
 | `SUPABASE_URL` | yes in production | `_supabase.mjs` |
-| `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`) | yes in production | `_supabase.mjs` |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes in production | `_supabase.mjs` |
 | `BLINDPAY_API_KEY`, `BLINDPAY_INSTANCE_ID` | for SPEI | `_blindpay-core.mjs`, `_blindpay-onramp.mjs` |
 | `BLINDPAY_DEMO_RECEIVER_ID` | for the on-ramp | `_blindpay-onramp.mjs` |
 | `BLINDPAY_DEMO_BANK_ACCOUNT_ID` | for the off-ramp | `api/blindpay.js` |
