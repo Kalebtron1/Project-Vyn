@@ -1951,6 +1951,7 @@ name = "vinculo_lending"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
+ "staking_pool",
  "stellar-access",
  "stellar-contract-utils",
  "stellar-macros",

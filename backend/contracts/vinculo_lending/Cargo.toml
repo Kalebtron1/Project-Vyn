@@ -14,3 +14,5 @@ stellar-macros = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# Solo en tests: como dependencia normal exportaría sus funciones en este Wasm.
+staking_pool = { path = "../staking_pool" }

@@ -15,13 +15,19 @@
 #   VAULT_ADDRESS     — DeFindex vault (USDC) behind staking_pool
 #
 # Optional:
-#   LENDING_TOKEN_ADDRESS — asset lent by vinculo_lending. Default: TOKEN_ADDRESS
 #   MIN_COUNTED_DEPOSIT   — smallest deposit that counts for reputation, in stroops.
 #                           Default: 100000000 (10 USDC)
+#   SECONDS_PER_MONTH     — length of a loan month. Default: 2592000 (30 days)
+#   GRACE_PERIOD          — seconds after the due date before liquidation.
+#                           Default: 604800 (7 days)
 #   METADATA_BASE_URL     — base URL of the tier metadata JSON files
 #   NETWORK               — defaults to "testnet"
 #
-# Create the vault first with scripts/create_vault.sh.
+# Create the vault first with scripts/create_vault.sh. The loan terms below are
+# the approved values; the admin can change them later with set_config.
+#
+# After deploying, the admin must grant the "lending" role on staking_pool to
+# vinculo_lending. Without it, new loans fail.
 
 set -euo pipefail
 
@@ -36,8 +42,9 @@ METADATA_BASE_URL="${METADATA_BASE_URL:-https://raw.githubusercontent.com/Kalebt
 : "${TREASURY_PUBLIC:?Set TREASURY_PUBLIC before running this script}"
 : "${TOKEN_ADDRESS:?Set TOKEN_ADDRESS (USDC SAC) before running this script}"
 : "${VAULT_ADDRESS:?Set VAULT_ADDRESS (DeFindex vault) before running this script}"
-LENDING_TOKEN_ADDRESS="${LENDING_TOKEN_ADDRESS:-$TOKEN_ADDRESS}"
 MIN_COUNTED_DEPOSIT="${MIN_COUNTED_DEPOSIT:-100000000}"
+SECONDS_PER_MONTH="${SECONDS_PER_MONTH:-2592000}"
+GRACE_PERIOD="${GRACE_PERIOD:-604800}"
 
 echo "==> Network: $NETWORK" >&2
 echo "==> Admin:   $ADMIN_PUBLIC" >&2
@@ -68,14 +75,23 @@ STAKING_CONTRACT_ID=$(deploy_contract staking_pool \
   --admin "$ADMIN_PUBLIC" \
   --pauser "$PAUSER_PUBLIC" \
   --token "$TOKEN_ADDRESS" \
-  --vault "$VAULT_ADDRESS" \n  --min_counted_deposit "$MIN_COUNTED_DEPOSIT")
+  --vault "$VAULT_ADDRESS" \
+  --min_counted_deposit "$MIN_COUNTED_DEPOSIT")
+
+# Amounts in stroops: 100, 250, 750 and 2,000 USDC.
+LOAN_CONFIG="{\"apy_bps\":1200,\"seconds_per_month\":$SECONDS_PER_MONTH,\"grace_period\":$GRACE_PERIOD,\
+\"plata\":{\"ltv_bps\":5000,\"max_principal\":\"1000000000\"},\
+\"oro\":{\"ltv_bps\":6000,\"max_principal\":\"2500000000\"},\
+\"diamante\":{\"ltv_bps\":7000,\"max_principal\":\"7500000000\"},\
+\"platino\":{\"ltv_bps\":8000,\"max_principal\":\"20000000000\"}}"
 
 LENDING_CONTRACT_ID=$(deploy_contract vinculo_lending \
   --admin "$ADMIN_PUBLIC" \
   --pauser "$PAUSER_PUBLIC" \
-  --token "$LENDING_TOKEN_ADDRESS" \
+  --savings "$STAKING_CONTRACT_ID" \
   --sbt "$SBT_CONTRACT_ID" \
-  --treasury "$TREASURY_PUBLIC")
+  --treasury "$TREASURY_PUBLIC" \
+  --config "$LOAN_CONFIG")
 
 echo "" >&2
 echo "════════════════════════════════════════" >&2

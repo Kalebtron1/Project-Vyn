@@ -18,8 +18,8 @@
 
 use soroban_sdk::auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error, token,
-    vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype,
+    panic_with_error, token, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
 };
 use stellar_access::access_control::{self as access_control, AccessControl};
 use stellar_contract_utils::{
@@ -133,6 +133,60 @@ pub struct UserStats {
     pub tx_count: u32,
 }
 
+// ─── Eventos ───────────────────────────────────────────────────────────────────
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Deposited {
+    #[topic]
+    pub user: Address,
+    pub amount: i128,
+    pub shares: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Withdrawn {
+    #[topic]
+    pub user: Address,
+    pub to: Address,
+    pub amount: i128,
+    pub shares: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CollateralLocked {
+    #[topic]
+    pub user: Address,
+    pub shares: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CollateralUnlocked {
+    #[topic]
+    pub user: Address,
+    pub shares: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CollateralSeized {
+    #[topic]
+    pub user: Address,
+    pub amount: i128,
+    pub shares: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VaultMigrated {
+    pub old_vault: Address,
+    pub new_vault: Address,
+    pub assets: i128,
+}
+
 #[contract]
 pub struct StakingContract;
 
@@ -191,6 +245,12 @@ impl StakingContract {
             return Err(Error::MigrationLoss);
         }
         Self::extend_instance(&env);
+        VaultMigrated {
+            old_vault,
+            new_vault,
+            assets,
+        }
+        .publish(&env);
         Ok(assets)
     }
 
@@ -210,6 +270,11 @@ impl StakingContract {
     /// Vault DeFindex actualmente configurado.
     pub fn get_vault(env: Env) -> Result<Address, Error> {
         Self::read_vault(&env)
+    }
+
+    /// Token subyacente del pool.
+    pub fn get_token(env: Env) -> Result<Address, Error> {
+        Self::read_token(&env)
     }
 
     /// Deposita `amount` del token en el vault y acredita shares del pool al
@@ -258,6 +323,12 @@ impl StakingContract {
         stats.tx_count += 1;
         Self::write_stats(&env, &user, &stats);
         Self::extend_instance(&env);
+        Deposited {
+            user,
+            amount,
+            shares: minted,
+        }
+        .publish(&env);
 
         Ok(minted)
     }
@@ -301,6 +372,7 @@ impl StakingContract {
         }
         Self::write_locked(&env, &user, locked + shares);
         Self::extend_instance(&env);
+        CollateralLocked { user, shares }.publish(&env);
         Ok(shares)
     }
 
@@ -314,6 +386,7 @@ impl StakingContract {
         }
         Self::write_locked(&env, &user, locked - shares);
         Self::extend_instance(&env);
+        CollateralUnlocked { user, shares }.publish(&env);
         Ok(())
     }
 
@@ -341,7 +414,13 @@ impl StakingContract {
             return Err(Error::InsufficientPosition);
         }
         Self::write_locked(&env, &user, locked - burn);
-        let received = Self::burn_and_pay(&env, &user, burn, 0, &to)?;
+        let received = Self::burn_and_pay(&env, &user, burn, 0, &to, true)?;
+        CollateralSeized {
+            user,
+            amount: received,
+            shares: burn,
+        }
+        .publish(&env);
         Ok((received, burn))
     }
 
@@ -420,16 +499,19 @@ impl StakingContract {
             let total_shares = Self::read_total_shares(env);
             Self::ceil_shares(amount, total_assets, total_shares)?.min(free)
         };
-        Self::burn_and_pay(env, user, burn, min_out, to)
+        Self::burn_and_pay(env, user, burn, min_out, to, false)
     }
 
     /// Quema shares del usuario, redime su parte de dfTokens y entrega el token.
+    /// `round_up` es para cobrar colateral: evita que el redondeo deje sin cubrir
+    /// una fracción de la deuda. Un retiro normal redondea a favor del pool.
     fn burn_and_pay(
         env: &Env,
         user: &Address,
         burn: i128,
         min_out: i128,
         to: &Address,
+        round_up: bool,
     ) -> Result<i128, Error> {
         let token_addr = Self::read_token(env)?;
         let vault_addr = Self::read_vault(env)?;
@@ -438,7 +520,8 @@ impl StakingContract {
 
         // Si se queman todas las shares del pool, salen todos los dfTokens.
         let df_total = VaultClient::new(env, &vault_addr).balance(&this);
-        let df_amount = (burn * df_total) / total_shares;
+        let numerator = burn * df_total + if round_up { total_shares - 1 } else { 0 };
+        let df_amount = (numerator / total_shares).min(df_total);
         if df_amount <= 0 {
             return Err(Error::InvalidAmount);
         }
@@ -458,6 +541,13 @@ impl StakingContract {
         stats.tx_count += 1;
         Self::write_stats(env, user, &stats);
         Self::extend_instance(env);
+        Withdrawn {
+            user: user.clone(),
+            to: to.clone(),
+            amount: received,
+            shares: burn,
+        }
+        .publish(env);
 
         Ok(received)
     }

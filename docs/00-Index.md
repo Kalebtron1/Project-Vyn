@@ -49,6 +49,7 @@ Why things are the way they are. Read before reverting something that looks odd.
 - [ADR-002: Use the oldest Stellar wallet of a Privy account](decisions/ADR-002-oldest-privy-wallet.md)
 - [ADR-003: Cache on-chain reads, no polling](decisions/ADR-003-no-polling-cache.md)
 - [ADR-004: Upgradeable contracts with roles and pause](decisions/ADR-004-upgradeable-contracts.md)
+- [ADR-005: Credit backed by the user's savings, in USDC](decisions/ADR-005-collateralized-credit.md)
 
 ## Operating it
 
