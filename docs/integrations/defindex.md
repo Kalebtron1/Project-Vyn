@@ -33,8 +33,7 @@ User wallet ──deposit(USDC)──▶ staking_pool ──vault.deposit(from =
   strategy (`scripts/create_vault.sh`): one asset (USDC), one strategy, fee 0, all roles held
   by the admin key, upgradable. The fixed APR makes yield visible on testnet.
 - The vault address is stored in `staking_pool` at `init(admin, token, vault)` and can be
-  changed with `set_vault` (admin only). `src/stellar/contracts.ts` keeps a `VAULT_ID`
-  constant for reference only; the app never reads it.
+  changed with `set_vault` (admin only).
 
 ## Contract interface used
 

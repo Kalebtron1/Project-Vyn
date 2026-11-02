@@ -42,10 +42,6 @@ export const getAvailableCreditBodySchema = z.object({
   userAddress: nonEmptyString.describe("userAddress es requerido"),
 });
 
-export const getUserDataQuerySchema = z.object({
-  address: nonEmptyString.describe("address es requerido"),
-});
-
 // Monto en USD (USDC desde la UI). BlindPay exige ≥ $10 USD por transacción SPEI.
 const usdAmount = z.preprocess((value) => {
   if (typeof value === "string" && value.trim().length > 0) return Number(value);
@@ -74,7 +70,7 @@ const mxnAmount = z.preprocess((value) => {
   .positive({ message: "debe ser mayor a 0" })
   .min(175, { message: "el monto mínimo es ~175 MXN (BlindPay exige ≥ $10 USD)" }));
 
-// Dirección Stellar (cuenta clásica G…) de la wallet Accesly del usuario.
+// Dirección Stellar (cuenta clásica G…) de la wallet Privy del usuario.
 const stellarAddress = z
   .string()
   .trim()

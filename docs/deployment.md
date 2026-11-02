@@ -78,7 +78,7 @@ preview can move the same test funds as production.
 | Variable | Required | Read by |
 |---|---|---|
 | `SECRET_KEY_ADMIN` | yes | `evaluate-and-mint` (mint), `get-available-credit` (simulation source), `_usdc.mjs` (faucet and on-ramp settlement) |
-| `STAKING_CONTRACT_ID` | yes | `_scoring-core.mjs` via `calculate-score`, `evaluate-and-mint`, `get-user-data` |
+| `STAKING_CONTRACT_ID` | yes | `_scoring-core.mjs` via `calculate-score`, `evaluate-and-mint` |
 | `NFT_CONTRACT_ID` | yes | `evaluate-and-mint`, `get-available-credit` |
 | `SUPABASE_URL` | yes in production | `_supabase.mjs` |
 | `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`) | yes in production | `_supabase.mjs` |
@@ -111,10 +111,9 @@ preview can move the same test funds as production.
 | `MAX_REPLAY_EVENTS` | WebSocket hub, which is not deployed. |
 | `KEEPALIVE_BASE_URL` | Optional GitHub **repository variable** for the Supabase keep-alive workflow. |
 | `VERCEL_OIDC_TOKEN` | Injected by Vercel; don't set it. |
-| `PUBLIC_KEY_ADMIN`, `BLINDPAY_PAYOUT_PUBLIC`, `BLINDPAY_WEBHOOK_SECRET` | Listed in `.env.example` but **not read** by any code. |
 
 > ⚠️ `STAKING_CONTRACT_ID` and `VITE_STAKING_CONTRACT_ID` are mandatory and must hold the
-> same ID. If the server one is missing, `calculate-score`, `get-user-data` and
+> same ID. If the server one is missing, `calculate-score` and
 > `evaluate-and-mint` answer `500` and the SBT mint hangs in the frontend.
 
 ## Scheduled jobs

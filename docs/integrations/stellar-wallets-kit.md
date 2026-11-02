@@ -92,8 +92,6 @@ These intervals check the extension, not the chain, so they are outside
 
 ## Notes
 
-- `@albedo-link/intent` is still a dependency, but no file in `src/` imports it; the kit's
-  Albedo module is used instead.
 - `DepositModal` labels the provider "Albedo" or "Freighter" only, even when another kit
   wallet is in use.
 

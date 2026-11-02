@@ -86,12 +86,3 @@ export function fetchContractBalance(userAddress: string): Promise<number> {
   return readOne(userAddress, "get_position");
 }
 
-// Ingreso acumulado del usuario (para mostrar el rendimiento generado = posición − ingreso neto).
-export function fetchTotalDeposited(userAddress: string): Promise<number> {
-  return readOne(userAddress, "get_total_deposited");
-}
-
-// Retiro acumulado del usuario (para estimar el rendimiento neto generado).
-export function fetchTotalWithdrawn(userAddress: string): Promise<number> {
-  return readOne(userAddress, "get_total_withdrawn");
-}

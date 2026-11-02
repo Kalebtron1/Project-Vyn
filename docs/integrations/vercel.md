@@ -33,7 +33,7 @@ Vercel recommends against `builds` and suggests the `functions` property instead
 can't be combined ([vercel.json reference](https://vercel.com/docs/project-configuration/vercel-json#builds),
 [error list](https://vercel.com/docs/errors/error-list#conflicting-functions-and-builds-configuration)).
 
-## Function count today: 10 of 12
+## Function count today: 9 of 12
 
 | # | File | Called by | Notes |
 |---|---|---|---|
@@ -42,11 +42,10 @@ can't be combined ([vercel.json reference](https://vercel.com/docs/project-confi
 | 3 | `evaluate-and-mint.js` | Perfil | `maxDuration: 60` |
 | 4 | `faucet-usdc.js` | Perfil | |
 | 5 | `get-available-credit.js` | `useCredit`, Perfil | |
-| 6 | `get-user-data.js` | **nobody** | Legacy |
-| 7 | `health.js` | Deploy checks | |
-| 8 | `nonce.js` | **nobody** | Legacy, see [pending](pending.md) |
-| 9 | `onramp.js` | Depositar, Login | `action`: init, quote, payin, status, settle |
-| 10 | `readiness.js` | Supabase keep-alive workflow, deploy checks | Pings Supabase |
+| 6 | `health.js` | Deploy checks | |
+| 7 | `nonce.js` | **nobody** | Legacy, see [pending](pending.md) |
+| 8 | `onramp.js` | Depositar, Login | `action`: init, quote, payin, status, settle |
+| 9 | `readiness.js` | Supabase keep-alive workflow, deploy checks | Pings Supabase |
 
 **Not functions** (shared code bundled into the functions that import it):
 `_blindpay-core.mjs`, `_blindpay-onramp.mjs`, `_faucet-core.mjs`, `_logger.mjs`,
@@ -119,8 +118,8 @@ compiled into the frontend at build time: change them and redeploy.
 
 In order of cost:
 
-1. **Delete the two unused functions**, `nonce.js` and `get-user-data.js` (no caller in the
-   frontend). Frees 2.
+1. **Delete the unused function**, `nonce.js` (no caller in the
+   frontend). Frees 1.
 2. **Merge `health.js` into `readiness.js`** (for example `GET /api/readiness?deep=0` for a
    shallow check) and update `scripts/healthcheck.js` and the runbook. Frees 1.
 3. **Add actions, not files**: new endpoints in an existing domain go behind `?action=`

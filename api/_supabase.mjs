@@ -73,7 +73,7 @@ export async function pingSupabase() {
   return "ok";
 }
 
-/** Busca el mapping por dirección de wallet (identidad estable del usuario Accesly). */
+/** Busca el mapping por dirección de wallet (identidad estable del usuario Privy). */
 export async function getOnrampUserByWallet(walletAddress) {
   if (!isSupabaseConfigured()) return memory.get(walletAddress) || null;
   const rows = await sbFetch(

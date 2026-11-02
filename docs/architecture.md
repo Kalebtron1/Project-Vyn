@@ -27,7 +27,7 @@ Browser (React SPA)
   │          or Privy (email / Google / passkey → embedded Stellar wallet)
   ├─ Soroban RPC + Horizon (testnet)  ── staking_pool ─▶ DeFindex vault
   │                                    ── vinculo_lending ─▶ vinculo_sbt.get_tier
-  └─ /api/* on Vercel (10 Node functions)
+  └─ /api/* on Vercel (9 Node functions)
         ├─ scoring, SBT mint, credit       → Soroban RPC (admin key)
         ├─ SPEI on/off-ramp                → BlindPay API, Horizon (admin / payout keys)
         ├─ USDC faucet                     → Horizon (admin key)
@@ -105,8 +105,8 @@ data is the source of truth, and an open loan is forgotten on reload
 
 | File | Purpose |
 |---|---|
-| `contracts.ts` | `CONTRACT_ID` (`VITE_STAKING_CONTRACT_ID`), `LENDING_CONTRACT_ID`, `TREASURY_ADDRESS`, `RPC_URL`, reference `VAULT_ID`. |
-| `queries.ts` | `readSavingsSnapshot` (position, deposited, withdrawn in one go); legacy `fetch*` helpers. |
+| `contracts.ts` | `CONTRACT_ID` (`VITE_STAKING_CONTRACT_ID`), `LENDING_CONTRACT_ID`, `TREASURY_ADDRESS`, `RPC_URL`. |
+| `queries.ts` | `readSavingsSnapshot` (position, deposited, withdrawn in one go). |
 | `deposit.ts` | `depositToVault(address, amount, sign)`, shared by the SPEI on-ramp. |
 | `trustline.ts` | Friendbot funding, USDC trustline check/build/submit, USDC balance (Horizon). |
 | `activity.ts` | History from Horizon operations plus locally stored mints. |
@@ -164,7 +164,6 @@ Hobby plan allows 12 functions per deployment; there are 10
 | `/api/health` | GET | Liveness. |
 | `/api/readiness` | GET | Checks Supabase; used by the keep-alive workflow. |
 | `/api/nonce` | POST | Unused (legacy). |
-| `/api/get-user-data` | GET | Unused (legacy). |
 
 Request and response shapes: [API reference](api.md). Shared modules: `_scoring-core.mjs`,
 `_blindpay-core.mjs`, `_blindpay-onramp.mjs`, `_faucet-core.mjs`, `_usdc.mjs`,

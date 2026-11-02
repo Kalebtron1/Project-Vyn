@@ -13,11 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:stress": "node scripts/stress-test.js"
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@albedo-link/intent": "^0.13.0",
     "@creit.tech/stellar-wallets-kit": "^2.4.0",
     "@hookform/resolvers": "^3.10.0",
     "@privy-io/react-auth": "^3.32.2",

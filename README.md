@@ -24,7 +24,7 @@ Use this flow if you are a new contributor and want to reproduce the app on your
 ### What you need to replicate
 
 - A Stellar wallet (Freighter extension on desktop, or Albedo on mobile) to log in.
-- A Stellar testnet admin account for `SECRET_KEY_ADMIN` and `PUBLIC_KEY_ADMIN`.
+- A Stellar testnet admin account for `SECRET_KEY_ADMIN`.
 - The deployed Soroban contract IDs for `NFT_CONTRACT_ID`, `VITE_LENDING_CONTRACT_ID`, and the staking_pool (`VITE_STAKING_CONTRACT_ID` / `STAKING_CONTRACT_ID`).
 
 If you do not have those values yet, you can still read the code and work on UI or docs changes, but wallet, scoring, and minting flows will not work end to end.
@@ -33,12 +33,11 @@ If you do not have those values yet, you can still read the code and work on UI 
 
 The project uses the following variables:
 
-- `PUBLIC_KEY_ADMIN`
 - `SECRET_KEY_ADMIN`
 - `NFT_CONTRACT_ID`
 - `VITE_LENDING_CONTRACT_ID`
 - `VITE_STAKING_CONTRACT_ID` — staking_pool (DeFindex-backed) contract ID, read by the frontend (`src/stellar/contracts.ts`).
-- `STAKING_CONTRACT_ID` — same staking_pool contract ID, read by the serverless API functions (`api/get-user-data.js`, `api/evaluate-and-mint.js`). These two must hold the **same** contract ID; there is no hardcoded fallback, so the API returns a clear error if it is missing.
+- `STAKING_CONTRACT_ID` — same staking_pool contract ID, read by the serverless API functions (`api/evaluate-and-mint.js`). These two must hold the **same** contract ID; there is no hardcoded fallback, so the API returns a clear error if it is missing.
 - `VITE_TREASURY_ADDRESS` — treasury wallet (`G…` address). The only wallet that can see and operate the treasury panel (loan-interest profit). UI gating is cosmetic; the real authorization is enforced on-chain by `vinculo_lending.withdraw_interest`.
 - `PORT`
 
@@ -50,8 +49,7 @@ The project uses the following variables:
 
 1. Create or reuse a dedicated Stellar testnet account for backend operations.
 2. Copy the account secret into `SECRET_KEY_ADMIN`.
-3. Derive the matching public key from that account and place it in `PUBLIC_KEY_ADMIN`.
-4. Keep the secret out of version control. Use `.env.local` only.
+3. Keep the secret out of version control. Use `.env.local` only.
 
 ### Contract IDs
 
@@ -84,5 +82,4 @@ Vyn has three layers: a React frontend (wallet-based auth), Vercel serverless AP
 
 - Do not commit `.env.local`.
 - Use `.env.example` as the reference for required variables.
-- `PUBLIC_KEY_ADMIN` and `SECRET_KEY_ADMIN` must belong to the same account.
 - Contract IDs are environment-specific and may change after redeployments.

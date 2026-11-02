@@ -41,8 +41,6 @@ The app itself doesn't read `token_uri`: `NFTModal` shows local images from
 `public/images/`. Only wallets or explorers that read SEP-style metadata would see these
 files. If they matter, host them in this repo (or the app's domain) and redeploy the SBT.
 
-`src/stellar/nft-metadata.json` describes a different, older mint interface and is not
-imported anywhere.
 
 ## Google Fonts
 

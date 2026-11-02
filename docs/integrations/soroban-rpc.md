@@ -14,7 +14,6 @@ files:
   - api/_scoring-core.mjs
   - api/evaluate-and-mint.js
   - api/get-available-credit.js
-  - api/get-user-data.js
 ---
 
 # Soroban RPC
@@ -31,7 +30,7 @@ There is no environment variable for the network. The RPC URL
 - `src/components/CreditSection.tsx` (two literal URLs),
 - `src/lib/stellarWalletsKit.ts` (`NETWORK_PASSPHRASE`),
 - `api/_scoring-core.mjs`, `api/evaluate-and-mint.js`, `api/get-available-credit.js`,
-  `api/get-user-data.js`, `api/_blindpay-core.mjs` and `backend/server.js`.
+  `api/_blindpay-core.mjs` and `backend/server.js`.
 
 `Networks.TESTNET` also appears directly in the files that build transactions
 (`deposit.ts`, `queries.ts`, `treasury.ts`, `DepositModal`, `Retiros`, `Tesoreria`, …);
@@ -43,7 +42,7 @@ Contract IDs do come from the environment:
 | Variable | Read by | Contract |
 |---|---|---|
 | `VITE_STAKING_CONTRACT_ID` | `src/stellar/contracts.ts` | `staking_pool` |
-| `STAKING_CONTRACT_ID` | `api/_scoring-core.mjs` callers, `api/get-user-data.js`, `api/evaluate-and-mint.js`, `backend/server.js` | `staking_pool` (same ID) |
+| `STAKING_CONTRACT_ID` | `api/_scoring-core.mjs` callers, `api/evaluate-and-mint.js`, `backend/server.js` | `staking_pool` (same ID) |
 | `VITE_LENDING_CONTRACT_ID` | `src/stellar/contracts.ts`, `src/components/CreditSection.tsx` | `vinculo_lending` |
 | `NFT_CONTRACT_ID` | `api/evaluate-and-mint.js`, `api/get-available-credit.js`, `backend/server.js` | `vinculo_sbt` |
 | `SECRET_KEY_ADMIN` | `api/evaluate-and-mint.js`, `api/get-available-credit.js` | Signs `mint`; its account is also the source for the `get_tier` simulation. |
@@ -59,7 +58,6 @@ needs an existing source account, so each caller loads one first with `getAccoun
 |---|---|---|
 | `staking_pool.get_position`, `get_total_deposited`, `get_total_withdrawn` | `readSavingsSnapshot` (`src/stellar/queries.ts`, via `useSavings`) | The user |
 | same + `get_tx_count` | `getOnChainAggregates` (`api/_scoring-core.mjs`) for `/api/calculate-score` | The user |
-| `get_position`, `get_total_deposited`, `get_tx_count` | `/api/get-user-data` (no caller today) | The user |
 | `get_position` | `/api/evaluate-and-mint` fallback when no volume is sent | The user |
 | `vinculo_sbt.get_tier` | `/api/get-available-credit` | Admin account |
 | `vinculo_lending.get_accrued_interest`, `get_pool_balance` | `src/stellar/treasury.ts` (via `useTreasury`) | Treasury wallet |

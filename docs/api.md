@@ -33,7 +33,6 @@ Vercel Node functions in `api/`, served from the same domain as the app
 | [`/api/blindpay`](#apiblindpay) | GET, POST | Retiros |
 | [`/api/health`](#get-apihealth-and-get-apireadiness) | GET | Deploy checks |
 | [`/api/readiness`](#get-apihealth-and-get-apireadiness) | GET | Keep-alive workflow, deploy checks |
-| [`/api/get-user-data`](#get-apiget-user-data-unused) | GET | Nobody |
 | [`/api/nonce`](#post-apinonce-unused) | POST | Nobody |
 
 ---
@@ -185,13 +184,6 @@ the vault first (issue #91).
   `supabase-keepalive` workflow calls it every 6 hours
   ([Supabase](integrations/supabase.md#keeping-the-project-awake)).
 - Any other method: `405` with an `Allow: GET` header.
-
-## GET /api/get-user-data (unused)
-
-`?address=G...` → `{ "totalXlmDeposited", "currentPosition", "depositCount", "nftLevel" }`.
-Despite the name, the amounts are in the pool's token (USDC), `depositCount` counts deposits
-and withdrawals, and `nftLevel` is approximated from the position, not the score. An unknown
-account returns zeros. `500` if `STAKING_CONTRACT_ID` is missing or the RPC fails. No caller.
 
 ## POST /api/nonce (unused)
 

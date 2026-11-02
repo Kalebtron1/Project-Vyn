@@ -35,7 +35,7 @@ const en = {
     view_on_explorer: "View on explorer",
   },
 
-  // ─── Deposit via SPEI (Accesly on-ramp) ──────────────────────────────────────
+  // ─── Deposit via SPEI (Privy on-ramp) ──────────────────────────────────────
   deposit_spei: {
     title: "Deposit via SPEI",
     subtitle: "Transfer pesos and receive USDC in your account",
