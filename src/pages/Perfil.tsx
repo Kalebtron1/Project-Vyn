@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useFormatters } from "@/lib/format";
 import AppShell from "@/components/AppShell";
 import LanguageToggle from "@/components/LanguageToggle";
+import ThemeToggle from "@/components/ThemeToggle";
 import NFTModal from "@/components/NFTModal";
 import { toast } from "@/hooks/use-toast";
 import { requestAccess } from "@stellar/freighter-api";
@@ -825,6 +826,12 @@ const Perfil = () => {
               <span className="text-sm font-semibold text-foreground">Idioma / Language</span>
             </div>
             <LanguageToggle />
+          </div>
+
+          {/* En móvil el encabezado ya no lleva el cambio de tema. */}
+          <div className="card-elevated p-6 flex items-center justify-between animate-fade-up" style={{ animationDelay: "120ms" }}>
+            <span className="text-sm font-semibold text-foreground">{t("common.toggle_theme")}</span>
+            <ThemeToggle className="bg-secondary" />
           </div>
         </div>
       </div>

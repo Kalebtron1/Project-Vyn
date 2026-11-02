@@ -6,6 +6,7 @@
 const en = {
   common: {
     app_name: "Vyn",
+    toggle_theme: "Change theme",
     app_tagline: "Stellar Microcredits",
     loading: "Loading...",
     syncing: "Updating…",
@@ -131,9 +132,12 @@ const en = {
   },
 
   home: {
-    balance_title: "My savings",
-    balance_caption: "Balance available in the contract",
-    deposit_button: "Deposit Earnings",
+    balance_title: "Your savings",
+    balance_caption: "Includes your yield",
+    deposit_button: "Deposit",
+    action_withdraw: "Withdraw",
+    action_credit: "Credit",
+    action_history: "History",
     wallet_disconnected_title: "Wallet disconnected",
     wallet_disconnected_description:
       "Your wallet is not available. Make sure Freighter is installed and unlocked, or use the reconnect button.",

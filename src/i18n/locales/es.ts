@@ -13,6 +13,7 @@ const es = {
   // ─── Shared across the whole app ────────────────────────────────────────────
   common: {
     app_name: "Vyn",
+    toggle_theme: "Cambiar tema",
     app_tagline: "Stellar Microcredits",
     loading: "Cargando...",
     syncing: "Actualizando…",
@@ -143,9 +144,12 @@ const es = {
 
   // ─── Home / Index ────────────────────────────────────────────────────────────
   home: {
-    balance_title: "Mi ahorro",
-    balance_caption: "Saldo disponible en contrato",
-    deposit_button: "Depositar Ganancias",
+    balance_title: "Tu ahorro",
+    balance_caption: "Incluye tu rendimiento",
+    deposit_button: "Depositar",
+    action_withdraw: "Retirar",
+    action_credit: "Crédito",
+    action_history: "Historial",
     wallet_disconnected_title: "Wallet desconectada",
     wallet_disconnected_description:
       "Tu wallet no está disponible. Verifica que Freighter esté instalado y desbloqueado, o usa el botón de reconexión.",

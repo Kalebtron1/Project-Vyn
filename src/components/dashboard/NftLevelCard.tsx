@@ -1,4 +1,4 @@
-import { Medal, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/hooks/useWallet";
 import { useCredit, useScore } from "@/lib/chainData";
@@ -31,32 +31,26 @@ const NftLevelCard = () => {
     : 1;
 
   return (
-    <div className="card-elevated p-6">
-      <div className="flex items-center gap-2 text-sm font-bold text-foreground mb-5">
-        <Medal className="w-4 h-4 text-primary" /> {t("home.nft_card_title")}
+    <div className="card-metal p-6">
+      <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest">
+        <span>{t("common.app_name")}</span>
+        <span className="card-metal-sub">SBT</span>
       </div>
 
-      <div className="flex items-center gap-4 mb-5">
-        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-          <Medal className="w-7 h-7 text-amber-500" />
-        </div>
-        <div>
-          <p className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">{t("home.nft_rank_label")}</p>
-          <h3 className="text-xl font-bold text-foreground">{tierLabel(t, current.tier)} {current.emoji}</h3>
-        </div>
-      </div>
+      <p className="card-metal-sub text-sm font-medium mt-7">{t("home.nft_rank_label")}</p>
+      <h3 className="font-display text-3xl font-extrabold tracking-tight mt-1">{tierLabel(t, current.tier)}</h3>
 
-      <div className="w-full bg-secondary rounded-full h-2 mb-2 overflow-hidden">
-        <div className="bg-gradient-to-r from-primary to-accent h-2 rounded-full transition-all duration-700" style={{ width: `${progress * 100}%` }} />
+      <div className="w-full rounded-full h-1.5 mt-5 mb-2 overflow-hidden" style={{ backgroundColor: "hsl(var(--metal-sub) / 0.25)" }}>
+        <div className="h-1.5 rounded-full transition-all duration-700 bg-current" style={{ width: `${progress * 100}%` }} />
       </div>
-      <div className="flex justify-between text-[11px] font-bold text-muted-foreground">
+      <div className="card-metal-sub flex justify-between gap-3 text-xs font-semibold">
         {next ? (
           <>
             <span>{t("home.nft_next_level", { level: tierLabel(t, next.tier) })}</span>
-            <span className="tabular-nums">{Math.round(score)} / {next.minScore} pts</span>
+            <span className="tabular-nums shrink-0">{Math.round(score)} / {next.minScore} pts</span>
           </>
         ) : (
-          <span className="text-primary">{t("home.nft_max_level")}</span>
+          <span>{t("home.nft_max_level")}</span>
         )}
       </div>
     </div>

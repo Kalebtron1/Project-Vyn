@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import AppShell from "@/components/AppShell";
 import BalanceCard from "@/components/BalanceCard";
@@ -10,7 +10,10 @@ import DepositModal from "@/components/DepositModal";
 import YieldCard from "@/components/dashboard/YieldCard";
 import NftLevelCard from "@/components/dashboard/NftLevelCard";
 import PeriodSummaryCard from "@/components/dashboard/PeriodSummaryCard";
+import QuickActions from "@/components/dashboard/QuickActions";
 import { useWallet } from "@/hooks/useWallet";
+
+const CREDIT_SECTION_ID = "credit-section";
 
 const Index = () => {
   const { walletStatus } = useWallet();
@@ -18,7 +21,7 @@ const Index = () => {
   const { t } = useTranslation();
 
   return (
-    <AppShell title={t("home.welcome_title")} subtitle={t("home.dashboard_subtitle")}>
+    <AppShell title={t("home.welcome_title")} hideTitle>
       {/* Banner de wallet desconectada */}
       {walletStatus === "disconnected" && (
         <div className="max-w-[1400px] mx-auto mb-4 flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
@@ -37,30 +40,25 @@ const Index = () => {
       )}
 
       <div className="max-w-[1400px] mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-start">
-        {/* Columna 1: ahorro + depositar + reputación + rendimiento */}
+        {/* Columna 1: ahorro + acciones + nivel + reputación + rendimiento */}
         <div className="flex flex-col gap-5 opacity-0 animate-fade-up" style={{ animationDelay: "80ms", animationFillMode: "forwards" }}>
           <BalanceCard />
-          <button
-            onClick={() => setDepositOpen(true)}
-            data-testid="open-deposit"
-            className="btn-emerald w-full flex items-center justify-center gap-2 py-4 text-base font-bold shadow-lg shadow-emerald-500/10"
-          >
-            <Plus className="w-5 h-5" />
-            {t("home.deposit_button")}
-          </button>
+          <QuickActions onDeposit={() => setDepositOpen(true)} creditSectionId={CREDIT_SECTION_ID} />
+          <NftLevelCard />
           <ProgressRing />
           <YieldCard />
         </div>
 
         {/* Columna 2: crédito + actividad */}
         <div className="flex flex-col gap-5 opacity-0 animate-fade-up" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
-          <CreditSection />
+          <div id={CREDIT_SECTION_ID} className="scroll-mt-20">
+            <CreditSection />
+          </div>
           <ActivityList />
         </div>
 
-        {/* Columna 3: nivel NFT + resumen del periodo */}
+        {/* Columna 3: resumen del periodo */}
         <div className="flex flex-col gap-5 opacity-0 animate-fade-up md:col-span-2 xl:col-span-1" style={{ animationDelay: "320ms", animationFillMode: "forwards" }}>
-          <NftLevelCard />
           <PeriodSummaryCard />
         </div>
       </div>

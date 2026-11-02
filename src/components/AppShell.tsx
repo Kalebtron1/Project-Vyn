@@ -2,7 +2,6 @@ import { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Bell, HelpCircle, LogOut, Wallet, AlertTriangle, Loader2 } from "lucide-react";
-import logoVin from "@/assets/logo-vin.png";
 import BottomNav from "@/components/BottomNav";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
@@ -13,15 +12,21 @@ import { useChainSyncing } from "@/lib/chainData";
 interface AppShellProps {
   title: string;
   subtitle?: string;
+  /** Inicio: el saldo ya abre la pantalla; el título queda solo para lectores de pantalla. */
+  hideTitle?: boolean;
   children: ReactNode;
 }
+
+const Wordmark = ({ label, className }: { label: string; className: string }) => (
+  <span className={`font-display font-extrabold tracking-tighter lowercase ${className}`}>{label}</span>
+);
 
 /**
  * Layout compartido: sidebar lateral en escritorio (lg+) y bottom nav en móvil.
  * Mantiene un header superior con título de página, chip de wallet y accesos
  * (tema, idioma, notificaciones). Las páginas solo renderizan su contenido.
  */
-const AppShell = ({ title, subtitle, children }: AppShellProps) => {
+const AppShell = ({ title, subtitle, hideTitle = false, children }: AppShellProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -43,7 +48,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
     : "";
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground">
+    <div className="min-h-screen flex text-foreground">
       {/* ─── Sidebar (escritorio) ─────────────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col w-64 shrink-0 sticky top-0 h-screen bg-card border-r border-border">
         <button
@@ -51,8 +56,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
           className="h-20 flex items-center gap-3 px-6 hover:opacity-80 transition-opacity"
           aria-label={t("common.app_name")}
         >
-          <img src={logoVin} alt={t("common.app_name")} className="w-9 h-9 object-contain" />
-          <span className="text-xl font-extrabold tracking-tight">{t("common.app_name")}</span>
+          <Wordmark label={t("common.app_name")} className="text-3xl" />
         </button>
 
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
@@ -64,7 +68,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
                 onClick={() => navigate(path)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
                   isActive
-                    ? "text-primary-foreground bg-gradient-to-r from-primary to-sky shadow-md"
+                    ? "text-primary bg-secondary"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
@@ -99,41 +103,41 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
 
       {/* ─── Área principal ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg px-4 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between gap-3">
+        <header className="px-4 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {/* Logo solo en móvil (en escritorio ya está en el sidebar). Lleva al inicio. */}
             <button
               onClick={() => navigate("/")}
-              className="lg:hidden shrink-0 hover:opacity-80 transition-opacity"
+              className="lg:hidden shrink-0 hover:opacity-80 transition-opacity min-h-11"
               aria-label={t("common.app_name")}
             >
-              <img src={logoVin} alt={t("common.app_name")} className="w-8 h-8 object-contain" />
+              <Wordmark label={t("common.app_name")} className="text-[26px]" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-xl md:text-2xl font-extrabold tracking-tight truncate">{title}</h1>
+              <h1 className={hideTitle ? "sr-only" : "text-lg md:text-2xl font-bold tracking-tight truncate"}>{title}</h1>
               {syncing ? (
                 <p className="text-xs text-primary font-semibold flex items-center gap-1.5" role="status" data-testid="chain-syncing">
                   <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                   <span className="truncate">{t("common.syncing")}</span>
                 </p>
               ) : (
-                subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+                subtitle && !hideTitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-            <ThemeToggle />
-            <div className="hidden sm:block"><LanguageToggle /></div>
+            {/* En móvil, tema e idioma viven en Perfil para no saturar el encabezado. */}
+            <div className="hidden md:block"><ThemeToggle /></div>
+            <div className="hidden md:block"><LanguageToggle /></div>
 
             <button
               onClick={() => navigate("/notificaciones")}
-              className="relative flex items-center justify-center w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="flex items-center justify-center w-11 h-11 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               title={t("profile.menu_notifications")}
               aria-label={t("profile.menu_notifications")}
             >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-destructive rounded-full" />
+              <Bell className="w-5 h-5" />
             </button>
 
             {/* Chip de wallet (escritorio) */}
@@ -158,7 +162,7 @@ const AppShell = ({ title, subtitle, children }: AppShellProps) => {
             {/* Avatar compacto (móvil) */}
             <button
               onClick={() => navigate("/perfil")}
-              className="md:hidden flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground text-[10px] font-bold font-mono"
+              className="md:hidden flex items-center justify-center w-11 h-11 rounded-full bg-card border border-border text-foreground text-xs font-bold"
               aria-label={t("profile.title")}
             >
               {walletStatus === "loading" ? <Wallet className="w-4 h-4" /> : initials}

@@ -18,12 +18,13 @@ const BottomNav = () => {
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-xl transition-colors active:scale-95 ${
-                isActive ? "text-primary" : "text-muted-foreground"
+              aria-current={isActive ? "page" : undefined}
+              className={`flex-1 min-w-0 min-h-12 flex flex-col items-center justify-center gap-1 px-1 py-1 rounded-xl transition-colors active:scale-95 ${
+                isActive ? "text-primary font-bold" : "text-muted-foreground font-semibold"
               }`}
             >
-              <Icon className="w-5 h-5 shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
-              <span className="w-full text-[10px] font-semibold leading-tight text-center break-words hyphens-auto">
+              <Icon className="w-[22px] h-[22px] shrink-0" strokeWidth={isActive ? 2.2 : 1.9} />
+              <span className="w-full text-xs leading-tight text-center break-words hyphens-auto">
                 {t(labelKey)}
               </span>
             </button>
