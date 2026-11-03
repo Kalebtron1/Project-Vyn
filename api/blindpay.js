@@ -1,14 +1,16 @@
 // /api/blindpay?action=quote|payout|status — off-ramp USDC→SPEI (BlindPay sandbox).
 // Consolidado en un solo Serverless Function para respetar el límite del plan Hobby (≤12).
 //   POST /api/blindpay?action=quote   Body: { amount }                                → cotiza (no mueve fondos)
-//   POST /api/blindpay?action=payout  Body: { amount, walletAddress, fundingTxHash }  → verifica el pago y dispara el payout
+//   POST /api/blindpay?action=payout  Body: { amount, walletAddress, fundingTxHash }  → verifica el pago y dispara el payout (con sesión)
 //   GET  /api/blindpay?action=status&id=po_…                                          → estado del payout
 // Antes del payout, el usuario retira del vault y paga ese USDC a la cuenta de fondeo
 // (`fundingAddress` en la respuesta del quote). El payout solo sale si ese pago se verifica.
 import { createQuote, getPayout, summarizeQuote } from "./_blindpay-core.mjs";
 import { fundingAddress, payoutWithFunding } from "./_offramp.mjs";
 import { finishRampPayout } from "./_supabase.mjs";
+import { applyCors } from "./_cors.mjs";
 import { createLogger } from "./_logger.mjs";
+import { requireSessionFor } from "./_session.mjs";
 import {
   validateBody,
   validateQuery,
@@ -36,6 +38,7 @@ const failureStatus = (error) => (UNAVAILABLE_CODES.has(error.code) ? 503 : 502)
 
 export default async function handler(req, res) {
   const log = createLogger(req);
+  if (applyCors(req, res, "GET, POST, OPTIONS")) return;
   const action = String(req.query?.action || "");
 
   if (action === "status") {
@@ -79,6 +82,8 @@ export default async function handler(req, res) {
   } catch (error) {
     return reportValidationError(res, error);
   }
+
+  if (action === "payout" && !requireSessionFor(req, res, body.walletAddress)) return;
 
   const bankAccountId = process.env.BLINDPAY_DEMO_BANK_ACCOUNT_ID;
   if (!bankAccountId) {

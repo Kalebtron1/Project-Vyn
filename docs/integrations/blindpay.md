@@ -211,9 +211,8 @@ Repeat it before mainnet.
 
 ## Security issues (open)
 
-- No endpoint checks who is calling: there is no session or signature on the backend. The
-  off-ramp checks that the funding payment came from `walletAddress`, but until sessions exist
-  that address comes from the request.
+- `payin`, `settle` and `payout` require the wallet session
+  ([ADR-008](../decisions/ADR-008-wallet-session.md)). `init`, `quote` and `status` don't.
 - Refunds for failed payouts are manual.
 - No webhooks: status is polled every 4 s and `BLINDPAY_WEBHOOK_SECRET` is unused.
 

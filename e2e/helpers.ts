@@ -83,3 +83,12 @@ export async function stubCreditApi(page: Page): Promise<void> {
     await route.fulfill(ok);
   });
 }
+
+/** Simula una sesión de la API vigente para E2E_WALLET (no pide firmar el desafío). */
+export async function stubApiSession(page: Page): Promise<void> {
+  await page.route("**/api/auth?action=session", (route) =>
+    route.fulfill({
+      json: { address: E2E_WALLET, expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() },
+    })
+  );
+}

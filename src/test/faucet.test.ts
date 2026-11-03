@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import handler from "../../api/faucet-usdc.js";
+import { issueSessionToken } from "../../api/_session.mjs";
 import { clientIp } from "../../api/_faucet-core.mjs";
 
 const { sendUsdcFromAdmin, usdcBalance } = vi.hoisted(() => ({
@@ -46,9 +47,13 @@ async function fakeFetch(input: RequestInfo | URL, options: RequestInit = {}) {
   return new Response(JSON.stringify(rows), { status: 200 });
 }
 
-async function claim(address = WALLET, ip = "1.1.1.1") {
+// Sesión de la wallet que manda la petición, salvo que el test diga otra (null = sin sesión).
+const sessionCookie = (address: string | null) => (address ? `vyn_session=${issueSessionToken(address).token}` : "");
+
+async function claim(address = WALLET, ip = "1.1.1.1", sessionFor: string | null = address) {
   const res = {
     statusCode: 0,
+    setHeader() {},
     body: null as Record<string, unknown> | null,
     status(code: number) {
       this.statusCode = code;
@@ -59,7 +64,10 @@ async function claim(address = WALLET, ip = "1.1.1.1") {
       return this;
     },
   };
-  await handler({ method: "POST", body: { address }, headers: { "x-vercel-forwarded-for": ip } }, res);
+  await handler(
+    { method: "POST", body: { address }, headers: { "x-vercel-forwarded-for": ip, cookie: sessionCookie(sessionFor) } },
+    res
+  );
   return res;
 }
 
@@ -87,6 +95,7 @@ beforeEach(async () => {
   supabaseDown = false;
   vi.stubEnv("SUPABASE_URL", "https://db.test");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  vi.stubEnv("AUTH_JWT_SECRET", "x".repeat(40));
   vi.stubEnv("FAUCET_IP_SALT", "test-salt");
   vi.stubEnv("FAUCET_USDC_AMOUNT", "2");
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
@@ -123,6 +132,13 @@ describe("faucet", () => {
     expect(sendUsdcFromAdmin).toHaveBeenCalledOnce();
     expect(results.filter((r) => r.body!.sent === true)).toHaveLength(1);
     expect(results.find((r) => r.body!.sent === false)!.body).toMatchObject({ reason: "already_claimed" });
+  });
+
+  it("answers 401 without a session and 403 with another wallet's session", async () => {
+    expect((await claim(WALLET, "1.1.1.1", null)).statusCode).toBe(401);
+    expect((await claim(WALLET, "1.1.1.1", wallet("B"))).statusCode).toBe(403);
+    expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
+    expect(await spent()).toBe(0);
   });
 
   it("answers already_claimed on a repeat", async () => {

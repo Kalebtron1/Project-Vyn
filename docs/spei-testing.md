@@ -145,15 +145,15 @@ curl -s "$BASE/api/blindpay?action=status&id=PAYOUT_ID"
 ```
 
 Do **not** call `action=settle` or `action=payout` by hand against a shared
-environment: both move funds (admin USDC, payout-wallet USDB), and neither has a session
-check yet. `action=payout` only runs with a verified USDC payment that has not been used.
+environment: both move funds (admin USDC, payout-wallet USDB). They need the wallet's
+session cookie from `/api/auth`, and `action=payout` only runs with a verified USDC payment
+that has not been used.
 
 ## Risks while testing
 
 | Risk | Detail | Issue |
 |---|---|---|
 | Manual refunds | A failed or refunded payout leaves the user's USDC in the funding account until someone returns it. | — |
-| No session on settle | `walletAddress` in the body is only a claim, although the USDC always goes to the payin's wallet and daily limits apply. | #89 |
 | Shared admin key | The admin account also signs SBT mints and funds the faucet. | — |
 | Shared receiver and bank account | All users share one KYC'd receiver and all payouts go to one CLABE. Fine for a demo, not for production. | — |
 | No webhooks | Status is only known by polling; `BLINDPAY_WEBHOOK_SECRET` is unused. | — |

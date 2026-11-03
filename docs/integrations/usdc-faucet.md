@@ -78,7 +78,8 @@ The asset (code `USDC`, issuer starting with `GATALTGT`) is hard-coded in `api/_
 - Anyone can create new testnet accounts (Friendbot) and claim from each one. The IP limit
   raises the cost but can be avoided with other IPs, and one IPv6 user may control many
   addresses. The daily budget is the hard limit on what can leave.
-- There is no session yet, so anyone can claim for any address.
+- A claim needs the wallet's session, so it costs one signature per wallet, but new wallets
+  are still free.
 - The same admin key also mints SBTs and pays on-ramp settlements. Draining its USDC breaks
   the faucet and the SPEI on-ramp at the same time; leaking the key compromises all three.
 

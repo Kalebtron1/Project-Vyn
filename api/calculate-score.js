@@ -1,6 +1,7 @@
+import { applyCors } from "./_cors.mjs";
 import { createLogger } from "./_logger.mjs";
 import { validateBody, calculateScoreBodySchema, reportValidationError } from "./validation.mjs";
-import { computeFinancialReputation, getOnChainAggregates } from "./_scoring-core.mjs";
+import { computeFinancialReputation, getOnChainAggregates, isScoreAnomalous } from "./_scoring-core.mjs";
 
 // staking_pool respaldado por DeFindex. El score se calcula con los contadores
 // REALES que el contrato mantiene on-chain (no con effects de Horizon). La lógica
@@ -19,12 +20,7 @@ export { computeFinancialReputation };
 export default async function handler(req, res) {
   const log = createLogger(req);
 
-  res.setHeader("Access-Control-Allow-Credentials", true);
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (applyCors(req, res)) return;
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
@@ -49,15 +45,7 @@ export default async function handler(req, res) {
 
     const result = computeFinancialReputation(aggregates);
 
-    // --- ANOMALY DETECTION ---
-    // Bajo el scoring acotado (score <= 1000, retención <= 1) estos umbrales quedan
-    // latentes; se revisarán con la recalibración del scoring.
-    const SCORE_ANOMALY_THRESHOLD = 2000;
-    const RETENTION_ANOMALY_THRESHOLD = 5;
-    if (
-      result.score > SCORE_ANOMALY_THRESHOLD ||
-      (result.metrics && result.metrics.retention > RETENTION_ANOMALY_THRESHOLD)
-    ) {
+    if (isScoreAnomalous(result)) {
       log.warn("calculate_score.anomaly", {
         address,
         score: result.score,

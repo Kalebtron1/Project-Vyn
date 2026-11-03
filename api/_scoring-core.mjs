@@ -114,6 +114,15 @@ export function computeFinancialReputation({ totalDeposited, totalWithdrawn, pos
   };
 }
 
+// Bajo el scoring acotado (score <= 1000, retención <= 1) estos umbrales quedan latentes;
+// se revisarán con la recalibración del scoring. Un score anómalo bloquea el mint.
+const SCORE_ANOMALY_THRESHOLD = 2000;
+const RETENTION_ANOMALY_THRESHOLD = 5;
+
+export function isScoreAnomalous(result) {
+  return result.score > SCORE_ANOMALY_THRESHOLD || (result.metrics?.retention ?? 0) > RETENTION_ANOMALY_THRESHOLD;
+}
+
 // Lee los contadores del staking_pool por simulación de Soroban (mismo patrón que
 // calculate-score). Devuelve los agregados ya convertidos a unidades del token.
 // `contractId` es OBLIGATORIO: sin él no hay forma de saber qué contrato leer, y leer

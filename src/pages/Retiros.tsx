@@ -15,6 +15,7 @@ import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, 
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
 import { useRefreshChainData, useYield } from "@/lib/chainData";
 import { buildUsdcPaymentXdr, submitClassicXdr } from "@/stellar/trustline";
+import { ensureApiSession } from "@/lib/apiSession";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const PAYOUT_FINAL_STATUSES = ["completed", "failed", "refunded"];
@@ -210,6 +211,15 @@ const Retiros = () => {
     setSpeiError("");
     setSpeiStep("signing");
 
+    // El payout exige la sesión de esta wallet: se pide antes de mover nada.
+    setSpeiSigningLabel(t("withdrawals.spei.signing_session"));
+    const session = await ensureApiSession(walletAddress, sign);
+    if (session.ok === false) {
+      setSpeiError(session.cancelled ? t("withdrawals.spei.session_cancelled") : t("withdrawals.spei.session_failed"));
+      setSpeiStep("error");
+      return;
+    }
+
     if (!progress.withdrawn) {
       setSpeiSigningLabel(t("withdrawals.spei.signing_withdraw"));
       const res = await submitContractCall("withdraw", [
@@ -254,7 +264,9 @@ const Retiros = () => {
         throw new Error(
           FUNDING_REJECTIONS.includes(data.reason)
             ? t(`withdrawals.spei.${data.reason}`)
-            : data.error || t("withdrawals.spei.payout_error")
+            : data.reason === "no_session" || data.reason === "address_mismatch"
+              ? t("withdrawals.spei.session_failed")
+              : data.error || t("withdrawals.spei.payout_error")
         );
       }
       setSpeiResult({

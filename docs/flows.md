@@ -79,9 +79,10 @@ Perfil ─▶ fetchContractBalance + POST /api/get-available-credit (current tie
             computeFinancialReputation ─▶ { score, tier, eligibility, metrics }
 "Reclamar NFT" (enabled when the score's tier is higher than the on-chain tier and the
 balance is not 0)
-  Freighter sessions: requestAccess() must return the same address
-  ─▶ POST /api/evaluate-and-mint { userAddress, totalVolume }
-       ─▶ POST /api/calculate-score (same deployment, over HTTP)
+  ensureApiSession: the wallet signs the /api/auth challenge if there is no session
+  ─▶ POST /api/evaluate-and-mint { userAddress } with the session cookie
+       ─▶ 401 without a session · 403 if it belongs to another wallet
+       ─▶ same score as /api/calculate-score, computed in process
        ─▶ anomaly? 422  ·  tier 0? { status: "pending" }
        ─▶ vinculo_sbt.mint(admin, user, tier) signed by SECRET_KEY_ADMIN
        ─▶ poll getTransaction up to 45 s ─▶ { status: "minted", txHash, tier, tierName }
@@ -112,7 +113,7 @@ useCredit(address) (shared by CreditSection, ProgressRing, NftLevelCard, Histori
 tier ≥ 1 ─▶ show the limit and the withdraw button · tier 0 ─▶ locked
 ```
 
-Read once and cached; refreshed after a mint, loan or repayment. Any error returns tier 0.
+Read once and cached; refreshed after a mint, loan or repayment. An error answers `502`.
 
 ## 7. Loan and repayment
 
