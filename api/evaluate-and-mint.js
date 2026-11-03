@@ -10,6 +10,7 @@ import {
 } from "@stellar/stellar-sdk";
 import dotenv from "dotenv";
 import { createLogger } from "./_logger.mjs";
+import { requireSession } from "./_session.mjs";
 import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.mjs";
 
 dotenv.config();
@@ -150,10 +151,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (!STAKING_CONTRACT_ID) {
-    log.error("evaluate_and_mint.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
-    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
-  }
+  // El admin firma y paga cada mint: solo se actúa para la wallet que probó ser dueña (#89).
+  const sessionAddress = requireSession(req, res);
+  if (!sessionAddress) return;
 
   let userAddress;
   let deposits;
@@ -166,6 +166,16 @@ export default async function handler(req, res) {
     totalVolume = validated.totalVolume;
   } catch (error) {
     return reportValidationError(res, error);
+  }
+
+  if (userAddress !== sessionAddress) {
+    log.warn("evaluate_and_mint.address_mismatch", { userAddress, sessionAddress });
+    return res.status(403).json({ error: "La sesión es de otra wallet", reason: "address_mismatch" });
+  }
+
+  if (!STAKING_CONTRACT_ID) {
+    log.error("evaluate_and_mint.misconfigured", { reason: "STAKING_CONTRACT_ID no configurado" });
+    return res.status(500).json({ error: "Falta la variable de entorno STAKING_CONTRACT_ID" });
   }
 
   log.info("evaluate_and_mint.start", { userAddress });

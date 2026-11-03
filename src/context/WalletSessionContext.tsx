@@ -21,6 +21,7 @@ import React, {
 import * as FreighterAPI from "@stellar/freighter-api";
 import * as sessionStore from "@/lib/sessionStore";
 import { privyLogout } from "@/lib/privyBridge";
+import { clearApiSession } from "@/lib/apiSession";
 // `walletEnv` y no `mobileWalletConnectors`/`stellarWalletsKit`: este provider está
 // en la raíz y no debe meter el kit ni el Stellar SDK en el bundle inicial.
 import { FREIGHTER_ID, isMobileBrowser } from "@/lib/walletEnv";
@@ -111,6 +112,7 @@ export const WalletSessionProvider: React.FC<{ children: React.ReactNode }> = ({
     // Vía el puente: si Privy no está cargado (p. ej. sesión de Freighter), la cierra
     // en cuanto cargue en /login; si no había sesión de Privy, no hace nada.
     privyLogout();
+    clearApiSession();
   }, []);
 
   // Desktop + Freighter: detectar cambio de cuenta en la extensión.
