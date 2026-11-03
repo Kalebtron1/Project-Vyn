@@ -34,16 +34,6 @@ function loadScoringCore() {
   return scoringCorePromise;
 }
 
-// Core de BlindPay (off-ramp SPEI) — también ESM; se carga con import() dinámico cacheado.
-let blindpayCorePromise;
-function loadBlindpayCore() {
-  if (!blindpayCorePromise) {
-    blindpayCorePromise = import("../api/_blindpay-core.mjs");
-  }
-  return blindpayCorePromise;
-}
-const DEMO_BANK_ACCOUNT_ID = process.env.BLINDPAY_DEMO_BANK_ACCOUNT_ID;
-
 // Core de BlindPay ON-RAMP (payin SPEI) — ESM; se carga con import() dinámico cacheado.
 let onrampCorePromise;
 function loadOnrampCore() {
@@ -349,69 +339,17 @@ app.post('/api/evaluate-and-mint', async (req, res) => {
 // ─────────────────────────────────────────────
 // ENDPOINTS: BLINDPAY OFF-RAMP (SPEI) 💸
 // La UI maneja USDC; el USDB→SPEI lo firma la wallet de payout del backend.
-// Mismo handler que las funciones serverless api/blindpay-*.js (core compartido).
+// Reusa el handler serverless api/blindpay.js: el payout exige un pago de fondeo verificado (#91).
 // ─────────────────────────────────────────────
-function blindpayAmount(req, res) {
-  const raw = req.body && req.body.amount;
-  const amount = typeof raw === "string" ? Number(raw) : raw;
-  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 5) {
-    res.status(400).json({ error: "amount inválido (mínimo 5 USDC)", status: "error" });
-    return null;
-  }
-  if (!DEMO_BANK_ACCOUNT_ID) {
-    res.status(500).json({ error: "BlindPay demo no configurado (BLINDPAY_DEMO_BANK_ACCOUNT_ID)" });
-    return null;
-  }
-  return amount;
-}
-
-app.post("/api/blindpay-quote", async (req, res) => {
-  const amount = blindpayAmount(req, res);
-  if (amount === null) return;
+let blindpayHandlerPromise;
+app.all("/api/blindpay", async (req, res) => {
   try {
-    const { createQuote, summarizeQuote } = await loadBlindpayCore();
-    const quote = await createQuote({ amountCents: Math.round(amount * 100), bankAccountId: DEMO_BANK_ACCOUNT_ID });
-    return res.json(summarizeQuote(quote));
+    if (!blindpayHandlerPromise) blindpayHandlerPromise = import("../api/blindpay.js");
+    const mod = await blindpayHandlerPromise;
+    return mod.default(req, res);
   } catch (error) {
-    console.error("[DEBUG] 💥 /blindpay-quote:", error.message);
-    return res.status(502).json({ error: error.message || "Error al cotizar con BlindPay" });
-  }
-});
-
-app.post("/api/blindpay-payout", async (req, res) => {
-  const amount = blindpayAmount(req, res);
-  if (amount === null) return;
-  try {
-    const { quoteAndPayout, summarizeQuote } = await loadBlindpayCore();
-    const { quote, payout } = await quoteAndPayout({ amountCents: Math.round(amount * 100), bankAccountId: DEMO_BANK_ACCOUNT_ID });
-    return res.json({
-      payoutId: payout.id,
-      status: payout.status,
-      quote: summarizeQuote(quote),
-      tracking: payout.tracking_complete || payout.tracking_transaction || null,
-      payment: payout.tracking_payment || null,
-    });
-  } catch (error) {
-    console.error("[DEBUG] 💥 /blindpay-payout:", error.message);
-    return res.status(502).json({ error: error.message || "Error al ejecutar el retiro a SPEI" });
-  }
-});
-
-app.get("/api/blindpay-status", async (req, res) => {
-  const id = req.query && req.query.id;
-  if (!id) return res.status(400).json({ error: "id requerido", status: "error" });
-  try {
-    const { getPayout } = await loadBlindpayCore();
-    const payout = await getPayout(id);
-    return res.json({
-      payoutId: payout.id,
-      status: payout.status,
-      tracking: payout.tracking_complete || payout.tracking_transaction || null,
-      payment: payout.tracking_payment || null,
-    });
-  } catch (error) {
-    console.error("[DEBUG] 💥 /blindpay-status:", error.message);
-    return res.status(502).json({ error: error.message || "Error al consultar el payout" });
+    console.error("[DEBUG] 💥 /api/blindpay:", error.message);
+    return res.status(502).json({ error: error.message || "Error en el retiro a SPEI" });
   }
 });
 

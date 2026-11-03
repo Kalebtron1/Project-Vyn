@@ -51,6 +51,7 @@ From BlindPay's docs ([payins](https://blindpay.com/docs/essentials/payins),
 
 | Account | Needs | Variable |
 |---|---|---|
+| Funding account | XLM and a trustline to the project's USDC. It receives the user's USDC before each payout. The admin account works. | `OFFRAMP_FUNDING_ADDRESS` (public key only) |
 | Payout wallet | XLM (Friendbot), a trustline to BlindPay's **USDB** on testnet, and a USDB balance. BlindPay suggests funding test wallets with a payin, which auto-completes. On 2026-05-15 BlindPay rotated the testnet USDB issuer ([changelog](https://blindpay.com/changelog)), so a trustline created before then points at the old asset. | `BLINDPAY_PAYOUT_SECRET` |
 | Admin account | XLM, a trustline to the project's USDC (issuer starting with `GATALTGT`) and a USDC balance, topped up by hand. It pays every on-ramp settlement and the faucet. | `SECRET_KEY_ADMIN` |
 
@@ -67,7 +68,7 @@ stay in memory until the server restarts and `settle` answers `503`.
 |---|---|---|---|
 | Production or a Vercel preview | ✅ | ✅ | Uses the variables set in Vercel. Easiest. |
 | `vercel dev` locally | ✅ | ✅ | Runs `api/` like Vercel. Needs the Vercel CLI and a linked project. |
-| `npm run dev` + `node backend/server.js` | ✅ | ❌ | The Express server forwards `/api/onramp` to the real handler but only has the old `/api/blindpay-quote`, `-payout` and `-status` routes. The frontend calls `/api/blindpay?action=…`, which returns `404` there. Vite runs on port 8080 and proxies `/api` to port 3000. |
+| `npm run dev` + `node backend/server.js` | ✅ | ✅ | The Express server forwards `/api/onramp`, `/api/blindpay` and `/api/faucet-usdc` to the real handlers. Vite runs on port 8080 and proxies `/api` to port 3000. |
 
 ## On-ramp (Depositar) step by step
 
@@ -104,15 +105,20 @@ Check the result:
 2. **Retiros** → choose **SPEI** → **Retirar**.
 3. Tap **Simular KYC**. It's a 3.5-second animation; nothing is sent to BlindPay.
 4. Type at least 10 USDC (and no more than the balance). The MXN quote appears.
-5. Tap **Confirmar** and sign the vault withdrawal. Then the backend creates the payout from
-   the payout wallet to the demo bank account.
-6. The success screen shows the MXN amount and the provider. The page does not track the
-   payout status afterwards.
+5. Tap **Confirmar** and sign twice: the vault withdrawal, then the USDC payment to the
+   funding account (`OFFRAMP_FUNDING_ADDRESS`). The backend verifies that payment on Horizon
+   and creates the payout from the payout wallet to the demo bank account.
+6. The success screen shows the MXN amount and the payout status, which it refreshes every
+   5 seconds until BlindPay closes it.
 
-Check the payout status by hand (see curl below) or in the BlindPay dashboard.
+Check the result:
 
-Failure cases: **666 USDC** → payout `failed`; **777** → `refunded`. In both cases the user's
-USDC has already left the vault and is in their wallet; nothing is rolled back.
+- The USDC payment on StellarExpert (user → funding account).
+- A row in `ramp_payouts` with the funding hash and status `submitted`, then `completed`.
+
+Failure cases: **666 USDC** → payout `failed`; **777** → `refunded`. The screen shows it and
+the row ends in that state. The user's USDC is already in the funding account and is returned
+by hand.
 
 ## curl reference
 
@@ -140,13 +146,13 @@ curl -s "$BASE/api/blindpay?action=status&id=PAYOUT_ID"
 
 Do **not** call `action=settle` or `action=payout` by hand against a shared
 environment: both move funds (admin USDC, payout-wallet USDB), and neither has a session
-check yet. `action=payout` is what issue #91 describes.
+check yet. `action=payout` only runs with a verified USDC payment that has not been used.
 
 ## Risks while testing
 
 | Risk | Detail | Issue |
 |---|---|---|
-| Payout not tied to a withdrawal | `action=payout` only checks the amount. Anyone can drain the payout wallet's USDB. | #91 |
+| Manual refunds | A failed or refunded payout leaves the user's USDC in the funding account until someone returns it. | — |
 | No session on settle | `walletAddress` in the body is only a claim, although the USDC always goes to the payin's wallet and daily limits apply. | #89 |
 | Shared admin key | The admin account also signs SBT mints and funds the faucet. | — |
 | Shared receiver and bank account | All users share one KYC'd receiver and all payouts go to one CLABE. Fine for a demo, not for production. | — |
@@ -154,7 +160,7 @@ check yet. `action=payout` is what issue #91 describes.
 
 ## Before mainnet
 
-- Fix #91, and remove or server-gate "Simular KYC".
+- Remove or server-gate "Simular KYC".
 - Production instance: `BLINDPAY_NETWORK` / `BLINDPAY_ONRAMP_NETWORK = stellar`,
   `BLINDPAY_TOKEN = USDC`.
 - Replace the hard-coded `Networks.TESTNET` in `executeStellarPayout` and re-check the

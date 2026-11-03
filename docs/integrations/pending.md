@@ -95,11 +95,9 @@ Read by the code but missing from `.env.example`:
 | `vinculo_sbt` has no tests (stale snapshots only); `vinculo_lending` has none | #99 (in PR #128), #98 |
 | No slippage protection on vault withdrawals (`min_amounts_out = 0`) | #104 is closed, but the fix is in PR #128, not in `main` |
 | CORS `*` on every API function | #94 |
-| Faucet has no rate limit and fails open | #93 |
-| No caller authentication on the API (mint, payout, settle) | #89, #91, #92 |
+| No caller authentication on the API (mint, payout, settle) | #89 |
 | `scripts/upgrade_contract.sh` and parts of the [migration guide](../contracts/migration.md) call an `upgrade` function that no contract has | — |
 | CI runs only the contracts; frontend lint, tests and build are not checked on PRs (PR #128 adds a job) | — |
-| The local Express server lacks `/api/blindpay?action=…`, so the off-ramp can't run with `node backend/server.js` | — |
 | Runtime logs last 1 hour on Vercel Hobby; no log drain or error tracking | — |
 | DeFindex yield needs `scripts/harvest_keeper.sh` running on someone's machine | — |
 

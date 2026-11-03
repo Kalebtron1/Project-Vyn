@@ -55,6 +55,19 @@ export const blindpayQuoteBodySchema = z.object({
   amount: usdAmount,
 });
 
+export const blindpayPayoutBodySchema = z.object({
+  amount: usdAmount,
+  walletAddress: z
+    .string()
+    .trim()
+    .regex(/^G[A-Z2-7]{55}$/, { message: "dirección Stellar inválida" }),
+  fundingTxHash: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[0-9a-f]{64}$/, { message: "hash de transacción inválido" }),
+});
+
 export const blindpayStatusQuerySchema = z.object({
   id: nonEmptyString.describe("id del payout es requerido"),
 });

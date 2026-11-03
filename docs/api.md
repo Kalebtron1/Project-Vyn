@@ -170,16 +170,28 @@ USDC → SPEI. Amounts in USD (USDC), at least 10.
 
 | Action | Method | Body / query | Response 200 |
 |---|---|---|---|
-| `quote` | POST | `{ amount }` | `{ quoteId, senderUsd, receiverMxn, flatFeeUsd, partnerFeeUsd, rateMxnPerUsd, commercialRateMxnPerUsd, expiresAt }` |
-| `payout` | POST | `{ amount }` | `{ payoutId, status, quote: {…}, tracking, payment }` |
+| `quote` | POST | `{ amount }` | `{ quoteId, senderUsd, receiverMxn, flatFeeUsd, partnerFeeUsd, rateMxnPerUsd, commercialRateMxnPerUsd, expiresAt, fundingAddress }` |
+| `payout` | POST | `{ amount, walletAddress, fundingTxHash }` | `{ payoutId, status, quote: {…}, tracking, payment }` |
 | `status` | GET | `&id=<payoutId>` | `{ payoutId, status, tracking, payment }` |
 
-Errors: `400` for an unknown action or validation; `405` for the wrong method; `500`
-`{ "error": "BlindPay demo no configurado" }` without `BLINDPAY_DEMO_BANK_ACCOUNT_ID`; `502`
-with BlindPay's message.
+Before `payout`, the user pays `amount` USDC from `walletAddress` to `fundingAddress` in a
+single-payment transaction, and sends its hash as `fundingTxHash`. `payout` rejects it with
+`{ reason }`:
 
-`payout` sends from the backend payout wallet and does not check that the user withdrew from
-the vault first (issue #91).
+| Status | `reason` | Meaning |
+|---|---|---|
+| `404` | `funding_not_found` | Horizon does not have the transaction (yet). |
+| `400` | `funding_failed` | The transaction failed. |
+| `400` | `funding_expired` | It is older than 15 minutes. |
+| `400` | `funding_invalid` | It is not exactly one USDC payment to `fundingAddress`. |
+| `400` | `funding_insufficient` | It pays less than `amount`. |
+| `403` | `funding_wrong_sender` | It was not sent by `walletAddress`. |
+| `409` | `funding_already_used` | That hash already backs a payout. |
+
+Other errors: `400` for an unknown action or validation; `405` for the wrong method; `500`
+`{ "error": "BlindPay demo no configurado" }` without `BLINDPAY_DEMO_BANK_ACCOUNT_ID`; `503`
+without `OFFRAMP_FUNDING_ADDRESS` or if Supabase fails, with no payout; `502` with
+BlindPay's message.
 
 ## GET /api/health and GET /api/readiness
 

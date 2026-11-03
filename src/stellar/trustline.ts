@@ -73,6 +73,20 @@ export async function buildUsdcTrustlineXdr(address: string): Promise<string> {
   return tx.toXDR();
 }
 
+/** Construye el XDR de un pago de USDC (`amount` con hasta 7 decimales) para que lo firme el usuario. */
+export async function buildUsdcPaymentXdr(from: string, to: string, amount: string): Promise<string> {
+  const server = new Horizon.Server(HORIZON_URL);
+  const account = await server.loadAccount(from);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: Networks.TESTNET,
+  })
+    .addOperation(Operation.payment({ destination: to, asset: USDC_ASSET, amount }))
+    .setTimeout(120)
+    .build();
+  return tx.toXDR();
+}
+
 /** Envía un XDR ya firmado a Horizon (tx clásica). Devuelve el hash. */
 export async function submitClassicXdr(signedXdr: string): Promise<string> {
   const server = new Horizon.Server(HORIZON_URL);

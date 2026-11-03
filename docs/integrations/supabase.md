@@ -23,6 +23,7 @@ back only to keep idempotency and mapping tables for the faucet and the SPEI on-
 | `ramp_payins` | `payin_id` | `saveRampPayin` | Each payin with the wallet it was created for and its amounts. |
 | `ramp_settlements` | `payin_id` | `reserve_settlement`, `finish_settlement` | One USDC settlement per payin. |
 | `faucet_grants` | `wallet_address` | `reserve_faucet`, `finish_faucet` | One grant per wallet, with a hashed IP for the daily limit. |
+| `ramp_payouts` | `id` (`funding_tx_hash` unique) | `insertRampPayout`, `updateRampPayout`, `finishRampPayout` | One SPEI payout per verified USDC funding payment, with its status. |
 | `faucet_claims` | `wallet_address` | Nothing | Old claims. Still checked by the faucet and read by `pingSupabase`. |
 | `onramp_users` | `wallet_address` | Nothing | Old mapping. Read only for wallets missing from `ramp_customers`. |
 | `onramp_settlements` | `payin_id` | Nothing | Old settlements. Copied by `0003_backfill.sql`. |
@@ -36,14 +37,13 @@ on an embedded Postgres ([PGlite](https://pglite.dev)), so `npm test` covers the
 | File | What it does |
 |---|---|
 | `0001_baseline_close_access.sql` | The three tables above and the closed access. Safe to repeat. |
-| `0002_ramp_schema.sql` | New tables and atomic functions. Runs once. The on-ramp and faucet use them; the off-ramp does not yet. |
+| `0002_ramp_schema.sql` | New tables and atomic functions. Runs once. The on-ramp, faucet and off-ramp use them. |
 | `0003_backfill.sql` | Copies current rows to the new tables, without emails. Safe to repeat. Run it again each time an endpoint moves to the new tables. |
 
 Other new tables, not used yet except where noted:
 
 | Table | Purpose |
 |---|---|
-| `ramp_payouts` | One payout per funding transaction. |
 | `daily_budgets` | Amount spent per budget and UTC day, to enforce global caps. Used by the on-ramp and faucet. |
 | `webhook_events` | Webhook deliveries already received. |
 | `used_auth_challenges`, `rate_limits` | Session challenges already used, and hits per time window. |
@@ -73,6 +73,9 @@ the `apikey` and `Authorization: Bearer` headers. Upserts use
 | `reserveSettlement`, `finishSettlement` | `settlePayin` | `POST rpc/<function>` |
 | `hasClaimedFaucet(address)` | `sendFaucetUsdc` (`_faucet-core.mjs`) | `GET faucet_claims?wallet_address=eq.…` |
 | `reserveFaucet`, `finishFaucet` | `sendFaucetUsdc` | `POST rpc/<function>` |
+| `insertRampPayout(row)` | `payoutWithFunding` (`_offramp.mjs`) | `POST ramp_payouts?on_conflict=funding_tx_hash` (ignore duplicates, returns the row) |
+| `updateRampPayout(id, fields)` | `payoutWithFunding` | `PATCH ramp_payouts?id=eq.…` |
+| `finishRampPayout(payoutId, status)` | `api/blindpay.js` (`status`) | `PATCH ramp_payouts?blindpay_payout_id=eq.…&status=eq.submitted` |
 | `pingSupabase()` | `api/readiness.js` | `GET faucet_claims?select=claimed_at&limit=1` (5 s timeout) |
 | `hitRateLimit`, `consumeAuthChallenge` | Nothing yet | `POST rpc/<function>` |
 
