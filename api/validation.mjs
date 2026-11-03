@@ -49,7 +49,8 @@ const usdAmount = z.preprocess((value) => {
 }, z
   .number({ invalid_type_error: "debe ser un número" })
   .positive({ message: "debe ser mayor a 0" })
-  .min(10, { message: "el monto mínimo es 10 USDC (BlindPay exige ≥ $10 USD)" }));
+  .min(10, { message: "el monto mínimo es 10 USDC (BlindPay exige ≥ $10 USD)" })
+  .max(10_000, { message: "el monto máximo es 10,000 USDC por operación" }));
 
 export const blindpayQuoteBodySchema = z.object({
   amount: usdAmount,
@@ -81,7 +82,8 @@ const mxnAmount = z.preprocess((value) => {
 }, z
   .number({ invalid_type_error: "debe ser un número" })
   .positive({ message: "debe ser mayor a 0" })
-  .min(175, { message: "el monto mínimo es ~175 MXN (BlindPay exige ≥ $10 USD)" }));
+  .min(175, { message: "el monto mínimo es ~175 MXN (BlindPay exige ≥ $10 USD)" })
+  .max(200_000, { message: "el monto máximo es 200,000 MXN por operación" }));
 
 // Dirección Stellar (cuenta clásica G…) de la wallet Privy del usuario.
 const stellarAddress = z

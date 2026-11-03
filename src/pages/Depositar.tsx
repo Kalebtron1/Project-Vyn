@@ -24,6 +24,7 @@ import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
 import { depositToVault } from "@/stellar/deposit";
 import { formatAmount } from "@/lib/format";
+import { ensureApiSession } from "@/lib/apiSession";
 
 type Step = "input" | "generating" | "clabe" | "settling" | "success" | "error";
 
@@ -45,7 +46,10 @@ function rejectionMessage(
     case "forbidden":
     case "unknown_payin":
     case "payin_mismatch":
+    case "address_mismatch":
       return t("deposit_spei.settle_rejected");
+    case "no_session":
+      return t("deposit_spei.session_failed");
     default:
       return null;
   }
@@ -137,6 +141,11 @@ const Depositar = () => {
     setError("");
     setStep("generating");
     try {
+      // Generar la CLABE y liquidar exigen la sesión de esta wallet (una firma por hora).
+      const session = await ensureApiSession(address, sign);
+      if (session.ok === false) {
+        throw new Error(session.cancelled ? t("deposit_spei.session_cancelled") : t("deposit_spei.session_failed"));
+      }
       const r = await fetch("/api/onramp?action=payin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

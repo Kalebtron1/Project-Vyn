@@ -8,14 +8,13 @@ import {
   nativeToScVal,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import dotenv from "dotenv";
+import { applyCors } from "./_cors.mjs";
 import { createLogger } from "./_logger.mjs";
-import { requireSession } from "./_session.mjs";
+import { computeFinancialReputation, getOnChainAggregates, isScoreAnomalous } from "./_scoring-core.mjs";
+import { requireSessionFor } from "./_session.mjs";
 import { validateBody, evaluateAndMintBodySchema, reportValidationError } from "./validation.mjs";
 
-dotenv.config();
-
-// El mint encadena calculate-score (RPC Soroban) + prepare + polling de confirmación;
+// El mint encadena el score (RPC Soroban) + prepare + polling de confirmación;
 // el default de 10 s del plan hobby lo cortaba (504 → front colgado). 60 s es el máx en hobby.
 export const config = { maxDuration: 60 };
 
@@ -25,53 +24,21 @@ const server = new rpc.Server(RPC_URL);
 // (sin fallback hardcodeado; debe definirse en el entorno tras cada redeploy).
 const STAKING_CONTRACT_ID = process.env.STAKING_CONTRACT_ID;
 
-function tierNameFromValue(tier) {
-  if (tier === 4) return "Platino";
-  if (tier === 3) return "Diamante";
-  if (tier === 2) return "Oro";
-  if (tier === 1) return "Plata";
-  return "Bronce";
-}
-
-async function resolveTierFromCanonicalScore(req, log, userAddress, totalVolume) {
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  const proto = req.headers["x-forwarded-proto"] || "https";
-
-  if (!host) {
-    throw new Error("No se pudo resolver host para validar score");
-  }
-
-  log.info("evaluate_and_mint.score_request", { userAddress, totalVolume, host });
-
-  const scoreResponse = await fetch(`${proto}://${host}/api/calculate-score`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // Propagate request-id so the inner call shares the same trace.
-      "x-request-id": log.reqId,
-    },
-    body: JSON.stringify({
-      address: userAddress,
-      totalDeposited: Number(totalVolume) || 0,
-    }),
+// Mismo cálculo que /api/calculate-score, en proceso: sin depender de los encabezados
+// Host ni de una segunda llamada HTTP.
+async function resolveTier(log, userAddress) {
+  const aggregates = await getOnChainAggregates(userAddress, { contractId: STAKING_CONTRACT_ID });
+  const result = computeFinancialReputation(aggregates);
+  const anomaly = isScoreAnomalous(result);
+  log.info("evaluate_and_mint.score_resolved", {
+    userAddress,
+    tier: result.tier,
+    tierName: result.tierName,
+    score: result.score,
+    anomaly,
   });
-
-  if (!scoreResponse.ok) {
-    throw new Error("No se pudo validar score para mintear");
-  }
-
-  const scoreData = await scoreResponse.json();
-  const tier = Number(scoreData?.tier) || 0;
-  const tierName = scoreData?.tierName || tierNameFromValue(tier);
-  const anomaly = scoreData?.anomaly === true;
-
-  log.info("evaluate_and_mint.score_resolved", { userAddress, tier, tierName, score: scoreData?.score, anomaly });
-
-  if (anomaly) {
-    log.warn("evaluate_and_mint.anomaly_flagged", { userAddress, tier, score: scoreData?.score });
-  }
-
-  return { tier, tierName, anomaly };
+  if (anomaly) log.warn("evaluate_and_mint.anomaly_flagged", { userAddress, tier: result.tier, score: result.score });
+  return { tier: result.tier, tierName: result.tierName, anomaly };
 }
 
 async function mintNftOnChain(log, userAddress, tier) {
@@ -143,34 +110,20 @@ async function mintNftOnChain(log, userAddress, tier) {
 export default async function handler(req, res) {
   const log = createLogger(req);
 
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // El admin firma y paga cada mint: solo se actúa para la wallet que probó ser dueña (#89).
-  const sessionAddress = requireSession(req, res);
-  if (!sessionAddress) return;
-
   let userAddress;
-  let deposits;
-  let totalVolume;
-
   try {
-    const validated = validateBody(evaluateAndMintBodySchema, req.body || {});
-    userAddress = validated.userAddress;
-    deposits = validated.deposits;
-    totalVolume = validated.totalVolume;
+    ({ userAddress } = validateBody(evaluateAndMintBodySchema, req.body || {}));
   } catch (error) {
     return reportValidationError(res, error);
   }
 
-  if (userAddress !== sessionAddress) {
-    log.warn("evaluate_and_mint.address_mismatch", { userAddress, sessionAddress });
-    return res.status(403).json({ error: "La sesión es de otra wallet", reason: "address_mismatch" });
+  // El admin firma y paga cada mint: solo se actúa para la wallet que probó ser dueña (#89).
+  if (!requireSessionFor(req, res, userAddress)) {
+    log.info("evaluate_and_mint.unauthorized", { userAddress, status: res.statusCode });
+    return;
   }
 
   if (!STAKING_CONTRACT_ID) {
@@ -180,46 +133,12 @@ export default async function handler(req, res) {
 
   log.info("evaluate_and_mint.start", { userAddress });
 
-  const fallbackVolumeFromDeposits = Array.isArray(deposits)
-    ? deposits.reduce((acc, d) => acc + (Number(d?.amount) || 0), 0)
-    : 0;
-
-  let effectiveTotalVolume = Number(totalVolume) || fallbackVolumeFromDeposits;
-
-  // Fallback: lee la posición real on-chain (depósito + rendimiento del vault DeFindex)
-  // en lugar del balance nativo XLM, para que el score refleje el apartado del usuario.
-  if (!effectiveTotalVolume || effectiveTotalVolume <= 0) {
-    try {
-      const account = await server.getAccount(userAddress);
-      const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(
-          Operation.invokeContractFunction({
-            contract: STAKING_CONTRACT_ID,
-            function: "get_position",
-            args: [nativeToScVal(userAddress, { type: "address" })],
-          })
-        )
-        .setTimeout(30)
-        .build();
-      const sim = await server.simulateTransaction(tx);
-      if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
-        const positionXLM = Number(scValToNative(sim.result.retval)) / 10000000;
-        effectiveTotalVolume = positionXLM || effectiveTotalVolume;
-      }
-    } catch (e) {
-      log.warn("evaluate_and_mint.position_fetch_failed", { userAddress, err: e.message });
-    }
-  }
-
   const t0 = Date.now();
   let tier;
   let tierName;
   let anomaly = false;
   try {
-    const tierResult = await resolveTierFromCanonicalScore(req, log, userAddress, effectiveTotalVolume);
+    const tierResult = await resolveTier(log, userAddress);
     tier = tierResult.tier;
     tierName = tierResult.tierName;
     anomaly = tierResult.anomaly || false;

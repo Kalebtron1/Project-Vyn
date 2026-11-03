@@ -4,6 +4,7 @@
 //   GET  /api/auth?action=session                           → { address, expiresAt } o 401
 //   POST /api/auth?action=logout                            → borra la cookie
 // Ver api/_session.mjs.
+import { applyCors } from "./_cors.mjs";
 import { createLogger } from "./_logger.mjs";
 import {
   AuthError,
@@ -31,6 +32,7 @@ function sendError(res, log, event, error) {
 
 export default async function handler(req, res) {
   const log = createLogger(req);
+  if (applyCors(req, res, "GET, POST, OPTIONS")) return;
   const action = String(req.query?.action || "");
 
   if (action === "session") {

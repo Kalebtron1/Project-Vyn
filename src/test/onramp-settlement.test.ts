@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import handler from "../../api/onramp.js";
+import { issueSessionToken } from "../../api/_session.mjs";
 
 const { sendUsdcFromAdmin } = vi.hoisted(() => ({ sendUsdcFromAdmin: vi.fn() }));
 vi.mock("../../api/_usdc.mjs", () => ({ sendUsdcFromAdmin }));
@@ -84,9 +85,13 @@ async function fakeFetch(input: RequestInfo | URL, options: RequestInit = {}) {
   return payin ? json(payin) : json({ message: "not found" }, 404);
 }
 
-async function call(action: string, body: unknown) {
+// Sesión de la wallet que manda la petición, salvo que el test diga otra (null = sin sesión).
+const sessionCookie = (address: string | null) => (address ? `vyn_session=${issueSessionToken(address).token}` : "");
+
+async function call(action: string, body: Record<string, unknown> & { walletAddress?: string }, sessionFor: string | null = body?.walletAddress ?? null) {
   const res = {
     statusCode: 0,
+    setHeader() {},
     body: null as Record<string, unknown> | null,
     status(code: number) {
       this.statusCode = code;
@@ -97,11 +102,12 @@ async function call(action: string, body: unknown) {
       return this;
     },
   };
-  await handler({ method: "POST", query: { action }, body, headers: {} }, res);
+  await handler({ method: "POST", query: { action }, body, headers: { cookie: sessionCookie(sessionFor) } }, res);
   return res;
 }
 
-const settle = (payinId: string, walletAddress = WALLET) => call("settle", { payinId, walletAddress });
+const settle = (payinId: string, walletAddress = WALLET, sessionFor: string | null = walletAddress) =>
+  call("settle", { payinId, walletAddress }, sessionFor);
 
 // Crea el payin por el camino real y BlindPay lo reporta como `status` (lo que haría el sandbox).
 async function createPayin(amountMxn: number, status = "completed", wallet = WALLET) {
@@ -143,6 +149,7 @@ beforeEach(async () => {
   vi.stubEnv("BLINDPAY_DEMO_RECEIVER_ID", "re_test");
   vi.stubEnv("SUPABASE_URL", "https://db.test");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  vi.stubEnv("AUTH_JWT_SECRET", "x".repeat(40));
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -187,6 +194,19 @@ describe("settle", () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toMatchObject({ settled: false, reason: "forbidden" });
+    expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
+  });
+
+  it("answers 401 without a session and 403 with another wallet's session", async () => {
+    const payinId = await createPayin(500);
+
+    const anonymous = await settle(payinId, WALLET, null);
+    expect(anonymous.statusCode).toBe(401);
+    expect(anonymous.body).toMatchObject({ reason: "no_session" });
+
+    const impostor = await settle(payinId, WALLET, OTHER_WALLET);
+    expect(impostor.statusCode).toBe(403);
+    expect(impostor.body).toMatchObject({ reason: "address_mismatch" });
     expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
   });
 
@@ -331,6 +351,14 @@ describe("payin", () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body).not.toHaveProperty("clabe");
+  });
+
+  it("needs the wallet's session to generate a CLABE, but not to quote", async () => {
+    expect((await call("payin", { walletAddress: WALLET, amountMxn: 500 }, null)).statusCode).toBe(401);
+    expect((await call("payin", { walletAddress: WALLET, amountMxn: 500 }, OTHER_WALLET)).statusCode).toBe(403);
+    expect(blindpayCalls.some((url) => url.endsWith("/payins/evm"))).toBe(false);
+
+    expect((await call("quote", { walletAddress: WALLET, amountMxn: 500 }, null)).statusCode).toBe(200);
   });
 
   it("rejects an amount over the cap before creating anything", async () => {

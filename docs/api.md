@@ -14,12 +14,15 @@ Vercel Node functions in `api/`, served from the same domain as the app
 `api/validation.mjs` (zod) answer `400` with `{ "error": "<field>: <message>", "status": "error" }`.
 
 - **Auth:** a wallet session cookie from [`/api/auth`](#apiauth)
-  ([ADR-008](decisions/ADR-008-wallet-session.md)). Only `evaluate-and-mint` requires it so
-  far; the other endpoints still take the address from the request
-  ([pending](integrations/pending.md)).
-- **CORS:** `calculate-score`, `evaluate-and-mint` and `get-available-credit` send
-  `Access-Control-Allow-Origin: *` and answer `OPTIONS` with `200` (issue #94). The others
-  send no CORS headers, so only the app's own origin can call them from a browser.
+  ([ADR-008](decisions/ADR-008-wallet-session.md)). Everything that moves money or spends
+  the admin key requires it: `evaluate-and-mint`, `onramp` `payin` and `settle`, `blindpay`
+  `payout` and `faucet-usdc`. The address in the body must be the session's, or the answer is
+  `401` `{ reason: "no_session" }` or `403` `{ reason: "address_mismatch" }`. Reads
+  (`quote`, `status`, score, credit) do not need it.
+- **CORS:** `api/_cors.mjs` echoes the `Origin` only when it is allowed: `ALLOWED_ORIGINS`,
+  the deployment's own Vercel domains and, outside production, `localhost`. Other origins
+  get no CORS headers. `OPTIONS` answers `204`. The app calls the API from its own domain,
+  which needs no CORS. `/api/health` and `/api/readiness` send no CORS headers.
 - **Logs:** one JSON line per event (`ts`, `level`, `reqId`, `event`, …) from
   `api/_logger.mjs`, plus `[metric]` lines for latency.
 - **Local:** `backend/server.js` serves the API on port 3000. `/api/auth`,
@@ -120,8 +123,9 @@ The contract accepts a lower tier than the current one; only the same tier is re
 | 3 | Diamante | 1 500 |
 | 4 | Platino | 5 000 |
 
-On any contract, RPC or configuration error it still answers `200` with tier 0 and 0 credit
-(issue #96). `400` for a missing `userAddress`, `405` if not POST.
+It simulates `get_tier` with the user's own account as the source, so it needs no admin
+key. On a contract, RPC or configuration error it answers `502` `{ error }`, so an outage does
+not look like "no credit". `400` for a missing `userAddress`, `405` if not POST.
 
 ## POST /api/faucet-usdc
 

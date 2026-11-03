@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import handler from "../../api/blindpay.js";
+import { issueSessionToken } from "../../api/_session.mjs";
 
 const { quoteAndPayout, createQuote, getPayout } = vi.hoisted(() => ({
   quoteAndPayout: vi.fn(),
@@ -94,9 +95,17 @@ async function fakeFetch(input: RequestInfo | URL, options: RequestInit = {}) {
   return json(match[2] ? { _embedded: { records: found.ops } } : found.tx);
 }
 
-async function call(action: string, { body, query = {} }: { body?: unknown; query?: Record<string, string> } = {}) {
+// Sesión de la wallet que manda la petición, salvo que el test diga otra (null = sin sesión).
+const sessionCookie = (address: string | null) => (address ? `vyn_session=${issueSessionToken(address).token}` : "");
+
+async function call(
+  action: string,
+  { body, query = {}, sessionFor }: { body?: Record<string, unknown> & { walletAddress?: string }; query?: Record<string, string>; sessionFor?: string | null } = {}
+) {
+  const cookie = sessionCookie(sessionFor === undefined ? body?.walletAddress ?? null : sessionFor);
   const res = {
     statusCode: 0,
+    setHeader() {},
     body: null as Record<string, unknown> | null,
     status(code: number) {
       this.statusCode = code;
@@ -107,7 +116,7 @@ async function call(action: string, { body, query = {} }: { body?: unknown; quer
       return this;
     },
   };
-  await handler({ method: body ? "POST" : "GET", query: { action, ...query }, body, headers: {} }, res);
+  await handler({ method: body ? "POST" : "GET", query: { action, ...query }, body, headers: { cookie } }, res);
   return res;
 }
 
@@ -127,6 +136,7 @@ beforeEach(async () => {
   supabaseDown = false;
   vi.stubEnv("SUPABASE_URL", "https://db.test");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  vi.stubEnv("AUTH_JWT_SECRET", "x".repeat(40));
   vi.stubEnv("BLINDPAY_DEMO_BANK_ACCOUNT_ID", "ba_demo");
   vi.stubEnv("OFFRAMP_FUNDING_ADDRESS", FUNDING);
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
@@ -179,6 +189,18 @@ describe("payout", () => {
     expect((await payout()).body).toEqual({ reason: "funding_already_used" });
     expect(quoteAndPayout).toHaveBeenCalledOnce();
     expect(await rows()).toHaveLength(1);
+  });
+
+  it("answers 401 without a session and 403 with another wallet's session", async () => {
+    fundingTx();
+    const body = { amount: 25, walletAddress: WALLET, fundingTxHash: HASH };
+
+    expect((await call("payout", { body, sessionFor: null })).statusCode).toBe(401);
+    const impostor = await call("payout", { body, sessionFor: OTHER_WALLET });
+    expect(impostor.statusCode).toBe(403);
+    expect(impostor.body).toMatchObject({ reason: "address_mismatch" });
+    expect(quoteAndPayout).not.toHaveBeenCalled();
+    expect(await rows()).toHaveLength(0);
   });
 
   it("answers 403 for a payment from another account", async () => {

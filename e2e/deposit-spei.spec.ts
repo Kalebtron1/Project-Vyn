@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { seedWalletSession, stubCreditApi } from "./helpers";
+import { seedWalletSession, stubApiSession, stubCreditApi } from "./helpers";
 
 async function reachClabe(page: Page, status: string): Promise<void> {
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
   await stubCreditApi(page);
+  await stubApiSession(page);
   await page.route("**/api/onramp?action=quote", (route) =>
     route.fulfill({ json: { receiverUsd: 27, rateMxnPerUsd: 18.5, flatFeeUsd: 0.5, partnerFeeUsd: 0 } })
   );

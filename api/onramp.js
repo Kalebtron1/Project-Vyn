@@ -2,9 +2,9 @@
 // Consolidado en un solo Serverless Function para respetar el límite del plan Hobby (≤12).
 //   POST /api/onramp?action=init    Body: { walletAddress, email? }            → registra wallet (idempotente)
 //   POST /api/onramp?action=quote   Body: { walletAddress, amountMxn, email? } → cotiza (no genera CLABE)
-//   POST /api/onramp?action=payin   Body: { walletAddress, amountMxn, email? } → cotiza fresco + genera CLABE
+//   POST /api/onramp?action=payin   Body: { walletAddress, amountMxn, email? } → cotiza fresco + genera CLABE (con sesión)
 //   GET  /api/onramp?action=status&id=pi_…                                      → estado del payin (polling)
-//   POST /api/onramp?action=settle  Body: { payinId, walletAddress }            → liquida un payin pagado
+//   POST /api/onramp?action=settle  Body: { payinId, walletAddress }            → liquida un payin pagado (con sesión)
 import {
   assertPayinWithinCap,
   ensureBlockchainWallet,
@@ -15,7 +15,9 @@ import {
   summarizePayinQuote,
   summarizePayin,
 } from "./_blindpay-onramp.mjs";
+import { applyCors } from "./_cors.mjs";
 import { createLogger } from "./_logger.mjs";
+import { requireSessionFor } from "./_session.mjs";
 import {
   validateBody,
   validateQuery,
@@ -41,6 +43,7 @@ const failureStatus = (error) => (error.code === "supabase_unavailable" ? 503 : 
 
 export default async function handler(req, res) {
   const log = createLogger(req);
+  if (applyCors(req, res, "GET, POST, OPTIONS")) return;
   const action = String(req.query?.action || "");
 
   if (action === "status") {
@@ -62,8 +65,8 @@ export default async function handler(req, res) {
     }
   }
 
-  // settle: liquidación on-chain (USDC al usuario) tras confirmarse el SPEI.
-  // La wallet del body se reemplaza por la de la sesión cuando exista (PR de autenticación).
+  // settle: liquidación on-chain (USDC al usuario) tras confirmarse el SPEI. Exige la sesión
+  // de la wallet con la que se creó el payin.
   if (action === "settle") {
     if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
     let body;
@@ -72,6 +75,7 @@ export default async function handler(req, res) {
     } catch (error) {
       return reportValidationError(res, error);
     }
+    if (!requireSessionFor(req, res, body.walletAddress)) return;
     try {
       const result = await settlePayin({ payinId: body.payinId, walletAddress: body.walletAddress, log });
       log.info("onramp_settle.done", { payinId: body.payinId, ...result });
@@ -113,6 +117,9 @@ export default async function handler(req, res) {
   } catch (error) {
     return reportValidationError(res, error);
   }
+
+  // Generar la CLABE compromete el pago de USDC a esa wallet: exige su sesión.
+  if (action === "payin" && !requireSessionFor(req, res, body.walletAddress)) return;
 
   try {
     const { blockchainWalletId } = await ensureBlockchainWallet({

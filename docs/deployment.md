@@ -77,7 +77,8 @@ preview can move the same test funds as production.
 
 | Variable | Required | Read by |
 |---|---|---|
-| `SECRET_KEY_ADMIN` | yes | `evaluate-and-mint` (mint), `get-available-credit` (simulation source), `_usdc.mjs` (faucet and on-ramp settlement) |
+| `SECRET_KEY_ADMIN` | yes | `evaluate-and-mint` (mint), `_usdc.mjs` (faucet and on-ramp settlement) |
+| `ALLOWED_ORIGINS` | no | `_cors.mjs`: extra origins allowed to call the API from a browser, comma-separated. The deployment's own Vercel domains are always allowed. |
 | `STAKING_CONTRACT_ID` | yes | `_scoring-core.mjs` via `calculate-score`, `evaluate-and-mint` |
 | `NFT_CONTRACT_ID` | yes | `evaluate-and-mint`, `get-available-credit` |
 | `SUPABASE_URL` | yes in production | `_supabase.mjs` |

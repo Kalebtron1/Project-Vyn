@@ -158,6 +158,13 @@ const Perfil = () => {
       let faucetMsg = "";
       let faucetIssue: { title: string; desc: string } | null = null;
       try {
+        // El faucet exige la sesión de esta wallet (una firma por hora).
+        const session = await ensureApiSession(walletAddress, sign);
+        if (session.ok === false) {
+          const sessionError = new Error(session.cancelled ? t("profile.session_cancelled_faucet") : t("profile.session_failed"));
+          sessionError.name = "ApiSessionError";
+          throw sessionError;
+        }
         const fr = await fetch("/api/faucet-usdc", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -188,11 +195,11 @@ const Perfil = () => {
             desc: fd?.error || t("profile.usdc_faucet_failed_desc"),
           };
         }
-      } catch {
+      } catch (e) {
         setFaucetFailed(true);
         faucetIssue = {
           title: t("profile.usdc_faucet_failed_title"),
-          desc: t("profile.usdc_faucet_failed_desc"),
+          desc: e instanceof Error && e.name === "ApiSessionError" ? e.message : t("profile.usdc_faucet_failed_desc"),
         };
       }
 

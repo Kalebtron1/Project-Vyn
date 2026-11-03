@@ -26,6 +26,11 @@ more every 20 s, while the data only changes when the user makes a transaction.
   Cards that show the same data share one request.
 - Data is fresh for 60 s (`STALE_MS`). It is read again when the user returns to the tab
   or opens a page after that. **No `refetchInterval`, no `setInterval`.**
+- **Exception:** after the user starts a SPEI operation, the page may poll BlindPay's status
+  for that one operation through our API until it reaches a final state. Depositar waits
+  for the payin, and Retiros for the payout (every 5 s, for at most 2 min). This is not
+  on-chain data, it changes on BlindPay's side without any user action, and it stops on
+  its own. Webhooks (Phase 3) will replace it.
 - After an action that changes data (deposit, withdrawal, loan, repayment, SBT mint,
   treasury action):
   1. Wait for the transaction to be confirmed (`waitForConfirmation`). Otherwise the

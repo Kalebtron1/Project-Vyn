@@ -169,3 +169,17 @@ export function requireSession(req, res) {
   }
   return session.address;
 }
+
+/**
+ * Exige una sesión de `address`. Devuelve true si la hay; si no, responde 401, 403 (la
+ * sesión es de otra wallet) o 503, y devuelve false.
+ */
+export function requireSessionFor(req, res, address) {
+  const sessionAddress = requireSession(req, res);
+  if (!sessionAddress) return false;
+  if (sessionAddress !== address) {
+    res.status(403).json({ error: "La sesión es de otra wallet", reason: "address_mismatch" });
+    return false;
+  }
+  return true;
+}

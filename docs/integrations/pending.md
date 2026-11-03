@@ -75,8 +75,6 @@ Read by the code but missing from `.env.example`:
 - Savings are in **USDC**; loans and the treasury are in **XLM** (`vinculo_lending` is
   initialized with the native XLM token). `/api/get-available-credit` answers
   `currency: "XLM"` and the SBT metadata lists credit in XLM (issue #96).
-- `/api/get-available-credit` returns tier 0 with `200` on any error, so an outage looks like
-  "no credit" (issue #96).
 - Score curve: `score = retention × log10(txCount + 1) × 100`. With full retention, Plata
   needs 3 transactions and Oro 31, but Diamante needs about 100,000 and Platino about
   10 billion, so tiers 3–4 are unreachable (issue #95).
@@ -93,7 +91,6 @@ Read by the code but missing from `.env.example`:
 | `vinculo_sbt` has no tests (stale snapshots only); `vinculo_lending` has none | #99 (in PR #128), #98 |
 | No slippage protection on vault withdrawals (`min_amounts_out = 0`) | #104 is closed, but the fix is in PR #128, not in `main` |
 | CORS `*` on every API function | #94 |
-| Money endpoints (payout, settle, faucet) take the address from the request instead of the session | #94 |
 | `scripts/upgrade_contract.sh` and parts of the [migration guide](../contracts/migration.md) call an `upgrade` function that no contract has | — |
 | CI runs only the contracts; frontend lint, tests and build are not checked on PRs (PR #128 adds a job) | — |
 | Runtime logs last 1 hour on Vercel Hobby; no log drain or error tracking | — |

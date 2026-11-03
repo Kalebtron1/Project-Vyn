@@ -54,14 +54,14 @@ Privy's embedded wallet.
   (`ensureApiSession` in `src/lib/apiSession.ts`), not at sign-in. Opening the app never shows
   a signing popup. The signing function is passed in, so the module imports neither Privy nor
   the wallet kit (ADR-001).
-- Endpoints that act for a wallet take the address from the session. `evaluate-and-mint`
-  answers `401` without a session and `403` if the body names another wallet. The money
-  endpoints follow in the next PR (#94).
+- Endpoints that act for a wallet require the session of the address in the body:
+  `evaluate-and-mint`, `onramp` `payin` and `settle`, `blindpay` `payout` and `faucet-usdc`.
+  They answer `401` without a session and `403` if the body names another wallet.
 
 ## Consequences
 
-- Minting a tier needs one extra signature per hour. Wallets show it as a transaction: it
-  should say it is not submitted.
+- Minting, generating a CLABE, a SPEI withdrawal or the faucet need one extra signature per
+  hour. Wallets show it as a transaction, so the UI should say it is never submitted.
 - **Not supported:** accounts whose master key has no weight (multisig with a disabled master
   key), and muxed `M…` addresses.
 - Without `AUTH_SIGNING_SECRET`, `AUTH_JWT_SECRET` or Supabase, the auth endpoints answer
