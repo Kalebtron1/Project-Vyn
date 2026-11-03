@@ -27,7 +27,8 @@ when it failed:
 ## Decision
 
 - In production (`VERCEL_ENV=production`) the backend throws if Supabase is not configured.
-  Local development and previews keep the in-memory store.
+  Local development and previews keep the in-memory store for the wallet mapping and payins,
+  but anything that moves money needs Supabase in every environment.
 - The faucet sends nothing if its check fails. A faucet that is down is better than an empty
   admin account.
 - Only the secret key is accepted. The `SUPABASE_KEY` fallback is gone, because a publishable
@@ -41,9 +42,9 @@ when it failed:
 
 ## Consequences
 
-- If Supabase is down, the on-ramp answers `503` and the faucet `502` until it returns.
+- If Supabase is down, the on-ramp and the faucet answer `503` until it returns.
 - The old tables stay. Each endpoint moves to the new functions in its own PR (the on-ramp
-  already did), and the old tables are removed only after that.
+  and the faucet already did), and the old tables are removed only after that.
 - A send counts as a declared failure only if nothing can have gone out. A timeout from
   Horizon does not count, so that reservation also waits for a manual review.
 - Migrations are applied by hand in the SQL Editor.

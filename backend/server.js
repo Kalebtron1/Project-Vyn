@@ -500,21 +500,17 @@ app.get("/api/onramp-status", async (req, res) => {
 // ─────────────────────────────────────────────
 // ENDPOINT: FAUCET USDC (testnet) 🚰 — manda 2 USDC al usuario para probar depósitos.
 // ─────────────────────────────────────────────
-let faucetCorePromise;
-function loadFaucetCore() {
-  if (!faucetCorePromise) faucetCorePromise = import("../api/_faucet-core.mjs");
-  return faucetCorePromise;
+let faucetHandlerPromise;
+function loadFaucetHandler() {
+  if (!faucetHandlerPromise) faucetHandlerPromise = import("../api/faucet-usdc.js");
+  return faucetHandlerPromise;
 }
 
+// Reusa el handler serverless para no duplicar topes ni códigos de respuesta.
 app.post("/api/faucet-usdc", async (req, res) => {
-  const address = req.body && req.body.address;
-  if (!address || !/^G[A-Z2-7]{55}$/.test(String(address))) {
-    return res.status(400).json({ error: "address inválida (dirección Stellar G…)" });
-  }
   try {
-    const { sendFaucetUsdc } = await loadFaucetCore();
-    const result = await sendFaucetUsdc({ to: address });
-    return res.json(result);
+    const mod = await loadFaucetHandler();
+    return mod.default(req, res);
   } catch (error) {
     console.error("[DEBUG] 💥 /faucet-usdc:", error.message);
     return res.status(502).json({ error: error.message || "Error enviando USDC" });

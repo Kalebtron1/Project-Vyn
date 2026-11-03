@@ -5,8 +5,6 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sendFaucetUsdc } from "../../api/_faucet-core.mjs";
-import { sendUsdcFromAdmin } from "../../api/_usdc.mjs";
 import {
   consumeAuthChallenge,
   finishFaucet,
@@ -17,21 +15,13 @@ import {
   hitRateLimit,
   isSupabaseConfigured,
   pingSupabase,
-  recordFaucetClaim,
   reserveFaucet,
   reserveSettlement,
   saveRampPayin,
   upsertRampCustomer,
 } from "../../api/_supabase.mjs";
 
-vi.mock("../../api/_usdc.mjs", () => ({
-  HORIZON_URL: "https://horizon-testnet.stellar.org",
-  usdcBalance: vi.fn().mockResolvedValue("0"),
-  sendUsdcFromAdmin: vi.fn().mockResolvedValue("hash"),
-}));
-
 const fetchMock = vi.fn();
-const WALLET = `G${"A".repeat(55)}`;
 
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -62,9 +52,10 @@ describe("_supabase", () => {
       vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
       vi.stubEnv("VERCEL_ENV", "preview");
 
-      await recordFaucetClaim("GMEMORY");
+      const row = { wallet_address: "GMEMORY" };
+      await upsertRampCustomer(row);
 
-      expect(await hasClaimedFaucet("GMEMORY")).toBe(true);
+      expect(await getRampCustomer("GMEMORY")).toEqual(row);
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -76,7 +67,6 @@ describe("_supabase", () => {
       await expect(getRampCustomer("GPROD")).rejects.toThrow(/producción/);
       await expect(upsertRampCustomer(row)).rejects.toThrow(/producción/);
       await expect(hasClaimedFaucet("GPROD")).rejects.toThrow(/producción/);
-      await expect(recordFaucetClaim("GPROD")).rejects.toThrow(/producción/);
       await expect(getRampPayin("pi_1")).rejects.toThrow(/producción/);
       await expect(saveRampPayin({ payin_id: "pi_1" })).rejects.toThrow(/producción/);
     });
@@ -94,33 +84,6 @@ describe("_supabase", () => {
       vi.stubEnv("VERCEL_ENV", "production");
 
       expect(await pingSupabase()).toBe("not_configured");
-    });
-  });
-
-  describe("faucet", () => {
-    beforeEach(() => vi.mocked(sendUsdcFromAdmin).mockClear());
-
-    it("sends nothing when production has no Supabase", async () => {
-      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
-      vi.stubEnv("VERCEL_ENV", "production");
-
-      await expect(sendFaucetUsdc({ to: WALLET })).rejects.toThrow(/producción/);
-      expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
-    });
-
-    it("sends nothing when the claim check fails", async () => {
-      fetchMock.mockResolvedValueOnce(new Response("", { status: 503 }));
-
-      await expect(sendFaucetUsdc({ to: WALLET })).rejects.toThrow(/503/);
-      expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
-    });
-
-    it("sends once the check says the wallet has not claimed", async () => {
-      fetchMock.mockResolvedValueOnce(jsonResponse([]));
-      fetchMock.mockResolvedValueOnce(new Response(null, { status: 201 }));
-
-      expect(await sendFaucetUsdc({ to: WALLET })).toMatchObject({ sent: true, hash: "hash" });
-      expect(sendUsdcFromAdmin).toHaveBeenCalledOnce();
     });
   });
 

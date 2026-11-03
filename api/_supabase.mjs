@@ -151,29 +151,15 @@ export async function getSettlementStatus(payinId) {
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
-// ── Faucet de USDC: una sola vez por wallet ─────────────────────────────────
-const faucetMemory = new Set(); // fallback dev: wallets que ya reclamaron
+// ── Faucet de USDC ──────────────────────────────────────────────────────────
 
-/** ¿Esta wallet ya reclamó el faucet de USDC? */
+/** ¿Esta wallet aparece en la tabla vieja? Cubre reclamos posteriores al último backfill. */
 export async function hasClaimedFaucet(walletAddress) {
-  if (usesMemory()) return faucetMemory.has(walletAddress);
+  if (usesMemory()) return false;
   const rows = await sbFetch(
     `faucet_claims?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=wallet_address&limit=1`
   );
   return Array.isArray(rows) && rows.length > 0;
-}
-
-/** Registra que esta wallet reclamó el faucet (idempotente). */
-export async function recordFaucetClaim(walletAddress) {
-  if (usesMemory()) {
-    faucetMemory.add(walletAddress);
-    return;
-  }
-  await sbFetch(`faucet_claims?on_conflict=wallet_address`, {
-    method: "POST",
-    body: [{ wallet_address: walletAddress }],
-    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-  });
 }
 
 // ── Funciones atómicas (supabase/migrations/0002_ramp_schema.sql) ───────────

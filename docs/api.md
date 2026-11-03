@@ -128,7 +128,10 @@ On any contract, RPC or configuration error it still answers `200` with tier 0 a
 | 200 | `{ "sent": false, "reason": "already_claimed" }` or `{ "sent": false, "reason": "no_trustline" }` |
 | 400 | `{ "error": "address inválida (dirección Stellar G…)" }` |
 | 405 | `{ "error": "Método no permitido" }` |
+| 409 | `{ "sent": false, "reason": "in_review" }`: the send may have gone through and needs a manual review |
+| 429 | `{ "sent": false, "reason": "ip_cap" }` or `{ "sent": false, "reason": "global_cap" }` |
 | 502 | `{ "error": "…" }` (e.g. `Horizon: {...op_underfunded...}`) |
+| 503 | `{ "error": "…" }`: Supabase failed or the faucet is not configured. No funds moved |
 
 See [USDC faucet](integrations/usdc-faucet.md).
 

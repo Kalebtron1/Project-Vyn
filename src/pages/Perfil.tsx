@@ -174,6 +174,12 @@ const Perfil = () => {
             title: t("profile.usdc_faucet_failed_title"),
             desc: t("profile.usdc_faucet_no_trustline"),
           };
+        } else if (fd.reason === "ip_cap" || fd.reason === "global_cap" || fd.reason === "in_review") {
+          setFaucetFailed(true);
+          faucetIssue = {
+            title: t("profile.usdc_faucet_failed_title"),
+            desc: t(`profile.usdc_faucet_${fd.reason}`),
+          };
         } else {
           // 502 u otro fallo del backend (p. ej. SECRET_KEY_ADMIN). Surface del motivo.
           setFaucetFailed(true);
