@@ -48,7 +48,10 @@ UI always talks about USDC: USDB is an invisible test artifact.
 | `BLINDPAY_PAYOUT_PUBLIC` | — | In `.env.example` but never read: the public key is derived from the secret. |
 | `BLINDPAY_WEBHOOK_SECRET` | — | In `.env.example` but never read: there is no webhook endpoint. |
 | `SECRET_KEY_ADMIN` | on-ramp | Admin account that sends the USDC at settlement ([USDC faucet](usdc-faucet.md) uses it too). |
-| `SUPABASE_*` | on-ramp | Wallet mapping and settlement idempotency ([Supabase](supabase.md)). |
+| `SUPABASE_*` | on-ramp | Wallet mapping, payins and settlement reservations ([Supabase](supabase.md)). |
+| `ONRAMP_MAX_PAYIN_USD_CENTS` | no | Maximum per payin. Default `10000` (100 USD). |
+| `ONRAMP_WALLET_DAILY_USD_CENTS` | no | Maximum settled per wallet per UTC day. Default `20000` (200 USD). |
+| `ONRAMP_GLOBAL_DAILY_USD_CENTS` | no | Maximum settled overall per UTC day. Default `100000` (1,000 USD). |
 
 ## API endpoints (Vercel)
 
@@ -61,7 +64,7 @@ Hobby function limit ([Vercel](vercel.md)).
 | `POST /api/onramp?action=quote` | `{ walletAddress, amountMxn, email? }` | Payin quote, no CLABE. |
 | `POST /api/onramp?action=payin` | same | Fresh quote + payin; returns the `clabe`. |
 | `GET /api/onramp?action=status&id=pi_…` | | Payin status. |
-| `POST /api/onramp?action=settle` | `{ payinId }` | Sends USDC from the admin account to the payin's wallet. |
+| `POST /api/onramp?action=settle` | `{ payinId, walletAddress }` | Reserves, then sends USDC from the admin account to the wallet the payin was created for. |
 | `POST /api/blindpay?action=quote` | `{ amount }` (USD) | Payout quote to the demo bank account. |
 | `POST /api/blindpay?action=payout` | `{ amount }` | Fresh quote + authorize + sign + payout. |
 | `GET /api/blindpay?action=status&id=…` | | Payout status. The UI never calls it. |
@@ -78,14 +81,15 @@ uses older checks (≥ 5).
 
 ```
 Login (Privy) ─▶ onramp init ─▶ BlindPay: POST /customers/{shared}/blockchain-wallets
-                                 Supabase: onramp_users (wallet → bw_…)
+                                 Supabase: ramp_customers (wallet → bw_…)
 Depositar: amount MXN ─(debounced 500 ms)─▶ onramp quote ─▶ POST /payin-quotes (spei, USDB, sender amount)
-"Generar CLABE" ─▶ onramp payin ─▶ POST /payin-quotes + POST /payins/evm ─▶ { payinId, clabe }
+"Generar CLABE" ─▶ onramp payin ─▶ POST /payin-quotes + POST /payins/evm ─▶ Supabase ramp_payins ─▶ { payinId, clabe }
 UI polls onramp status every 4 s until status "completed"  
 settling (in the browser):
   1. USDC trustline if missing (user signs, Horizon)
-  2. onramp settle ─▶ settlePayin: GET /payins/{id}; if paid and not yet settled
-        ─▶ admin pays receiver_amount USDC to payin.address (Horizon) ─▶ Supabase onramp_settlements
+  2. onramp settle ─▶ settlePayin: ramp_payins row for that wallet ─▶ GET /payins/{id}: paid?
+        ─▶ reserve_settlement (limits, one per payin) ─▶ admin pays USDC to the bound wallet (Horizon)
+        ─▶ finish_settlement
   3. depositToVault(usd) ─▶ staking_pool.deposit (user signs). Best effort: if it fails the USDC stays in the wallet.
   4. refresh chain data, success screen
 ```
@@ -97,6 +101,29 @@ instead, so on testnet the admin account funds every deposit.
 **Testing.** Development instances complete every payin about 30 seconds after creation, so
 the app only settles what BlindPay reports as paid. `settle` no longer accepts `simulate`. See
 [payins docs](https://blindpay.com/docs/payins).
+
+### Settlement rules
+
+- A payin is only settled if `ramp_payins` has it, for the wallet that asks, and BlindPay
+  reports it as paid to that same address. Payins created before this table existed are
+  refused (`404`).
+- USDC always goes to the wallet saved with the payin. The amount is the lower of the quoted
+  amount and what BlindPay confirms.
+- Until sessions exist, `walletAddress` in the body is only a claim: someone who knows both
+  the payin ID and its wallet can trigger the settlement, but the USDC still goes to that
+  wallet.
+- `finish_settlement` releases a reservation only when the send declared that nothing went
+  out (`notSent` in `sendUsdcFromAdmin`: Horizon result codes or a failure before submitting).
+  After a timeout the transaction may have landed, so the reservation stays closed and `settle`
+  answers `in_review` until someone reviews it. See
+  [ADR-007](../decisions/ADR-007-supabase-fail-closed.md).
+
+### Limits
+
+Development instances complete any payin without a real SPEI, so these limits cap what can
+leave the admin account: per payin (checked at `quote`, `payin` and `settle`), per wallet per
+UTC day and overall per UTC day (checked atomically by `reserve_settlement`). The variables are
+listed above.
 
 **Attribution model.** One shared receiver with one blockchain wallet per user avoids a
 human TOS acceptance per user in sandbox. Production needs a KYC'd receiver per user.
@@ -142,14 +169,15 @@ Retiros → SPEI: "Simular KYC" (UI animation only, 3.5 s) ─▶ amount ≥ 10 
 | BlindPay error | `bpFetch` throws with BlindPay's `message`/`errors`; endpoints return `502` with it. |
 | Payin `failed` or `refunded` | The UI stops waiting and shows an error; `settle` does not pay it. |
 | Withdrawal succeeds, payout fails | The user's USDC is already out of the vault (in their wallet); the UI shows an error. Nothing is rolled back. |
-| Settlement sent, Supabase write fails | `502` although USDC was sent; a retry pays again. |
+| Supabase down before sending | `503`, no USDC moves. |
+| Settlement sent, `finish_settlement` fails | `200` with the hash, logged. The reservation stays closed, so a retry does not pay again. |
+| Send times out | `409 in_review`. The reservation stays closed until a manual review. |
 | Auto-deposit to the vault fails | USDC stays in the wallet; success screen says so. |
 
 ## Security issues (open)
 
 - **#91** `action=payout` only validates `amount`. Anyone can call it and spend the payout
   wallet's USDB without having withdrawn anything.
-- **#92** `settle` checks then writes, so parallel calls can both pay.
 - No endpoint checks who is calling: there is no session or signature on the backend.
 - No webhooks: status is polled every 4 s and `BLINDPAY_WEBHOOK_SECRET` is unused.
 

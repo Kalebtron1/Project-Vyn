@@ -41,9 +41,11 @@ when it failed:
 
 ## Consequences
 
-- If Supabase is down, the faucet and the on-ramp answer `502` until it returns.
-- The old tables stay. The new functions are not called yet; each endpoint moves to them in
-  its own PR, and the old tables are removed only after that.
+- If Supabase is down, the on-ramp answers `503` and the faucet `502` until it returns.
+- The old tables stay. Each endpoint moves to the new functions in its own PR (the on-ramp
+  already did), and the old tables are removed only after that.
+- A send counts as a declared failure only if nothing can have gone out. A timeout from
+  Horizon does not count, so that reservation also waits for a manual review.
 - Migrations are applied by hand in the SQL Editor.
 
 ## Related

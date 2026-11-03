@@ -57,9 +57,9 @@ From BlindPay's docs ([payins](https://blindpay.com/docs/essentials/payins),
 ### 3. Other variables
 
 `STAKING_CONTRACT_ID`, `VITE_STAKING_CONTRACT_ID` and the rest from
-[Deployment](deployment.md#environment-variables). Supabase (`SUPABASE_URL` +
-`SUPABASE_SERVICE_ROLE_KEY`) is optional locally: without it the app keeps the wallet
-mapping and settlements in memory until the server restarts.
+[Deployment](deployment.md#environment-variables). Settlement needs Supabase (`SUPABASE_URL` +
+`SUPABASE_SERVICE_ROLE_KEY`) in every environment: without it, the wallet mapping and payins
+stay in memory until the server restarts and `settle` answers `503`.
 
 ## Where to run it
 
@@ -88,11 +88,13 @@ Check the result:
 
 - Home balance and history (refreshed automatically after the deposit).
 - The settlement transaction on StellarExpert (admin → user, USDC).
-- A row in `onramp_settlements` with the payin ID (if Supabase is configured).
+- A row in `ramp_settlements` with the payin ID and status `sent`.
 
 ### Failure cases worth trying
 
 - **666 MXN** → the payin fails, and the page stops waiting and shows an error.
+- **777 MXN** → the payin is refunded, with the same result.
+- An amount worth more than 100 USD → the quote shows the limit and no CLABE is generated.
 - Close the tab while "Liquidando…": the USDC may already be in the wallet without being
   deposited. Deposit it manually from Home.
 
@@ -137,22 +139,22 @@ curl -s "$BASE/api/blindpay?action=status&id=PAYOUT_ID"
 ```
 
 Do **not** call `action=settle` or `action=payout` by hand against a shared
-environment: both move funds (admin USDC, payout-wallet USDB) without any check of who
-asked. That is exactly what issues #91 and #92 describe.
+environment: both move funds (admin USDC, payout-wallet USDB), and neither has a session
+check yet. `action=payout` is what issue #91 describes.
 
 ## Risks while testing
 
 | Risk | Detail | Issue |
 |---|---|---|
 | Payout not tied to a withdrawal | `action=payout` only checks the amount. Anyone can drain the payout wallet's USDB. | #91 |
-| Double settlement | `settle` reads then writes; two parallel calls can both pay. A Supabase write failure after paying also leads to paying again on retry. | #92 |
+| No session on settle | `walletAddress` in the body is only a claim, although the USDC always goes to the payin's wallet and daily limits apply. | #89 |
 | Shared admin key | The admin account also signs SBT mints and funds the faucet. | — |
 | Shared receiver and bank account | All users share one KYC'd receiver and all payouts go to one CLABE. Fine for a demo, not for production. | — |
 | No webhooks | Status is only known by polling; `BLINDPAY_WEBHOOK_SECRET` is unused. | — |
 
 ## Before mainnet
 
-- Fix #91 and #92, and remove or server-gate "Simular KYC".
+- Fix #91, and remove or server-gate "Simular KYC".
 - Production instance: `BLINDPAY_NETWORK` / `BLINDPAY_ONRAMP_NETWORK = stellar`,
   `BLINDPAY_TOKEN = USDC`.
 - Replace the hard-coded `Networks.TESTNET` in `executeStellarPayout` and re-check the

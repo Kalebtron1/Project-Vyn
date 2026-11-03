@@ -17,6 +17,17 @@ async function reachClabe(page: Page, status: string): Promise<void> {
 }
 
 test.describe("SPEI deposit", () => {
+  test("explains the limit when the deposit is over the cap", async ({ page }) => {
+    await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await stubCreditApi(page);
+    await page.route("**/api/onramp?action=quote", (route) =>
+      route.fulfill({ status: 400, json: { reason: "payin_cap", maxUsd: 100, error: "over" } })
+    );
+    await seedWalletSession(page);
+    await page.goto("/depositar");
+    await expect(page.getByText(/(máximo por depósito|maximum per deposit)/)).toBeVisible();
+  });
+
   test("waits for BlindPay and offers no way to skip the confirmation", async ({ page }) => {
     await reachClabe(page, "processing");
     await expect(page.getByText("646180000000000000")).toBeVisible();
