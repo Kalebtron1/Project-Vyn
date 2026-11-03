@@ -162,6 +162,46 @@ export async function hasClaimedFaucet(walletAddress) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+// ── Off-ramp: un payout por pago de fondeo ──────────────────────────────────
+// Sin fallback en memoria: el hash único es lo que impide cobrar dos SPEI con un pago.
+
+function requireConfigured() {
+  if (!isSupabaseConfigured()) throw unavailable("Supabase no está configurado");
+}
+
+/** Inserta el payout. Devuelve su id, o null si ese hash de fondeo ya se usó. */
+export async function insertRampPayout(row) {
+  requireConfigured();
+  const rows = await sbFetch("ramp_payouts?on_conflict=funding_tx_hash", {
+    method: "POST",
+    body: [row],
+    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+  });
+  return Array.isArray(rows) && rows.length ? rows[0].id : null;
+}
+
+export async function updateRampPayout(id, fields) {
+  requireConfigured();
+  await sbFetch(`ramp_payouts?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { ...fields, updated_at: new Date().toISOString() },
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+/** Guarda el estado final que reporta BlindPay. Solo cambia filas en `submitted`. */
+export async function finishRampPayout(blindpayPayoutId, status) {
+  requireConfigured();
+  await sbFetch(
+    `ramp_payouts?blindpay_payout_id=eq.${encodeURIComponent(blindpayPayoutId)}&status=eq.submitted`,
+    {
+      method: "PATCH",
+      body: { status, updated_at: new Date().toISOString() },
+      headers: { Prefer: "return=minimal" },
+    }
+  );
+}
+
 // ── Funciones atómicas (supabase/migrations/0002_ramp_schema.sql) ───────────
 // Sin fallback en memoria: el límite que protegen no existiría entre instancias.
 

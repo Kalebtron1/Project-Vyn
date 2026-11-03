@@ -14,7 +14,21 @@ import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { TransactionBuilder, Networks, Operation, BASE_FEE, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { CONTRACT_ID, RPC_URL } from "@/stellar/contracts";
 import { useRefreshChainData, useYield } from "@/lib/chainData";
+import { buildUsdcPaymentXdr, submitClassicXdr } from "@/stellar/trustline";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const PAYOUT_FINAL_STATUSES = ["completed", "failed", "refunded"];
+
+// Motivos con los que la API rechaza el pago de fondeo. Cada uno tiene su texto en i18n.
+const FUNDING_REJECTIONS = [
+  "funding_not_found",
+  "funding_failed",
+  "funding_expired",
+  "funding_invalid",
+  "funding_wrong_sender",
+  "funding_insufficient",
+  "funding_already_used",
+];
 
 const Retiros = () => {
   const { addWithdrawal } = useApp();
@@ -44,11 +58,13 @@ const Retiros = () => {
   const [kycDone, setKycDone] = useState(false);
   const [kycPhase, setKycPhase] = useState<"idle" | "verifying" | "done">("idle");
   const [speiAmount, setSpeiAmount] = useState("25");
-  const [quote, setQuote] = useState<null | { receiverMxn: number; rateMxnPerUsd: number; flatFeeUsd: number; partnerFeeUsd: number }>(null);
+  const [quote, setQuote] = useState<null | { receiverMxn: number; rateMxnPerUsd: number; flatFeeUsd: number; partnerFeeUsd: number; fundingAddress: string }>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [speiError, setSpeiError] = useState("");
   const [speiSigningLabel, setSpeiSigningLabel] = useState("");
-  const [speiResult, setSpeiResult] = useState<null | { mxn: number; provider: string }>(null);
+  const [speiResult, setSpeiResult] = useState<null | { mxn: number; provider: string; payoutId: string; status: string }>(null);
+  // Pasos ya firmados de este retiro: un reintento no vuelve a retirar ni a pagar.
+  const [speiProgress, setSpeiProgress] = useState<{ cents: number; withdrawn: boolean; fundingTxHash?: string } | null>(null);
   const kycTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -166,7 +182,7 @@ const Retiros = () => {
         });
         const data = await r.json();
         if (cancelled) return;
-        setQuote(r.ok ? { receiverMxn: data.receiverMxn, rateMxnPerUsd: data.rateMxnPerUsd, flatFeeUsd: data.flatFeeUsd, partnerFeeUsd: data.partnerFeeUsd ?? 0 } : null);
+        setQuote(r.ok ? { receiverMxn: data.receiverMxn, rateMxnPerUsd: data.rateMxnPerUsd, flatFeeUsd: data.flatFeeUsd, partnerFeeUsd: data.partnerFeeUsd ?? 0, fundingAddress: data.fundingAddress } : null);
       } catch {
         if (!cancelled) setQuote(null);
       } finally {
@@ -176,37 +192,78 @@ const Retiros = () => {
     return () => { cancelled = true; clearTimeout(handle); };
   }, [speiAmount, speiOpen, speiStep, realBalance]);
 
-  // Flujo SPEI: (1) withdraw REAL del vault (baja el saldo) → (2) payout USDB→SPEI en backend.
+  // Flujo SPEI: (1) withdraw REAL del vault a la wallet → (2) el usuario paga ese USDC a la
+  // cuenta de fondeo → (3) el backend verifica el pago y dispara el payout USDB→SPEI.
   const handleSpeiWithdraw = async () => {
-    const val = parseFloat(speiAmount);
-    if (!val || val < 10 || val > realBalance) {
+    const progress = speiProgress ?? { cents: Math.round(parseFloat(speiAmount) * 100), withdrawn: false };
+    const val = progress.cents / 100;
+    if (!progress.withdrawn && (!val || val < 10 || val > realBalance)) {
       setSpeiError(val && val < 10 ? t("withdrawals.spei.min_error") : t("withdrawals.error_insufficient"));
+      setSpeiStep("error");
+      return;
+    }
+    if (!walletAddress || !quote?.fundingAddress) {
+      setSpeiError(t("withdrawals.spei.no_wallet"));
       setSpeiStep("error");
       return;
     }
     setSpeiError("");
     setSpeiStep("signing");
-    setSpeiSigningLabel(t("withdrawals.spei.signing_withdraw"));
 
-    const valStroops = BigInt(Math.floor(val * 10000000));
-    const res = await submitContractCall("withdraw", [
-      nativeToScVal(walletAddress, { type: "address" }),
-      nativeToScVal(valStroops, { type: "i128" }),
-    ]);
-    if (!res.ok) { setSpeiError(res.error || ""); setSpeiStep("error"); return; }
-    refreshChainData(walletAddress);
-    addWithdrawal(val, res.hash);
+    if (!progress.withdrawn) {
+      setSpeiSigningLabel(t("withdrawals.spei.signing_withdraw"));
+      const res = await submitContractCall("withdraw", [
+        nativeToScVal(walletAddress, { type: "address" }),
+        nativeToScVal(BigInt(progress.cents) * 100_000n, { type: "i128" }),
+      ]);
+      if (!res.ok) { setSpeiError(res.error || ""); setSpeiStep("error"); return; }
+      refreshChainData(walletAddress);
+      addWithdrawal(val, res.hash);
+      progress.withdrawn = true;
+      setSpeiProgress({ ...progress });
+    }
+
+    if (!progress.fundingTxHash) {
+      setSpeiSigningLabel(t("withdrawals.spei.signing_payment"));
+      try {
+        const unsigned = await buildUsdcPaymentXdr(walletAddress, quote.fundingAddress, val.toFixed(2));
+        const signed = await sign(unsigned);
+        // `in` estrecha la unión: este proyecto compila sin strictNullChecks y `ok` no la estrecha.
+        if (!("signedXdr" in signed) || !signed.signedXdr) {
+          throw new Error("cancelled" in signed && !signed.cancelled ? signed.error : t("withdrawals.spei.payment_cancelled"));
+        }
+        progress.fundingTxHash = await submitClassicXdr(signed.signedXdr);
+        setSpeiProgress({ ...progress });
+      } catch (e) {
+        // El USDC sigue en la wallet del usuario: no se perdió nada.
+        setSpeiError(e instanceof Error && e.message ? e.message : t("withdrawals.spei.payment_cancelled"));
+        setSpeiStep("error");
+        return;
+      }
+    }
 
     setSpeiSigningLabel(t("withdrawals.spei.sending"));
     try {
       const r = await fetch("/api/blindpay?action=payout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: val }),
+        body: JSON.stringify({ amount: val, walletAddress, fundingTxHash: progress.fundingTxHash }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Error al enviar el SPEI");
-      setSpeiResult({ mxn: data.quote?.receiverMxn ?? 0, provider: data.payment?.provider_name || "BlindPay" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(
+          FUNDING_REJECTIONS.includes(data.reason)
+            ? t(`withdrawals.spei.${data.reason}`)
+            : data.error || t("withdrawals.spei.payout_error")
+        );
+      }
+      setSpeiResult({
+        mxn: data.quote?.receiverMxn ?? 0,
+        provider: data.payment?.provider_name || "BlindPay",
+        payoutId: data.payoutId,
+        status: data.status,
+      });
+      setSpeiProgress(null);
       setSpeiStep("success");
       confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 } });
     } catch (e) {
@@ -214,6 +271,23 @@ const Retiros = () => {
       setSpeiStep("error");
     }
   };
+
+  // Estado del payout después de crearlo, hasta que BlindPay lo cierre (sandbox: segundos).
+  const payoutId = speiResult?.payoutId;
+  const payoutDone = PAYOUT_FINAL_STATUSES.includes(speiResult?.status ?? "");
+  useEffect(() => {
+    if (!payoutId || payoutDone) return;
+    let attempts = 0;
+    const timer = setInterval(async () => {
+      if (++attempts > 24) { clearInterval(timer); return; }
+      try {
+        const r = await fetch(`/api/blindpay?action=status&id=${encodeURIComponent(payoutId)}`);
+        const data = await r.json();
+        if (r.ok && data.status) setSpeiResult((prev) => (prev ? { ...prev, status: data.status } : prev));
+      } catch { /* reintenta en el próximo tick */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [payoutId, payoutDone]);
 
   const openWithdraw = () => {
     if (selectedMethod === "spei") {
@@ -251,6 +325,7 @@ const Retiros = () => {
     setSpeiError("");
     setQuote(null);
     setSpeiResult(null);
+    setSpeiProgress(null);
   };
 
 
@@ -639,7 +714,15 @@ const Retiros = () => {
                 </div>
                 <p className="text-xl font-bold text-foreground mb-1">{t("withdrawals.spei.success_title")}</p>
                 <p className="text-sm text-muted-foreground mb-1">{t("withdrawals.spei.success_desc", { mxn: (speiResult?.mxn ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 }) })}</p>
-                <p className="text-[11px] text-muted-foreground mb-6">{t("withdrawals.spei.success_eta", { provider: speiResult?.provider ?? "BlindPay" })}</p>
+                <p className="text-[11px] text-muted-foreground mb-2">{t("withdrawals.spei.success_eta", { provider: speiResult?.provider ?? "BlindPay" })}</p>
+                {speiResult?.status && (
+                  <p
+                    data-testid="spei-payout-status"
+                    className={`text-xs font-semibold mb-6 max-w-[280px] ${speiResult.status === "failed" || speiResult.status === "refunded" ? "text-red-500" : "text-muted-foreground"}`}
+                  >
+                    {t(`withdrawals.spei.payout_status_${speiResult.status}`, { defaultValue: t("withdrawals.spei.payout_status_processing") })}
+                  </p>
+                )}
                 <button onClick={handleSpeiClose} className="w-full btn-emerald py-3 rounded-xl font-bold">{t("common.done")}</button>
               </div>
             )}
@@ -650,7 +733,7 @@ const Retiros = () => {
                 <X className="w-16 h-16 text-red-500 mb-4" />
                 <p className="font-bold text-xl mb-2">{t("withdrawals.spei.error_title")}</p>
                 {speiError && <p className="text-xs text-muted-foreground mb-4 max-w-[280px]">{speiError}</p>}
-                <button onClick={() => setSpeiStep("input")} className="w-full btn-emerald py-3 rounded-xl font-bold">{t("common.retry")}</button>
+                <button onClick={() => (speiProgress?.withdrawn ? handleSpeiWithdraw() : setSpeiStep("input"))} className="w-full btn-emerald py-3 rounded-xl font-bold">{t("common.retry")}</button>
               </div>
             )}
           </div>
