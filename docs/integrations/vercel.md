@@ -43,13 +43,13 @@ can't be combined ([vercel.json reference](https://vercel.com/docs/project-confi
 | 4 | `faucet-usdc.js` | Perfil | |
 | 5 | `get-available-credit.js` | `useCredit`, Perfil | |
 | 6 | `health.js` | Deploy checks | |
-| 7 | `nonce.js` | **nobody** | Legacy, see [pending](pending.md) |
+| 7 | `auth.js` | `ensureApiSession` (Perfil) | `action`: challenge, verify, session, logout. Replaced `nonce.js` |
 | 8 | `onramp.js` | Depositar, Login | `action`: init, quote, payin, status, settle |
 | 9 | `readiness.js` | Supabase keep-alive workflow, deploy checks | Pings Supabase |
 
 **Not functions** (shared code bundled into the functions that import it):
 `_blindpay-core.mjs`, `_blindpay-onramp.mjs`, `_faucet-core.mjs`, `_logger.mjs`,
-`_scoring-core.mjs`, `_supabase.mjs`, `_usdc.mjs` and `validation.mjs`.
+`_offramp.mjs`, `_scoring-core.mjs`, `_session.mjs`, `_supabase.mjs`, `_usdc.mjs` and `validation.mjs`.
 
 Why they don't count, and the trap:
 
@@ -118,14 +118,12 @@ compiled into the frontend at build time: change them and redeploy.
 
 In order of cost:
 
-1. **Delete the unused function**, `nonce.js` (no caller in the
-   frontend). Frees 1.
-2. **Merge `health.js` into `readiness.js`** (for example `GET /api/readiness?deep=0` for a
+1. **Merge `health.js` into `readiness.js`** (for example `GET /api/readiness?deep=0` for a
    shallow check) and update `scripts/healthcheck.js` and the runbook. Frees 1.
-3. **Add actions, not files**: new endpoints in an existing domain go behind `?action=`
+2. **Add actions, not files**: new endpoints in an existing domain go behind `?action=`
    (as `blindpay.js` and `onramp.js` do). A future BlindPay webhook can be
    `/api/blindpay?action=webhook`.
-4. **One router function** (`api/index.js` dispatching on the path) if the API keeps
+3. **One router function** (`api/index.js` dispatching on the path) if the API keeps
    growing. Watch cold starts and bundle size.
 5. **Move to Pro** ($20 per developer per month): no function limit, up to 800 s duration,
    and commercial use is allowed. Needed anyway before real users and real money.

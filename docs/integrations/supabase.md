@@ -46,7 +46,8 @@ Other new tables, not used yet except where noted:
 |---|---|
 | `daily_budgets` | Amount spent per budget and UTC day, to enforce global caps. Used by the on-ramp and faucet. |
 | `webhook_events` | Webhook deliveries already received. |
-| `used_auth_challenges`, `rate_limits` | Session challenges already used, and hits per time window. |
+| `used_auth_challenges` | Session challenges already used ([ADR-008](../decisions/ADR-008-wallet-session.md)). |
+| `rate_limits` | Hits per time window. |
 
 Amounts are integer cents. `reserve_settlement` and `reserve_faucet` check limits and write
 in one transaction, with a lock per wallet, before any money moves; `finish_*` closes the
@@ -77,7 +78,8 @@ the `apikey` and `Authorization: Bearer` headers. Upserts use
 | `updateRampPayout(id, fields)` | `payoutWithFunding` | `PATCH ramp_payouts?id=eq.…` |
 | `finishRampPayout(payoutId, status)` | `api/blindpay.js` (`status`) | `PATCH ramp_payouts?blindpay_payout_id=eq.…&status=eq.submitted` |
 | `pingSupabase()` | `api/readiness.js` | `GET faucet_claims?select=claimed_at&limit=1` (5 s timeout) |
-| `hitRateLimit`, `consumeAuthChallenge` | Nothing yet | `POST rpc/<function>` |
+| `consumeAuthChallenge` | `verifyChallenge` (`_session.mjs`) | `POST rpc/consume_auth_challenge` |
+| `hitRateLimit` | Nothing yet | `POST rpc/hit_rate_limit` |
 
 **Without configuration.** If `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the
 table functions use an in-memory `Map`/`Set` so local development and previews keep working.

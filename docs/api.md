@@ -13,15 +13,18 @@ Vercel Node functions in `api/`, served from the same domain as the app
 (`https://www.projectvyn.dev/api/...`). All bodies are JSON. Validation errors from
 `api/validation.mjs` (zod) answer `400` with `{ "error": "<field>: <message>", "status": "error" }`.
 
-- **Auth:** none. No endpoint checks who is calling; addresses come from the request
+- **Auth:** a wallet session cookie from [`/api/auth`](#apiauth)
+  ([ADR-008](decisions/ADR-008-wallet-session.md)). Only `evaluate-and-mint` requires it so
+  far; the other endpoints still take the address from the request
   ([pending](integrations/pending.md)).
-- **CORS:** `calculate-score`, `evaluate-and-mint`, `get-available-credit` and `nonce` send
+- **CORS:** `calculate-score`, `evaluate-and-mint` and `get-available-credit` send
   `Access-Control-Allow-Origin: *` and answer `OPTIONS` with `200` (issue #94). The others
   send no CORS headers, so only the app's own origin can call them from a browser.
 - **Logs:** one JSON line per event (`ts`, `level`, `reqId`, `event`, …) from
   `api/_logger.mjs`, plus `[metric]` lines for latency.
-- **Local:** `backend/server.js` mirrors most endpoints on port 3000, with older validation,
-  and lacks `/api/blindpay`.
+- **Local:** `backend/server.js` serves the API on port 3000. `/api/auth`,
+  `/api/evaluate-and-mint`, `/api/onramp`, `/api/blindpay` and `/api/faucet-usdc` use the real
+  handlers; the other routes are older copies.
 
 | Endpoint | Method | Used by |
 |---|---|---|
@@ -33,7 +36,7 @@ Vercel Node functions in `api/`, served from the same domain as the app
 | [`/api/blindpay`](#apiblindpay) | GET, POST | Retiros |
 | [`/api/health`](#get-apihealth-and-get-apireadiness) | GET | Deploy checks |
 | [`/api/readiness`](#get-apihealth-and-get-apireadiness) | GET | Keep-alive workflow, deploy checks |
-| [`/api/nonce`](#post-apinonce-unused) | POST | Nobody |
+| [`/api/auth`](#apiauth) | GET, POST | `ensureApiSession` (Perfil, before minting) |
 
 ---
 
@@ -73,7 +76,9 @@ with `200`. `maxDuration` is 60 s.
 ## POST /api/evaluate-and-mint
 
 Recomputes the score through `/api/calculate-score` and mints that tier on `vinculo_sbt`,
-signed by `SECRET_KEY_ADMIN`. **No nonce or signature is required** (issues #89, #90).
+signed by `SECRET_KEY_ADMIN`. **Requires a wallet session** for `userAddress`: `401`
+`{ reason: "no_session" }` without one, `403` `{ reason: "address_mismatch" }` if the session
+belongs to another wallet, `503` if the session is not configured.
 
 **Request**
 
@@ -210,8 +215,22 @@ BlindPay's message.
   ([Supabase](integrations/supabase.md#keeping-the-project-awake)).
 - Any other method: `405` with an `Allow: GET` header.
 
-## POST /api/nonce (unused)
+## /api/auth
 
-`{ "address": "G..." }` → `{ "success": true, "nonce": "<hex>", "expires": <ms> }`. Kept in
-the function's memory for 5 minutes, which doesn't survive between serverless invocations,
-and no endpoint consumes it. No caller.
+Wallet session ([ADR-008](decisions/ADR-008-wallet-session.md)). Select the operation with
+`?action=`.
+
+| Action | Method | Body | Response 200 |
+|---|---|---|---|
+| `challenge` | POST | `{ address }` | `{ transaction, networkPassphrase }`: a challenge signed by the server, to sign and send back. Never submitted to the network. |
+| `verify` | POST | `{ transaction }` (signed by the wallet) | `{ address, expiresAt }` and the `vyn_session` cookie (`HttpOnly; Secure; SameSite=Strict; Path=/api`, 60 min) |
+| `session` | GET | | `{ address, expiresAt }`, or `401` without a valid session |
+| `logout` | POST | | `{ ok: true }` and clears the cookie |
+
+Errors:
+
+| Status | When |
+|---|---|
+| `400` | Invalid address on `challenge`, or missing `transaction` on `verify`. |
+| `401` | `verify` with a challenge that is expired, already used, made by another server key or for another domain, or not signed by the address. |
+| `503` | `AUTH_SIGNING_SECRET` or `AUTH_JWT_SECRET` is missing, or Supabase fails. No session is issued. |

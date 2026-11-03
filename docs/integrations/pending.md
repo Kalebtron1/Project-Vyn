@@ -16,8 +16,6 @@ against the code on 2026-10-22. Open issue numbers are given where one exists; "
 | Item | Where | Notes |
 |---|---|---|
 | WebSocket replay hub | `src/ws/hub.ts`, `src/db/repositories/contractEventRepository.ts` | No server, table, producer or client. See [WebSocket](websocket.md). |
-| `POST /api/nonce` | `api/nonce.js`, `backend/server.js` | No frontend caller. `consumeNonce` is exported but `evaluate-and-mint` never checks a nonce, and the store is in memory, which doesn't survive between serverless invocations (issues #89, #90). Uses one of the 12 Vercel functions. |
-| `GET /api/blindpay?action=status` | `api/blindpay.js` | The off-ramp UI never checks the payout status after the success screen. |
 | `vinculo_lending.get_loan` | contract | The app never reads the active loan; see "In-memory state" below. |
 | `vinculo_sbt.revoke`, `name`, `symbol`, `token_uri` | contract | Not used by the app. `token_uri` points to a third-party repo and tier 0 returns a 404 URL ([other services](other-services.md)); PR #129 moves the metadata into this repo. |
 
@@ -95,7 +93,7 @@ Read by the code but missing from `.env.example`:
 | `vinculo_sbt` has no tests (stale snapshots only); `vinculo_lending` has none | #99 (in PR #128), #98 |
 | No slippage protection on vault withdrawals (`min_amounts_out = 0`) | #104 is closed, but the fix is in PR #128, not in `main` |
 | CORS `*` on every API function | #94 |
-| No caller authentication on the API (mint, payout, settle) | #89 |
+| Money endpoints (payout, settle, faucet) take the address from the request instead of the session | #94 |
 | `scripts/upgrade_contract.sh` and parts of the [migration guide](../contracts/migration.md) call an `upgrade` function that no contract has | — |
 | CI runs only the contracts; frontend lint, tests and build are not checked on PRs (PR #128 adds a job) | — |
 | Runtime logs last 1 hour on Vercel Hobby; no log drain or error tracking | — |

@@ -406,6 +406,9 @@ const es = {
     menu_logout: "Cerrar sesión",
     toast_minted_title: "NFT minteado con éxito",
     toast_minted_description: "Subiste a nivel {{level}}.",
+    session_title: "Confirma que la wallet es tuya",
+    session_cancelled: "Cancelaste la firma. Sin ella no podemos mintear tu nivel. No se movió dinero.",
+    session_failed: "No pudimos confirmar tu wallet. Intenta de nuevo en unos segundos.",
     toast_error_connection_title: "Conexión inestable",
     toast_error_connection_description:
       "No pudimos conectar con la red de Stellar. Intenta nuevamente en unos segundos.",

@@ -387,6 +387,9 @@ const en = {
     menu_logout: "Log out",
     toast_minted_title: "NFT minted successfully",
     toast_minted_description: "You leveled up to {{level}}.",
+    session_title: "Confirm the wallet is yours",
+    session_cancelled: "You cancelled the signature. Without it we can't mint your level. No money moved.",
+    session_failed: "We couldn't confirm your wallet. Try again in a few seconds.",
     toast_error_connection_title: "Unstable connection",
     toast_error_connection_description:
       "We couldn't connect to the Stellar network. Try again in a few seconds.",

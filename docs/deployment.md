@@ -90,6 +90,9 @@ preview can move the same test funds as production.
 | `BLINDPAY_NETWORK`, `BLINDPAY_ONRAMP_NETWORK`, `BLINDPAY_TOKEN` | no (defaults `stellar_testnet`, `USDB`) | BlindPay modules |
 | `BLINDPAY_PARTNER_FEE_ID` | no | BlindPay quotes |
 | `FAUCET_USDC_AMOUNT` | no (default `2`) | `_faucet-core.mjs` |
+| `AUTH_SIGNING_SECRET` | yes, or `/api/auth` and the SBT mint answer `503` | `_session.mjs` |
+| `AUTH_JWT_SECRET` | yes (32+ characters), same | `_session.mjs` |
+| `AUTH_HOME_DOMAIN` | no (default: `VERCEL_PROJECT_PRODUCTION_URL`, then `localhost`) | `_session.mjs` |
 | `FAUCET_IP_SALT` | yes, or the faucet answers `503` | `_faucet-core.mjs` |
 | `FAUCET_IP_DAILY_MAX` | no (default `5`) | `_faucet-core.mjs` |
 | `FAUCET_DAILY_BUDGET_USD_CENTS` | no (default `5000`) | `_faucet-core.mjs` |

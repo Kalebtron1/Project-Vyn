@@ -73,12 +73,6 @@ app.get('/api/readiness', (req, res) => {
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const server = new rpc.Server(RPC_URL);
 
-// Simple store en memoria de nonces (dev)
-const nonces = new Map();
-function generateNonce() {
-  return require('crypto').randomBytes(16).toString('hex');
-}
-
 // ─────────────────────────────────────────────
 // CONFIGURACIÓN DE CRÉDITO
 // ─────────────────────────────────────────────
@@ -150,74 +144,6 @@ app.post("/api/get-available-credit", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// FUNCIÓN PARA MINTEAR NFT 🚀
-// ─────────────────────────────────────────────
-async function mintNftOnChain(userAddress, tier) {
-  try {
-    if (!process.env.SECRET_KEY_ADMIN) {
-      const msg = 'Missing SECRET_KEY_ADMIN env var';
-      console.error('[DEBUG] 💥 Error Mint:', msg);
-      return { success: false, error: msg };
-    }
-    const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
-    const account = await server.getAccount(adminKeypair.publicKey());
-    
-    let transaction = new TransactionBuilder(account, { 
-        fee: BASE_FEE, 
-        networkPassphrase: Networks.TESTNET 
-    })
-      .addOperation(
-        Operation.invokeContractFunction({
-          contract: process.env.NFT_CONTRACT_ID,
-          function: "mint", 
-          args: [
-            nativeToScVal(adminKeypair.publicKey(), { type: "address" }), 
-            nativeToScVal(userAddress, { type: "address" }),    
-            nativeToScVal(tier, { type: "u32" })                
-          ],
-        })
-      )
-      .setTimeout(30).build();
-
-    transaction = await server.prepareTransaction(transaction);
-    transaction.sign(adminKeypair);
-
-    const submitRes = await server.sendTransaction(transaction);
-
-    if (submitRes.status === "ERROR") {
-      const reason = submitRes.errorResult
-        ? JSON.stringify(submitRes.errorResult)
-        : "sendTransaction devolvió ERROR";
-      console.error("[DEBUG] 💥 Mint rechazado:", reason);
-      return { success: false, hash: submitRes.hash, error: `La red rechazó el mint: ${reason}` };
-    }
-
-    // sendTransaction solo encola; confirmamos el resultado real con polling.
-    const hash = submitRes.hash;
-    let getRes = await server.getTransaction(hash);
-    const deadline = Date.now() + 45000;
-    while (getRes.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      getRes = await server.getTransaction(hash);
-    }
-
-    if (getRes.status === rpc.Api.GetTransactionStatus.SUCCESS) {
-      return { success: true, hash };
-    }
-    if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
-      console.error("[DEBUG] 💥 Mint revertido on-chain:", hash);
-      return { success: false, hash, error: "La transacción de mint falló al aplicarse en la red" };
-    }
-    console.warn("[DEBUG] ⚠️ Mint sin confirmar a tiempo:", hash);
-    return { success: false, hash, error: "No se pudo confirmar la transacción de mint a tiempo" };
-
-  } catch (error) {
-    console.error(`[DEBUG] 💥 Error Mint:`, error);
-    return { success: false, error: error.message || String(error) };
-  }
-}
-
-// ─────────────────────────────────────────────
 // ENDPOINT: CALCULAR SCORE DE RIESGO 🧮
 // ─────────────────────────────────────────────
 app.post("/api/calculate-score", async (req, res) => {
@@ -243,99 +169,25 @@ app.post("/api/calculate-score", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// ENDPOINT: NONCE (DEV) — para evitar 404 desde frontend en dev
+// ENDPOINTS: SESIÓN DE WALLET Y MINT DEL SBT
+// Reusan los handlers serverless: el mint exige la sesión que emite /api/auth (#89).
 // ─────────────────────────────────────────────
-app.post('/api/nonce', (req, res) => {
-  const { address } = req.body || {};
-  if (!address) return res.status(400).json({ error: 'address required' });
-  const nonce = generateNonce();
-  const expires = Date.now() + 5 * 60 * 1000; // 5 minutos
-  nonces.set(address, { nonce, expires });
-  return res.json({ success: true, nonce, expires });
-});
-
-function consumeNonce(address, nonce) {
-  const entry = nonces.get(address);
-  if (!entry) return false;
-  if (entry.expires < Date.now()) {
-    nonces.delete(address);
-    return false;
-  }
-  if (entry.nonce !== nonce) return false;
-  nonces.delete(address);
-  return true;
-}
-
-// ─────────────────────────────────────────────
-// ENDPOINT: EVALUATE AND MINT (DEV)
-// ─────────────────────────────────────────────
-app.post('/api/evaluate-and-mint', async (req, res) => {
-  try {
-    console.log('[DEBUG] /api/evaluate-and-mint body:', req.body);
-    const { address: maybeAddress, userAddress } = req.body || {};
-    const address = maybeAddress || userAddress;
-    if (!address) return res.status(400).json({ error: 'address required' });
-
-    // Elegibilidad y tier desde los contadores ON-CHAIN del staking_pool (misma
-    // fuente que /api/calculate-score). Reemplaza el antiguo cálculo por Horizon.
-    if (!STAKING_CONTRACT_ID) {
-      return res.status(500).json({ success: false, error: 'Falta la variable de entorno STAKING_CONTRACT_ID' });
-    }
-    const { computeFinancialReputation, getOnChainAggregates } = await loadScoringCore();
-    const aggregates = await getOnChainAggregates(address, { contractId: STAKING_CONTRACT_ID });
-    const scoreResult = computeFinancialReputation(aggregates);
-    const { tier, tierName } = scoreResult;
-    console.log('[DEBUG] evaluate-and-mint score:', { address, contract: STAKING_CONTRACT_ID, ...aggregates, tier, tierName });
-
-    if (!scoreResult.eligibility.isHistoryEligible) {
-      return res.json({ success: false, error: 'Not eligible by history', eligibility: scoreResult.eligibility });
-    }
-
-    // Check current on-chain tier to avoid panics in the contract (same-level mint)
+const handlerPromises = {};
+function serveHandler(route, file) {
+  app.all(route, async (req, res) => {
     try {
-      if (!process.env.SECRET_KEY_ADMIN) {
-        console.warn('[DEBUG] SECRET_KEY_ADMIN not set; skipping on-chain tier check');
-      } else {
-        const adminKeypair = Keypair.fromSecret(process.env.SECRET_KEY_ADMIN);
-        const sourceAccount = await server.getAccount(adminKeypair.publicKey());
-        const checkTx = new TransactionBuilder(sourceAccount, { fee: BASE_FEE, networkPassphrase: Networks.TESTNET })
-          .addOperation(
-            Operation.invokeContractFunction({
-              contract: process.env.NFT_CONTRACT_ID,
-              function: 'get_tier',
-              args: [nativeToScVal(address, { type: 'address' })]
-            })
-          )
-          .setTimeout(30)
-          .build();
-
-        const sim = await server.simulateTransaction(checkTx);
-        let currentTier = 0;
-        if (sim.result && sim.result.retval) {
-          currentTier = Number(scValToNative(sim.result.retval)) || 0;
-        }
-
-        if (currentTier === tier) {
-          return res.status(400).json({ success: false, message: 'Usuario ya posee este nivel exacto', tier: currentTier, tierName });
-        }
-      }
-    } catch (err) {
-      console.warn('[DEBUG] Could not read current on-chain tier:', err && err.message || err);
-      // proceed — we still try to mint, but the mint may fail with the contract panic which will be handled below
+      if (!handlerPromises[file]) handlerPromises[file] = import(file);
+      const mod = await handlerPromises[file];
+      return mod.default(req, res);
+    } catch (error) {
+      console.error(`[DEBUG] 💥 ${route}:`, error.message);
+      return res.status(502).json({ error: error.message || "Error interno" });
     }
+  });
+}
+serveHandler("/api/auth", "../api/auth.js");
+serveHandler("/api/evaluate-and-mint", "../api/evaluate-and-mint.js");
 
-    const mintRes = await mintNftOnChain(address, tier);
-    if (!mintRes.success) {
-      console.error('[DEBUG] mintNftOnChain failed:', mintRes);
-      return res.status(500).json({ success: false, error: mintRes.error });
-    }
-
-    return res.json({ status: 'minted', txHash: mintRes.hash, tier, tierName });
-  } catch (error) {
-    console.error('[DEBUG] 💥 Error en /evaluate-and-mint:', error);
-    return res.status(500).json({ success: false, error: error.message || String(error) });
-  }
-});
 // ─────────────────────────────────────────────
 // ENDPOINTS: BLINDPAY OFF-RAMP (SPEI) 💸
 // La UI maneja USDC; el USDB→SPEI lo firma la wallet de payout del backend.

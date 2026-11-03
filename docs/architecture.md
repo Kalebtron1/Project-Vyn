@@ -163,7 +163,7 @@ Hobby plan allows 12 functions per deployment; there are 10
 | `/api/blindpay?action=…` | GET/POST | SPEI off-ramp: quote, payout, status. |
 | `/api/health` | GET | Liveness. |
 | `/api/readiness` | GET | Checks Supabase; used by the keep-alive workflow. |
-| `/api/nonce` | POST | Unused (legacy). |
+| `/api/auth?action=…` | GET/POST | Wallet session: challenge, verify, session, logout ([ADR-008](decisions/ADR-008-wallet-session.md)). |
 
 Request and response shapes: [API reference](api.md). Shared modules: `_scoring-core.mjs`,
 `_blindpay-core.mjs`, `_blindpay-onramp.mjs`, `_faucet-core.mjs`, `_usdc.mjs`,

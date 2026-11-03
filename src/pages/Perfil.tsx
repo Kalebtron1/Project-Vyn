@@ -22,9 +22,9 @@ import {
   privyLinkPasskey,
   usePrivyBridge,
 } from "@/lib/privyBridge";
-import { FREIGHTER_ID } from "@/lib/stellarWalletsKit";
 import { useRefreshChainData } from "@/lib/chainData";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
+import { ensureApiSession } from "@/lib/apiSession";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
 
 // Logo "G" de Google (lucide no incluye logos de marcas).
@@ -421,20 +421,16 @@ const Perfil = () => {
     if (!walletAddress) return;
     setIsMinting(true);
     try {
-      // 1) Solo validamos que la wallet conectada sea la misma en Freighter.
-      // El mint lo firma el admin; este chequeo solo confirma que la wallet de Freighter
-      // coincide. Solo aplica si el provider conectado ES Freighter. Para cualquier otra
-      // wallet (Privy, Albedo, xBull, Lobstr, Hana, Rabet) requestAccess() de Freighter
-      // lanzaría y caería al toast de "conexión inestable", así que lo saltamos.
-      if (provider === FREIGHTER_ID) {
-        // Con timeout para que un popup de Freighter que nunca responde no deje el botón colgado.
-        const access = await Promise.race([
-          requestAccess(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Freighter no respondió a tiempo")), 30000)
-          ),
-        ]);
-        if (!access?.address || access.address !== walletAddress) throw new Error("Conecta la misma wallet en Freighter");
+      // 1) El mint lo firma y paga el admin: el backend exige una sesión que pruebe que
+      // esta wallet es del usuario. Pide la firma del desafío solo si no hay sesión vigente.
+      const session = await ensureApiSession(walletAddress, sign);
+      if (session.ok === false) {
+        toast({
+          title: t("profile.session_title"),
+          description: session.cancelled ? t("profile.session_cancelled") : t("profile.session_failed"),
+          variant: "destructive",
+        });
+        return;
       }
 
       const response = await fetch(`/api/evaluate-and-mint`, {
