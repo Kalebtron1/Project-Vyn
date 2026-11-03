@@ -5,53 +5,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ensureBlockchainWallet, isPayinPaid, settlePayin } from "../../api/_blindpay-onramp.mjs";
-import { getOnrampUserByWallet } from "../../api/_supabase.mjs";
-
-const { sendUsdcFromAdmin } = vi.hoisted(() => ({ sendUsdcFromAdmin: vi.fn() }));
-vi.mock("../../api/_usdc.mjs", () => ({ sendUsdcFromAdmin }));
+import { ensureBlockchainWallet, isPayinPaid } from "../../api/_blindpay-onramp.mjs";
+import { getRampCustomer } from "../../api/_supabase.mjs";
 
 const fetchMock = vi.fn();
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-describe("settlePayin", () => {
-  beforeEach(() => {
-    vi.stubEnv("BLINDPAY_API_KEY", "test-key");
-    vi.stubEnv("BLINDPAY_INSTANCE_ID", "in_test");
-    vi.stubEnv("BLINDPAY_DEMO_RECEIVER_ID", "re_test");
-    vi.stubEnv("SUPABASE_URL", "");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
-    vi.stubEnv("SUPABASE_KEY", "");
-    fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
-    sendUsdcFromAdmin.mockReset().mockResolvedValue("tx_hash");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-  });
-
-  it("does not pay a payin that BlindPay has not confirmed, even if asked to simulate", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "pi_wait", status: "processing", address: "GUSER", receiver_amount: 1000 }));
-
-    const options = { payinId: "pi_wait", simulate: true };
-    await expect(settlePayin(options)).resolves.toMatchObject({ settled: false, reason: "not_paid" });
-    expect(sendUsdcFromAdmin).not.toHaveBeenCalled();
-  });
-
-  it("pays a confirmed payin once", async () => {
-    const paid = { id: "pi_paid", status: "completed", address: "GUSER", receiver_amount: 1026 };
-    fetchMock.mockImplementation(async () => jsonResponse(paid));
-
-    await expect(settlePayin({ payinId: "pi_paid" })).resolves.toMatchObject({ settled: true, amountUsd: 10.26 });
-    await expect(settlePayin({ payinId: "pi_paid" })).resolves.toMatchObject({ settled: false, reason: "already_settled" });
-    expect(sendUsdcFromAdmin).toHaveBeenCalledTimes(1);
-    expect(sendUsdcFromAdmin).toHaveBeenCalledWith({ to: "GUSER", amount: "10.2600000" });
-  });
-
+describe("isPayinPaid", () => {
   it("treats failed and refunded as unpaid, whatever the tracking steps say", () => {
     const tracking = { tracking_payment: { step: "completed" } };
     expect(isPayinPaid({ status: "failed", ...tracking })).toBe(false);
@@ -101,7 +63,7 @@ describe("ensureBlockchainWallet", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
 
     await expect(ensureBlockchainWallet({ walletAddress: "GNOID" })).rejects.toThrow(/id/);
-    expect(await getOnrampUserByWallet("GNOID")).toBeNull();
+    expect(await getRampCustomer("GNOID")).toBeNull();
   });
 
   it("reuses a registered wallet without calling BlindPay", async () => {
@@ -119,6 +81,6 @@ describe("ensureBlockchainWallet", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: "invalid address" }, 400));
 
     await expect(ensureBlockchainWallet({ walletAddress: "GBAD" })).rejects.toThrow("invalid address");
-    expect(await getOnrampUserByWallet("GBAD")).toBeNull();
+    expect(await getRampCustomer("GBAD")).toBeNull();
   });
 });

@@ -4,7 +4,9 @@
 //   POST /api/onramp?action=quote   Body: { walletAddress, amountMxn, email? } → cotiza (no genera CLABE)
 //   POST /api/onramp?action=payin   Body: { walletAddress, amountMxn, email? } → cotiza fresco + genera CLABE
 //   GET  /api/onramp?action=status&id=pi_…                                      → estado del payin (polling)
+//   POST /api/onramp?action=settle  Body: { payinId, walletAddress }            → liquida un payin pagado
 import {
+  assertPayinWithinCap,
   ensureBlockchainWallet,
   createPayinQuote,
   quoteAndPayin,
@@ -19,9 +21,23 @@ import {
   validateQuery,
   onrampInitBodySchema,
   onrampQuoteBodySchema,
+  onrampSettleBodySchema,
   onrampStatusQuerySchema,
   reportValidationError,
 } from "./validation.mjs";
+
+const SETTLE_HTTP_STATUS = {
+  unknown_payin: 404,
+  forbidden: 403,
+  payin_mismatch: 409,
+  in_review: 409,
+  payin_cap: 429,
+  wallet_cap: 429,
+  global_cap: 429,
+};
+
+// 503 si falta Supabase: no se movió dinero y se puede reintentar.
+const failureStatus = (error) => (error.code === "supabase_unavailable" ? 503 : 502);
 
 export default async function handler(req, res) {
   const log = createLogger(req);
@@ -46,20 +62,23 @@ export default async function handler(req, res) {
     }
   }
 
-  // settle: liquidación on-chain (USDC al usuario) tras confirmarse el SPEI. POST { payinId }.
+  // settle: liquidación on-chain (USDC al usuario) tras confirmarse el SPEI.
+  // La wallet del body se reemplaza por la de la sesión cuando exista (PR de autenticación).
   if (action === "settle") {
     if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
-    const payinId = req.body?.payinId;
-    if (!payinId || typeof payinId !== "string") {
-      return res.status(400).json({ error: "payinId requerido" });
+    let body;
+    try {
+      body = validateBody(onrampSettleBodySchema, req.body || {});
+    } catch (error) {
+      return reportValidationError(res, error);
     }
     try {
-      const result = await settlePayin({ payinId });
-      log.info("onramp_settle.done", { payinId, ...result });
-      return res.status(200).json(result);
+      const result = await settlePayin({ payinId: body.payinId, walletAddress: body.walletAddress, log });
+      log.info("onramp_settle.done", { payinId: body.payinId, ...result });
+      return res.status(SETTLE_HTTP_STATUS[result.reason] ?? 200).json(result);
     } catch (error) {
       log.error("onramp_settle.error", { err: error.message });
-      return res.status(502).json({ error: error.message || "Error al liquidar el depósito" });
+      return res.status(failureStatus(error)).json({ error: error.message || "Error al liquidar el depósito" });
     }
   }
 
@@ -83,7 +102,7 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     } catch (error) {
       log.error("onramp_init.error", { err: error.message, status: error.status });
-      return res.status(502).json({ error: error.message || "Error al registrar la wallet en BlindPay" });
+      return res.status(failureStatus(error)).json({ error: error.message || "Error al registrar la wallet en BlindPay" });
     }
   }
 
@@ -104,6 +123,7 @@ export default async function handler(req, res) {
 
     if (action === "quote") {
       const quote = await createPayinQuote({ blockchainWalletId, amountCents });
+      assertPayinWithinCap(quote.receiver_amount);
       const summary = summarizePayinQuote(quote);
       log.info("onramp_quote.done", {
         quoteId: summary.quoteId,
@@ -114,13 +134,16 @@ export default async function handler(req, res) {
     }
 
     // action === "payin"
-    const { quote, payin } = await quoteAndPayin({ blockchainWalletId, amountCents });
+    const { quote, payin } = await quoteAndPayin({ walletAddress: body.walletAddress, blockchainWalletId, amountCents });
     const summary = summarizePayin(payin);
     log.info("onramp_payin.done", { payinId: summary.payinId, status: summary.status, clabe: summary.clabe });
     return res.status(200).json({ ...summary, quote: summarizePayinQuote(quote) });
   } catch (error) {
+    if (error.reason === "payin_cap") {
+      return res.status(400).json({ error: error.message, reason: error.reason, maxUsd: error.maxUsd });
+    }
     log.error(`onramp_${action}.error`, { err: error.message, status: error.status });
     const msg = action === "quote" ? "Error al cotizar el depósito SPEI" : "Error al generar el depósito SPEI";
-    return res.status(502).json({ error: error.message || msg });
+    return res.status(failureStatus(error)).json({ error: error.message || msg });
   }
 }

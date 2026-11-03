@@ -11,17 +11,17 @@ import {
   consumeAuthChallenge,
   finishFaucet,
   finishSettlement,
-  getOnrampUserByWallet,
+  getRampCustomer,
+  getRampPayin,
   hasClaimedFaucet,
-  hasSettledPayin,
   hitRateLimit,
   isSupabaseConfigured,
   pingSupabase,
   recordFaucetClaim,
-  recordSettlement,
   reserveFaucet,
   reserveSettlement,
-  upsertOnrampUser,
+  saveRampPayin,
+  upsertRampCustomer,
 } from "../../api/_supabase.mjs";
 
 vi.mock("../../api/_usdc.mjs", () => ({
@@ -73,12 +73,20 @@ describe("_supabase", () => {
       vi.stubEnv("VERCEL_ENV", "production");
       const row = { wallet_address: "GPROD" };
 
-      await expect(getOnrampUserByWallet("GPROD")).rejects.toThrow(/producción/);
-      await expect(upsertOnrampUser(row)).rejects.toThrow(/producción/);
+      await expect(getRampCustomer("GPROD")).rejects.toThrow(/producción/);
+      await expect(upsertRampCustomer(row)).rejects.toThrow(/producción/);
       await expect(hasClaimedFaucet("GPROD")).rejects.toThrow(/producción/);
       await expect(recordFaucetClaim("GPROD")).rejects.toThrow(/producción/);
-      await expect(hasSettledPayin("pi_1")).rejects.toThrow(/producción/);
-      await expect(recordSettlement("pi_1", {})).rejects.toThrow(/producción/);
+      await expect(getRampPayin("pi_1")).rejects.toThrow(/producción/);
+      await expect(saveRampPayin({ payin_id: "pi_1" })).rejects.toThrow(/producción/);
+    });
+
+    it("marks failures so the API can answer 503", async () => {
+      fetchMock.mockRejectedValueOnce(new Error("network down"));
+      await expect(getRampPayin("pi_1")).rejects.toMatchObject({ code: "supabase_unavailable" });
+
+      fetchMock.mockResolvedValueOnce(new Response("", { status: 500 }));
+      await expect(getRampPayin("pi_1")).rejects.toMatchObject({ code: "supabase_unavailable", status: 500 });
     });
 
     it("still lets readiness report the missing variables in production", async () => {

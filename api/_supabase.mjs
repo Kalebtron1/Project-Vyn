@@ -8,8 +8,6 @@
 //
 // El esquema está en supabase/migrations.
 
-const TABLE = "onramp_users";
-
 function getConfig() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,36 +19,49 @@ export function isSupabaseConfigured() {
   return getConfig() !== null;
 }
 
+// El código `supabase_unavailable` permite responder 503: no se movió dinero y se puede reintentar.
+function unavailable(message) {
+  const err = new Error(message);
+  err.code = "supabase_unavailable";
+  return err;
+}
+
 // ── Fallback en memoria (dev sin Supabase) ──────────────────────────────────
-const memory = new Map(); // wallet_address -> row
+const customerMemory = new Map(); // wallet_address -> row
+const payinMemory = new Map(); // payin_id -> row
 
 function usesMemory() {
   if (isSupabaseConfigured()) return false;
   if (process.env.VERCEL_ENV === "production") {
-    throw new Error("Supabase no está configurado en producción");
+    throw unavailable("Supabase no está configurado en producción");
   }
   return true;
 }
 
 async function sbFetch(path, { method = "GET", body, headers = {}, signal } = {}) {
   const cfg = getConfig();
-  const res = await fetch(`${cfg.url}/rest/v1/${path}`, {
-    method,
-    headers: {
-      apikey: cfg.key,
-      Authorization: `Bearer ${cfg.key}`,
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-  });
+  let res;
+  try {
+    res = await fetch(`${cfg.url}/rest/v1/${path}`, {
+      method,
+      headers: {
+        apikey: cfg.key,
+        Authorization: `Bearer ${cfg.key}`,
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    });
+  } catch (error) {
+    throw unavailable(error?.message || "Supabase no responde");
+  }
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
     const detail = data && (data.message || data.error || data.hint);
-    const err = new Error(detail || `Supabase respondió ${res.status}`);
+    const err = unavailable(detail || `Supabase respondió ${res.status}`);
     err.status = res.status;
     err.data = data;
     throw err;
@@ -73,12 +84,70 @@ export async function pingSupabase() {
   return "ok";
 }
 
+// ── On-ramp: wallet ↔ BlindPay y payins ligados a su wallet ─────────────────
+
 /** Busca el mapping por dirección de wallet (identidad estable del usuario Privy). */
-export async function getOnrampUserByWallet(walletAddress) {
-  if (usesMemory()) return memory.get(walletAddress) || null;
+export async function getRampCustomer(walletAddress) {
+  if (usesMemory()) return customerMemory.get(walletAddress) || null;
   const rows = await sbFetch(
-    `${TABLE}?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=*&limit=1`
+    `ramp_customers?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=*&limit=1`
   );
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+/** Mapping en la tabla vieja: cubre wallets registradas después del último backfill. */
+export async function getLegacyOnrampUser(walletAddress) {
+  if (usesMemory()) return null;
+  const rows = await sbFetch(
+    `onramp_users?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=blindpay_receiver_id,blindpay_blockchain_wallet_id&limit=1`
+  );
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+/** Inserta/actualiza el mapping (upsert por wallet_address). */
+export async function upsertRampCustomer(row) {
+  if (usesMemory()) {
+    customerMemory.set(row.wallet_address, row);
+    return;
+  }
+  await sbFetch("ramp_customers?on_conflict=wallet_address", {
+    method: "POST",
+    body: [row],
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+  });
+}
+
+/** Guarda un payin con su wallet y montos. `settle` solo acepta payins de esta tabla. */
+export async function saveRampPayin(row) {
+  if (usesMemory()) {
+    payinMemory.set(row.payin_id, row);
+    return;
+  }
+  await sbFetch("ramp_payins", { method: "POST", body: [row], headers: { Prefer: "return=minimal" } });
+}
+
+export async function getRampPayin(payinId) {
+  if (usesMemory()) return payinMemory.get(payinId) || null;
+  const rows = await sbFetch(`ramp_payins?payin_id=eq.${encodeURIComponent(payinId)}&select=*&limit=1`);
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+export async function updateRampPayinStatus(payinId, status) {
+  if (usesMemory()) {
+    const row = payinMemory.get(payinId);
+    if (row) row.status = status;
+    return;
+  }
+  await sbFetch(`ramp_payins?payin_id=eq.${encodeURIComponent(payinId)}`, {
+    method: "PATCH",
+    body: { status, updated_at: new Date().toISOString() },
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+/** Estado de la liquidación de un payin, o null si no hay. */
+export async function getSettlementStatus(payinId) {
+  const rows = await sbFetch(`ramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=status,tx_hash&limit=1`);
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
@@ -107,52 +176,11 @@ export async function recordFaucetClaim(walletAddress) {
   });
 }
 
-// ── Liquidación on-ramp: una USDC por payin (idempotencia) ──────────────────
-const settlementMemory = new Set();
-
-/** ¿Este payin ya fue liquidado (USDC enviado al usuario)? */
-export async function hasSettledPayin(payinId) {
-  if (usesMemory()) return settlementMemory.has(payinId);
-  const rows = await sbFetch(
-    `onramp_settlements?payin_id=eq.${encodeURIComponent(payinId)}&select=payin_id&limit=1`
-  );
-  return Array.isArray(rows) && rows.length > 0;
-}
-
-/** Registra la liquidación de un payin (idempotente). */
-export async function recordSettlement(payinId, { walletAddress, amountUsd, hash }) {
-  if (usesMemory()) {
-    settlementMemory.add(payinId);
-    return;
-  }
-  await sbFetch(`onramp_settlements?on_conflict=payin_id`, {
-    method: "POST",
-    body: [{ payin_id: payinId, wallet_address: walletAddress, amount_usd: amountUsd, hash }],
-    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-  });
-}
-
-/** Inserta/actualiza el mapping (upsert por wallet_address). */
-export async function upsertOnrampUser(row) {
-  if (usesMemory()) {
-    const existing = memory.get(row.wallet_address) || {};
-    const merged = { ...existing, ...row };
-    memory.set(row.wallet_address, merged);
-    return merged;
-  }
-  const rows = await sbFetch(`${TABLE}?on_conflict=wallet_address`, {
-    method: "POST",
-    body: [row],
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-  });
-  return Array.isArray(rows) && rows.length ? rows[0] : row;
-}
-
 // ── Funciones atómicas (supabase/migrations/0002_ramp_schema.sql) ───────────
 // Sin fallback en memoria: el límite que protegen no existiría entre instancias.
 
 function rpc(name, args) {
-  if (!isSupabaseConfigured()) throw new Error("Supabase no está configurado");
+  if (!isSupabaseConfigured()) throw unavailable("Supabase no está configurado");
   return sbFetch(`rpc/${name}`, { method: "POST", body: args });
 }
 

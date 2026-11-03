@@ -143,10 +143,23 @@ least 10 USD, and the API rejects less than 175 MXN. See [BlindPay](integrations
 | `quote` | POST | `{ walletAddress, amountMxn, email? }` | `{ quoteId, senderMxn, receiverUsd, flatFeeUsd, partnerFeeUsd, rateMxnPerUsd, commercialRateMxnPerUsd, expiresAt }` |
 | `payin` | POST | same as `quote` | `{ payinId, status, clabe, senderMxn, receiverUsd, address, network, tracking, payment, txHash, quote: {…} }` |
 | `status` | GET | `&id=<payinId>` | Same fields as `payin` without `quote` |
-| `settle` | POST | `{ payinId }` | `{ settled: true, to, amountUsd, hash }`, or `{ settled: false, reason: "not_paid", status }`, or `{ settled: false, reason: "already_settled" }` |
+| `settle` | POST | `{ payinId, walletAddress }` | `{ settled: true, to, amountUsd, hash }`, or `{ settled: false, reason: "not_paid", status }`, or `{ settled: false, reason: "already_settled", hash }` |
 
-Errors: `400` for an unknown action, validation or a missing `payinId`; `405` for the wrong
-method; `502` with `{ error }` for BlindPay, Supabase or Horizon failures.
+`settle` answers these with `{ settled: false, reason }`:
+
+| Status | `reason` | Meaning |
+|---|---|---|
+| `403` | `forbidden` | The payin belongs to another wallet. |
+| `404` | `unknown_payin` | The payin is not in `ramp_payins`, so it was not created by this API. |
+| `409` | `payin_mismatch` | BlindPay reports another address or no valid amount. |
+| `409` | `in_review` | A reservation is in progress or never finished. It needs a manual review. |
+| `429` | `payin_cap`, `wallet_cap`, `global_cap` | Over a limit. See [BlindPay](integrations/blindpay.md#limits). |
+
+`quote` and `payin` answer `400` with `{ reason: "payin_cap", maxUsd }` over the per-payin limit.
+
+Other errors: `400` for an unknown action or validation; `405` for the wrong method; `503`
+with `{ error }` if Supabase fails, with no funds moved; `502` with `{ error }` for BlindPay or
+Horizon failures.
 
 ## /api/blindpay
 

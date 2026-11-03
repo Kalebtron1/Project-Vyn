@@ -14,6 +14,7 @@ import {
   ArrowDownToLine, Loader2, Copy, CheckCircle2, Building2, Clock, Mail, AlertCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import confetti from "canvas-confetti";
 import AppShell from "@/components/AppShell";
 import { useWalletSession } from "@/context/WalletSessionContext";
@@ -22,8 +23,33 @@ import { useRefreshChainData } from "@/lib/chainData";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr } from "@/stellar/trustline";
 import { depositToVault } from "@/stellar/deposit";
+import { formatAmount } from "@/lib/format";
 
 type Step = "input" | "generating" | "clabe" | "settling" | "success" | "error";
+
+// Motivos con los que la API rechaza un depósito. null si es otro error.
+function rejectionMessage(
+  data: { reason?: string; maxUsd?: number } | null,
+  t: TFunction,
+  language: string
+): string | null {
+  switch (data?.reason) {
+    case "payin_cap":
+      return t("deposit_spei.limit_payin_cap", { max: formatAmount(data.maxUsd ?? 0, language) });
+    case "wallet_cap":
+      return t("deposit_spei.limit_wallet_cap");
+    case "global_cap":
+      return t("deposit_spei.limit_global_cap");
+    case "in_review":
+      return t("deposit_spei.settle_in_review");
+    case "forbidden":
+    case "unknown_payin":
+    case "payin_mismatch":
+      return t("deposit_spei.settle_rejected");
+    default:
+      return null;
+  }
+}
 
 interface Quote {
   receiverUsd: number;
@@ -33,7 +59,7 @@ interface Quote {
 }
 
 const Depositar = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { address, provider } = useWalletSession();
   const { email } = usePrivyBridge();
@@ -50,6 +76,9 @@ const Depositar = () => {
   const [payin, setPayin] = useState<null | { payinId: string; clabe: string; receiverUsd: number }>(null);
   const [copied, setCopied] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Si el efecto de liquidación se repite, reutiliza la misma llamada: una segunda vería la
+  // reserva de la primera y mostraría "en revisión" aunque el pago siga en curso.
+  const settleRef = useRef<{ payinId: string; call: Promise<Response> } | null>(null);
 
   const isPrivy = provider === PRIVY_PROVIDER;
 
@@ -84,7 +113,7 @@ const Depositar = () => {
           // El backend respondió con error (p. ej. 502 "BlindPay no configurado" si
           // faltan las env vars en prod). Lo mostramos en vez de tragarlo en silencio.
           setQuote(null);
-          setQuoteError((data && data.error) || t("deposit_spei.quote_error"));
+          setQuoteError(rejectionMessage(data, t, i18n.language) || (data && data.error) || t("deposit_spei.quote_error"));
         }
       } catch (e) {
         if (!cancelled) {
@@ -114,7 +143,7 @@ const Depositar = () => {
         body: JSON.stringify({ walletAddress: address, amountMxn: val, email }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || t("deposit_spei.generic_error"));
+      if (!r.ok) throw new Error(rejectionMessage(data, t, i18n.language) || data.error || t("deposit_spei.generic_error"));
       setPayin({ payinId: data.payinId, clabe: data.clabe, receiverUsd: data.receiverUsd ?? quote?.receiverUsd ?? 0 });
       setStep("clabe");
     } catch (e) {
@@ -162,15 +191,20 @@ const Depositar = () => {
           await submitClassicXdr(r.signedXdr);
         }
         // 2) Liquidación: el backend envía el USDC equivalente a la wallet del usuario.
-        const sr = await fetch("/api/onramp?action=settle", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payinId: payin.payinId }),
-        });
+        if (settleRef.current?.payinId !== payin.payinId) {
+          settleRef.current = {
+            payinId: payin.payinId,
+            call: fetch("/api/onramp?action=settle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ payinId: payin.payinId, walletAddress: address }),
+            }),
+          };
+        }
+        const sr = (await settleRef.current.call).clone();
         const sd = await sr.json();
-        if (!sr.ok) throw new Error(sd.error || "No se pudo acreditar el USDC");
         if (!sd.settled && sd.reason !== "already_settled") {
-          throw new Error(t("deposit_spei.generic_error"));
+          throw new Error(rejectionMessage(sd, t, i18n.language) || t("deposit_spei.generic_error"));
         }
         const usd = (sd.amountUsd ?? payin.receiverUsd ?? 0) as number;
         // 3) Auto-depósito al vault (firma la wallet del usuario). Best-effort: si falla,
@@ -194,7 +228,7 @@ const Depositar = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [step, payin, address, sign, refreshChainData, t]);
+  }, [step, payin, address, sign, refreshChainData, t, i18n.language]);
 
   const copyClabe = async () => {
     if (!payin) return;

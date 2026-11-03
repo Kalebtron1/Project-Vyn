@@ -87,6 +87,11 @@ export const onrampQuoteBodySchema = z.object({
   email: z.string().trim().email().optional(),
 });
 
+export const onrampSettleBodySchema = z.object({
+  payinId: nonEmptyString.describe("payinId es requerido"),
+  walletAddress: stellarAddress,
+});
+
 export const onrampStatusQuerySchema = z.object({
   id: nonEmptyString.describe("id del payin es requerido"),
 });

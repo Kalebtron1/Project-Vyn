@@ -476,7 +476,7 @@ app.post("/api/onramp-payin", async (req, res) => {
   try {
     const { ensureBlockchainWallet, quoteAndPayin, summarizePayinQuote, summarizePayin } = await loadOnrampCore();
     const { blockchainWalletId } = await ensureBlockchainWallet({ walletAddress, email: req.body && req.body.email });
-    const { quote, payin } = await quoteAndPayin({ blockchainWalletId, amountCents: Math.round(amountMxn * 100) });
+    const { quote, payin } = await quoteAndPayin({ walletAddress, blockchainWalletId, amountCents: Math.round(amountMxn * 100) });
     return res.json({ ...summarizePayin(payin), quote: summarizePayinQuote(quote) });
   } catch (error) {
     console.error("[DEBUG] 💥 /onramp-payin:", error.message);
