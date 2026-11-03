@@ -61,9 +61,8 @@ Read by the code but missing from `.env.example`:
 
 ## Partly migrated to the data-cache rules (ADR-003)
 
-- `Perfil.tsx` still reads balance, credit and score with its own `useEffect` + `fetch`
-  calls instead of `useSavings` / `useCredit` / `useScore`, and still sends `depositCount`
-  and `deposits` fields that no longer change the result (the score comes from the contract).
+- `Perfil.tsx` still sends `depositCount` and `deposits` to `evaluate-and-mint`, fields that
+  no longer change the result (the score comes from the contract).
 - `Depositar.tsx` polls the payin status with `setInterval` every 4 s (BlindPay status, not
   chain data, but it never stops on `failed`).
 - `Retiros.tsx` and `Tesoreria.tsx` poll `getTransaction` without a deadline.

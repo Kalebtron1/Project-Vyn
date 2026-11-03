@@ -72,8 +72,8 @@ See [BlindPay](integrations/blindpay.md) and [SPEI testing](spei-testing.md).
 ## 5. Score and SBT mint
 
 ```
-Perfil ─▶ fetchContractBalance + POST /api/get-available-credit (current tier)
-       ─▶ POST /api/calculate-score { address }
+Perfil ─▶ useSavings + useCredit (POST /api/get-available-credit, current tier)
+       ─▶ useScore (POST /api/calculate-score { address }), the same cached reads as Inicio
             getOnChainAggregates: staking_pool.get_total_deposited / get_total_withdrawn /
             get_position / get_tx_count (simulations)
             computeFinancialReputation ─▶ { score, tier, eligibility, metrics }

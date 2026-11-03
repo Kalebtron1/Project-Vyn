@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useWallet } from "@/hooks/useWallet";
-import { fetchContractBalance } from "../stellar/queries";
 import { recordMint } from "../stellar/activity";
 import { Shield, Wallet, Star, ChevronRight, LogOut, HelpCircle, Bell, Loader2, Award, Lock, Activity, Medal, Globe, CircleCheck, Fingerprint, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -22,7 +21,7 @@ import {
   privyLinkPasskey,
   usePrivyBridge,
 } from "@/lib/privyBridge";
-import { useRefreshChainData } from "@/lib/chainData";
+import { useCredit, useRefreshChainData, useSavings, useScore } from "@/lib/chainData";
 import { useMobileWallet } from "@/hooks/useMobileWallet";
 import { ensureApiSession } from "@/lib/apiSession";
 import { hasUsdcTrustline, buildUsdcTrustlineXdr, submitClassicXdr, ensureTestnetAccount } from "@/stellar/trustline";
@@ -248,141 +247,31 @@ const Perfil = () => {
     }
   };
 
-  const [loadingProfile, setLoadingProfile] = useState(true);
-
   const [isMinting, setIsMinting] = useState(false);
   const [showNFTModal, setShowNFTModal] = useState(false);
   const [nftTxHash, setNftTxHash] = useState<string | undefined>();
   const [lastMintedLevel, setLastMintedLevel] = useState("Bronce");
 
-  // --- ESTADOS ON-CHAIN ACTUALIZADOS ---
-  const [onChainUsdc, setOnChainUsdc] = useState<number | string>(0);
-  const [availableCredit, setAvailableCredit] = useState(0); // <-- Nueva métrica real
-  const [nftTier, setNftTier] = useState("Bronce");
-  
-  const [riskData, setRiskData] = useState({ 
-    score: 0, 
-    tier: 0, 
-  });
-  const [historyGate, setHistoryGate] = useState({
-    historyCount: 0,
-    minHistoryRequired: 3,
-    isHistoryEligible: false,
-  });
+  // Mismas lecturas en caché que Inicio (ADR-003): ahorro, tier on-chain y score siempre
+  // coinciden entre pantallas, y se refrescan juntas tras un depósito o un mint.
+  const savings = useSavings(walletAddress);
+  const credit = useCredit(walletAddress);
+  const score = useScore(walletAddress);
+  const loadingProfile = !!walletAddress && (savings.isPending || credit.isPending);
+
+  const onChainUsdc = savings.data?.position ?? 0;
+  const availableCredit = credit.data?.availableCredit ?? 0;
+  const nftTier = credit.data?.tierName ?? "Bronce";
+  const riskData = { score: Number(score.data?.score) || 0, tier: Number(credit.data?.tier) || 0 };
+  const eligibility = score.data?.eligibility;
+  const historyGate = {
+    historyCount: Number(eligibility?.historyCount) || 0,
+    minHistoryRequired: Number(eligibility?.minHistoryRequired) || 3,
+    isHistoryEligible: Boolean(eligibility?.isHistoryEligible),
+  };
 
   const displayName = walletAddress ? shortWallet : "Conecta tu wallet";
   const initials = walletAddress ? walletAddress.slice(0, 2).toUpperCase() : "WL";
-
-  // 1. LECTURA HÍBRIDA (Balance Directo + API de Crédito/Tier)
-  useEffect(() => {
-    const fetchBlockchainData = async () => {
-      if (!walletAddress) {
-        setLoadingProfile(false);
-        return;
-      }
-
-      try {
-        setLoadingProfile(true);
-
-        // --- A. OBTENER SALDO DIRECTO (Tu función Queries) ---
-        const balance = await fetchContractBalance(walletAddress);
-        setOnChainUsdc(balance);
-        
-        // --- B. OBTENER TIER Y LÍMITE DE CRÉDITO (Tu API de Vercel) ---
-        try {
-          const tierResponse = await fetch(`/api/get-available-credit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userAddress: walletAddress })
-          });
-
-          if (tierResponse.ok) {
-            const tierData = await tierResponse.json();
-            if (tierData.success) {
-              setNftTier(tierData.tierName);
-              setAvailableCredit(tierData.availableCredit); // <-- Dato real de tu lógica
-              setRiskData(prev => ({ ...prev, tier: tierData.tier }));
-            }
-          }
-        } catch (apiError) {
-          console.warn("Error consultando Tier API:", apiError);
-        }
-
-      } catch (error) {
-        console.error("Error general leyendo blockchain:", error);
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    fetchBlockchainData();
-  }, [walletAddress]);
-
-  // 2. MOTOR DE RIESGO (Score basado en balance real)
-  useEffect(() => {
-    const fetchRiskScore = async () => {
-      if (!walletAddress) return;
-      try {
-        const response = await fetch(`/api/calculate-score`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            address: walletAddress, 
-            totalDeposited: Number(onChainUsdc),
-            depositCount: Number(onChainUsdc) > 0 ? 1 : 0 // Fallback mínimo
-          }) 
-        });
-        const data = await response.json();
-        if (data.score !== undefined) {
-          const eligibility = data?.eligibility || {};
-          setHistoryGate({
-            historyCount: Number(eligibility?.historyCount) || 0,
-            minHistoryRequired: Number(eligibility?.minHistoryRequired) || 3,
-            isHistoryEligible: Boolean(eligibility?.isHistoryEligible),
-          });
-
-          // Sync on-chain tier/credit after computing score so UI matches backend state
-          try {
-            const tierResponse = await fetch(`/api/get-available-credit`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userAddress: walletAddress })
-            });
-
-            let blockchainTier = 0;
-            let blockchainTierName = "Bronce";
-            let blockchainAvailableCredit = 0;
-
-            if (tierResponse.ok) {
-              const tierData = await tierResponse.json();
-              if (tierData.success) {
-                blockchainTier = Number(tierData.tier) || 0;
-                blockchainTierName = tierData.tierName || blockchainTierName;
-                blockchainAvailableCredit = tierData.availableCredit || 0;
-                setNftTier(blockchainTierName);
-                setAvailableCredit(blockchainAvailableCredit);
-              }
-            }
-
-            // Score en vivo: refleja depósitos/retiros sin piso por tier (el tier
-            // on-chain solo gobierna lo ya minteado, no el avance del score).
-            const dynamicScore = Number(data.score) || 0;
-
-            setRiskData(prev => ({ ...prev, score: dynamicScore, tier: blockchainTier }));
-
-          } catch (err) {
-            console.warn('Error sincronizando tier despues de score:', err);
-            // Fallback: set dynamic score
-            setRiskData(prev => ({ ...prev, score: data.score }));
-          }
-        }
-      } catch (error) {
-        console.error("Error sincronizando matemáticas:", error);
-      }
-    };
-    
-    if (!loadingProfile) fetchRiskScore();
-  }, [onChainUsdc, walletAddress, loadingProfile]);
 
   // Lógica de visualización de progreso alineada con ProgressRing:
   // avance dentro del rango del nivel actual hacia el siguiente nivel.
@@ -459,17 +348,8 @@ const Perfil = () => {
       }
       if (response.ok && data?.status === "minted") {
         const mintedLevel = data.tierName || nftTier;
-        const mintedTier = Number(data.tier) || 0;
 
-        setNftTier(mintedLevel);
         setLastMintedLevel(mintedLevel);
-        setRiskData(prev => ({ ...prev, tier: mintedTier }));
-
-        // Sincroniza el crédito visual con el nivel recién minteado.
-        if (mintedTier === 1) setAvailableCredit(300);
-        if (mintedTier === 2) setAvailableCredit(600);
-        if (mintedTier === 3) setAvailableCredit(1500);
-        if (mintedTier === 4) setAvailableCredit(5000);
 
         setNftTxHash(data.txHash);
         setShowNFTModal(true);

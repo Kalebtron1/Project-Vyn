@@ -134,7 +134,7 @@ After a deposit, withdrawal, loan, repayment, SBT mint or treasury action, call
 Horizon-backed data (history and score) once more 6 s later, because Horizon indexes
 confirmed transactions with a short delay. Wait for the transaction to be confirmed
 first (`waitForConfirmation`); otherwise the network still returns the old values.
-See [ADR-003](decisions/ADR-003-no-polling-cache.md). `Perfil` still has its own fetches.
+See [ADR-003](decisions/ADR-003-no-polling-cache.md).
 
 ### Email login (Privy)
 
