@@ -42,10 +42,38 @@
                     "storage": [
                       {
                         "key": {
-                          "symbol": "admin"
+                          "vec": [
+                            {
+                              "symbol": "Admin"
+                            }
+                          ]
                         },
                         "val": {
                           "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Name"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "string": "Vinculo Credito SBT"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Symbol"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "string": "VINC"
                         }
                       }
                     ]
@@ -97,7 +125,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "initialize"
+                "symbol": "init"
               }
             ],
             "data": {
@@ -120,7 +148,7 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "initialize"
+                "symbol": "init"
               }
             ],
             "data": "void"
@@ -144,7 +172,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "mint_badge"
+                "symbol": "mint"
               }
             ],
             "data": {
@@ -156,7 +184,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "u32": 99
+                  "u32": 5
                 }
               ]
             }
@@ -180,7 +208,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'Invalid tier: must be 1 (Bronze), 2 (Silver), or 3 (Gold)' from contract function 'Symbol(obj#15)'"
+                  "string": "caught panic 'Invalid tier' from contract function 'Symbol(mint)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -189,7 +217,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "u32": 99
+                  "u32": 5
                 }
               ]
             }
@@ -246,7 +274,7 @@
                   "string": "contract call failed"
                 },
                 {
-                  "symbol": "mint_badge"
+                  "symbol": "mint"
                 },
                 {
                   "vec": [
@@ -257,7 +285,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                     },
                     {
-                      "u32": 99
+                      "u32": 5
                     }
                   ]
                 }
