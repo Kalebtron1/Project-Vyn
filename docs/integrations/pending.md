@@ -15,7 +15,7 @@ against the code on 2026-10-22. Open issue numbers are given where one exists; "
 
 | Item | Where | Notes |
 |---|---|---|
-| WebSocket replay hub | `src/ws/hub.ts`, `src/db/repositories/contractEventRepository.ts` | No server, table, producer or client. See [WebSocket](websocket.md). |
+| WebSocket replay hub | `src/ws/hub.ts`, `src/db/repositories/contractEventRepository.ts` | Contracts publish events (issue #101); still no server, `contract_events` table, ingestion job or client. See [WebSocket](websocket.md). |
 | `vinculo_lending.get_loan` | contract | The app never reads the active loan; see "In-memory state" below. |
 | `vinculo_sbt.revoke`, `name`, `symbol`, `token_uri` | contract | Not used by the app. `token_uri` points to a third-party repo and tier 0 returns a 404 URL ([other services](other-services.md)); PR #129 moves the metadata into this repo. |
 

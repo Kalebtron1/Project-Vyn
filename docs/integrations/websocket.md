@@ -11,9 +11,10 @@ files:
 
 # WebSocket event stream (not connected)
 
-**Status: library code only. Nothing in production serves, stores or consumes these
-events.** The protocol itself (`replay`, `replay_end`, `live`, `last_event_id`) is described
-in [WebSocket streams](../websocket.md).
+**Status: the contracts publish events (issue #101), but nothing in production serves,
+stores or consumes them yet.** The protocol itself (`replay`, `replay_end`, `live`,
+`last_event_id`) and the [event schema](../websocket.md#contract-events) are described in
+[WebSocket streams](../websocket.md).
 
 ## What exists
 
@@ -33,7 +34,7 @@ Added by PR #62 (May–June 2026) for a "durable replay on reconnect" issue.
 | A server that accepts the `/ws/streams` upgrade | None. Vercel functions can't keep WebSocket connections open, and `backend/server.js` doesn't mount the hub. |
 | The `ws` package | Only a transitive dependency; `hub.ts` imports its types only. |
 | The `contract_events` table | Does not exist in the Supabase project (only the three tables in [Supabase](supabase.md)). |
-| A producer of events | The contracts emit no Soroban events (issue #101) and no job ingests them. |
+| A producer of events | The contracts emit them now (see [topics and payloads](../websocket.md#topics-and-payloads)), but no job ingests them into `contract_events`. |
 | A client | No frontend code opens a WebSocket. |
 | Auth | The hub leaves it to the caller. |
 

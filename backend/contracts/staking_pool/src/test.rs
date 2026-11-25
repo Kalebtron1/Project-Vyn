@@ -3,7 +3,9 @@ extern crate std;
 
 use crate::{Error, StakingContract, StakingContractClient};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, token, vec, Address, Env, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{Address as _, Events},
+    token, vec, Address, Env, Symbol, TryIntoVal, Val, Vec,
 };
 
 // ─── Mock vault DeFindex ───────────────────────────────────────────────────────
@@ -101,6 +103,7 @@ impl MockVault {
 struct Setup {
     env: Env,
     staking: StakingContractClient<'static>,
+    staking_addr: Address,
     admin: Address,
     token_addr: Address,
     token_admin: soroban_sdk::token::StellarAssetClient<'static>,
@@ -132,6 +135,7 @@ fn setup() -> Setup {
     Setup {
         env,
         staking,
+        staking_addr,
         admin,
         token_addr,
         token_admin,
@@ -275,4 +279,87 @@ fn test_get_position_zero_for_new_user() {
     let user = Address::generate(&s.env);
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
+}
+
+// ─── Eventos ───────────────────────────────────────────────────────────────────
+
+/// Devuelve (topics, data) del último evento con `action` publicado por el pool.
+fn event_for(env: &Env, contract: &Address, action: &str) -> (Vec<Val>, Val) {
+    let expected = Symbol::new(env, action);
+    let all = env.events().all();
+    for i in (0..all.len()).rev() {
+        let (addr, topics, data) = all.get(i).unwrap();
+        if &addr != contract || topics.len() < 2 {
+            continue;
+        }
+        let topic0: Symbol = topics.get(0).unwrap().try_into_val(env).unwrap();
+        if topic0 == expected {
+            return (topics, data);
+        }
+    }
+    panic!("event not found: {}", action);
+}
+
+fn address_topic(env: &Env, topics: &Vec<Val>, index: u32) -> Address {
+    topics.get(index).unwrap().try_into_val(env).unwrap()
+}
+
+#[test]
+fn test_init_emits_event() {
+    let s = setup();
+    let (topics, data) = event_for(&s.env, &s.staking_addr, "init");
+
+    assert_eq!(address_topic(&s.env, &topics, 1), s.admin);
+    let values: Vec<Val> = data.try_into_val(&s.env).unwrap();
+    let token_addr: Address = values.get(0).unwrap().try_into_val(&s.env).unwrap();
+    let vault_addr: Address = values.get(1).unwrap().try_into_val(&s.env).unwrap();
+    assert_eq!(token_addr, s.token_addr);
+    assert_eq!(vault_addr, s.vault_addr);
+}
+
+#[test]
+fn test_set_vault_emits_event() {
+    let s = setup();
+    let new_vault_addr = s.env.register(MockVault, ());
+    MockVaultClient::new(&s.env, &new_vault_addr).init(&s.token_addr);
+
+    s.staking.set_vault(&new_vault_addr);
+
+    let (topics, data) = event_for(&s.env, &s.staking_addr, "vault_set");
+    assert_eq!(address_topic(&s.env, &topics, 1), s.admin);
+    let vault_addr: Address = data.try_into_val(&s.env).unwrap();
+    assert_eq!(vault_addr, new_vault_addr);
+}
+
+#[test]
+fn test_deposit_emits_event() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+
+    s.staking.deposit(&user, &1_000);
+
+    let (topics, data) = event_for(&s.env, &s.staking_addr, "deposit");
+    assert_eq!(address_topic(&s.env, &topics, 1), user);
+    let values: Vec<Val> = data.try_into_val(&s.env).unwrap();
+    let amount: i128 = values.get(0).unwrap().try_into_val(&s.env).unwrap();
+    let shares: i128 = values.get(1).unwrap().try_into_val(&s.env).unwrap();
+    assert_eq!((amount, shares), (1_000, 1_000));
+}
+
+#[test]
+fn test_withdraw_emits_event() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    s.staking.withdraw(&user, &400);
+
+    let (topics, data) = event_for(&s.env, &s.staking_addr, "withdraw");
+    assert_eq!(address_topic(&s.env, &topics, 1), user);
+    let values: Vec<Val> = data.try_into_val(&s.env).unwrap();
+    let amount: i128 = values.get(0).unwrap().try_into_val(&s.env).unwrap();
+    let shares: i128 = values.get(1).unwrap().try_into_val(&s.env).unwrap();
+    assert_eq!((amount, shares), (400, 400));
 }

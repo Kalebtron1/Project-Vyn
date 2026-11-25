@@ -13,6 +13,19 @@
 //! Además expone contadores de ingreso/actividad (`TotalDeposited`,
 //! `TotalWithdrawn`, `TxCount`) para que el motor de reputación off-chain pueda
 //! seguir midiendo el comportamiento del usuario y habilitar el minteo del SBT.
+//!
+//! # Eventos
+//!
+//! Cada función que cambia estado publica un evento Soroban con el esquema
+//! `(topic0 = acción, topic1 = sujeto)` y un payload pequeño (importes). El
+//! consumidor (indexador / WebSocket hub) los describe en `docs/websocket.md`:
+//!
+//! | topic0      | topic1 | datos                          |
+//! |-------------|--------|--------------------------------|
+//! | `init`      | admin  | `(token: Address, vault: Address)` |
+//! | `vault_set` | admin  | `vault: Address`               |
+//! | `deposit`   | user   | `(amount: i128, shares: i128)` |
+//! | `withdraw`  | user   | `(amount: i128, shares: i128)` |
 
 use soroban_sdk::auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation};
 use soroban_sdk::{
@@ -93,6 +106,12 @@ impl StakingContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
+
+        // `init` → (token, vault): permite reconstruir la configuración del pool.
+        env.events().publish(
+            (Symbol::new(&env, "init"), admin.clone()),
+            (token.clone(), vault.clone()),
+        );
         Ok(())
     }
 
@@ -108,6 +127,10 @@ impl StakingContract {
         let admin = Self::read_admin(&env)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Vault, &new_vault);
+
+        // `vault_set` → nuevo vault (el admin va en topic1).
+        env.events()
+            .publish((Symbol::new(&env, "vault_set"), admin), new_vault);
         Ok(())
     }
 
@@ -174,6 +197,12 @@ impl StakingContract {
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
 
+        // `deposit` → (importe depositado, shares minteadas).
+        env.events().publish(
+            (Symbol::new(&env, "deposit"), user.clone()),
+            (amount, minted),
+        );
+
         Ok(minted)
     }
 
@@ -231,6 +260,12 @@ impl StakingContract {
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
+
+        // `withdraw` → (importe entregado, shares quemadas).
+        env.events().publish(
+            (Symbol::new(&env, "withdraw"), user.clone()),
+            (received, shares_to_burn),
+        );
 
         Ok(received)
     }
