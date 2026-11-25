@@ -4,10 +4,24 @@
 //! Consulta on-chain el nivel con `VinculoSBTClient::get_tier` (alineado al `vinculo_sbt` actual).
 //!
 //! Modo demo (hackathon): 1 "mes" de plazo = 60 segundos de ledger, igual que `staking_pool`.
+//!
+//! # Eventos
+//!
+//! Cada función que cambia estado publica un evento Soroban con el esquema
+//! `(topic0 = acción, topic1 = sujeto)` y un payload pequeño. Ver `docs/websocket.md`:
+//!
+//! | topic0              | topic1   | datos                                             |
+//! |---------------------|----------|---------------------------------------------------|
+//! | `init`              | treasury | `(token: Address, sbt: Address)`                  |
+//! | `pool_fund`         | funder   | `amount: i128`                                    |
+//! | `loan`              | user     | `(principal: i128, total_owed: i128, due: u64)`   |
+//! | `repay`             | user     | `(amount: i128, remaining: i128)`                 |
+//! | `interest_withdraw` | treasury | `amount: i128`                                    |
+//! | `pool_withdraw`     | treasury | `amount: i128`                                    |
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol};
 use vinculo_sbt::VinculoSBTClient;
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -57,6 +71,12 @@ impl VinculoLending {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
+
+        // `init` → (token, sbt): configuración con la que se desplegó el contrato.
+        env.events().publish(
+            (Symbol::new(&env, "init"), treasury.clone()),
+            (token.clone(), sbt.clone()),
+        );
     }
 
     /// Aporta liquidez al pool de préstamos (el `from` transfiere al contrato).
@@ -71,6 +91,10 @@ impl VinculoLending {
             .expect("init not called");
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, &env.current_contract_address(), &amount);
+
+        // `pool_fund` → liquidez aportada por el fondeador (topic1).
+        env.events()
+            .publish((Symbol::new(&env, "pool_fund"), from.clone()), amount);
     }
 
     /// Solicita préstamo: lee tier en `vinculo_sbt`, valida tope y liquidez, transfiere al usuario.
@@ -122,6 +146,12 @@ impl VinculoLending {
             apy_bps: 500,
         };
         env.storage().persistent().set(&loan_key, &loan);
+
+        // `loan` → (principal, total a pagar, vencimiento) del préstamo desembolsado.
+        env.events().publish(
+            (Symbol::new(&env, "loan"), user.clone()),
+            (amount, total_owed, loan.due_timestamp),
+        );
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -160,6 +190,12 @@ impl VinculoLending {
             loan = Loan::default();
         }
         env.storage().persistent().set(&loan_key, &loan);
+
+        // `repay` → (importe efectivamente abonado, deuda restante).
+        env.events().publish(
+            (Symbol::new(&env, "repay"), user.clone()),
+            (pay, loan.total_owed),
+        );
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -188,6 +224,12 @@ impl VinculoLending {
 
         token_client.transfer(&this, &treasury, &withdrawable);
         storage.set(&DataKey::AccruedInterest, &(accrued - withdrawable));
+
+        // `interest_withdraw` → interés retirado por la tesorería (topic1).
+        env.events().publish(
+            (Symbol::new(&env, "interest_withdraw"), treasury),
+            withdrawable,
+        );
         withdrawable
     }
 
@@ -218,6 +260,10 @@ impl VinculoLending {
         assert!(withdrawable > 0, "nothing to withdraw");
 
         token_client.transfer(&this, &treasury, &withdrawable);
+
+        // `pool_withdraw` → principal retirado por la tesorería (topic1).
+        env.events()
+            .publish((Symbol::new(&env, "pool_withdraw"), treasury), withdrawable);
         withdrawable
     }
 
@@ -255,6 +301,9 @@ impl VinculoLending {
         token_client.balance(&env.current_contract_address())
     }
 }
+
+#[cfg(test)]
+mod test;
 
 fn max_principal_for_tier(tier: u32) -> i128 {
     match tier {

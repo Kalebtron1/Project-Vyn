@@ -1,8 +1,77 @@
 # WebSocket Streams — Durable Replay on Reconnect
 
-> **Status (2026-10-22):** not deployed. Only the hub library and its tests exist; there is
-> no server, `contract_events` table, event producer or client. See
-> [WebSocket integration](integrations/websocket.md).
+> **Status (2026-11-25):** the contracts publish events (issue #101), but the stream is
+> still not deployed: no indexer writes `contract_events`, and there is no server or
+> client. See [WebSocket integration](integrations/websocket.md).
+
+## Contract events
+
+Every state-changing function in the three contracts publishes exactly one Soroban
+contract event with `env.events().publish`. The shape is the same in all of them:
+
+- `topic[0]` — the action, a `Symbol` (`deposit`, `loan`, `mint`, …).
+- `topic[1]` — the subject, the `Address` the action applies to (`user`, `admin`,
+  `funder` or `treasury`).
+- `data` — a small payload: one value or a tuple, listed below.
+
+Amounts are `i128` in the token's smallest unit (USDC uses 7 decimals); timestamps are
+Unix seconds. `mint`/`revoke` carry the tier (`0` means the wallet has no SBT).
+
+### Topics and payloads
+
+| Contract | `topic[0]` | `topic[1]` | `data` |
+|---|---|---|---|
+| `staking_pool` | `init` | admin | `(token: Address, vault: Address)` |
+| `staking_pool` | `vault_set` | admin | `vault: Address` |
+| `staking_pool` | `deposit` | user | `(amount: i128, shares: i128)` |
+| `staking_pool` | `withdraw` | user | `(amount: i128, shares: i128)` |
+| `vinculo_lending` | `init` | treasury | `(token: Address, sbt: Address)` |
+| `vinculo_lending` | `pool_fund` | funder | `amount: i128` |
+| `vinculo_lending` | `loan` | user | `(principal: i128, total_owed: i128, due_timestamp: u64)` |
+| `vinculo_lending` | `repay` | user | `(amount: i128, remaining: i128)` |
+| `vinculo_lending` | `interest_withdraw` | treasury | `amount: i128` |
+| `vinculo_lending` | `pool_withdraw` | treasury | `amount: i128` |
+| `vinculo_sbt` | `init` | admin | none (`()` / void) |
+| `vinculo_sbt` | `mint` | user | `tier: u32` |
+| `vinculo_sbt` | `revoke` | user | `previous_tier: u32` |
+
+Field notes:
+
+- `deposit.amount` is the token amount transferred in and `shares` the dfTokens minted
+  by the DeFindex vault; `withdraw.amount` is what the user actually received and
+  `shares` the dfTokens burned (both can differ from the requested amount because of
+  vault rounding and yield).
+- `loan` reports the disbursed principal, the total owed at maturity (principal + 5%
+  interest) and the due timestamp; `repay.amount` is the amount actually applied and
+  `remaining` the debt left (`0` when the loan is settled).
+- The event is published in the same transaction as the storage change, so an indexer
+  can treat it as the source of truth and never has to poll the getters.
+
+### Example (decoded `deposit`)
+
+```json
+{
+  "contract": "C...STAKING",
+  "topics": ["deposit", "G...USER"],
+  "data": [10000000, 10000000],
+  "ledger": 1234567
+}
+```
+
+An indexer maps this to a `contract_events` row (see
+[`contractEventRepository.ts`](../src/db/repositories/contractEventRepository.ts)) and the
+hub broadcasts it; the `payload` shape is up to the indexer, but keeping the fields above
+makes the stream self-describing.
+
+### Source of each event
+
+| Contract source | Emitted events |
+|---|---|
+| `backend/contracts/staking_pool/src/lib.rs` | `init`, `vault_set`, `deposit`, `withdraw` |
+| `backend/contracts/vinculo_lending/src/lib.rs` | `init`, `pool_fund`, `loan`, `repay`, `interest_withdraw`, `pool_withdraw` |
+| `backend/contracts/vinculo_sbt/src/lib.rs` | `init`, `mint`, `revoke` |
+
+Unit tests in each contract's `src/test.rs` assert the topics and payloads.
 
 ## Endpoint
 
@@ -120,3 +189,4 @@ Set `MAX_REPLAY_EVENTS` in your `.env` / deployment config to tune the replay wi
 | `src/ws/hub.ts` | WebSocket hub — `attachHub`, `handleConnection`, `broadcast` |
 | `src/db/repositories/contractEventRepository.ts` | `getEventsSince` DB query |
 | `src/ws/hub.replay.test.ts` | Unit tests |
+| `backend/contracts/*/src/lib.rs` | Contracts that publish the events above |
