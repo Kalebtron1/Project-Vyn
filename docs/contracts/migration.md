@@ -254,6 +254,58 @@ stellar contract invoke \
 
 ---
 
+## Storage TTL (archival protection)
+
+Soroban archives a persistent or instance entry when its TTL reaches 0. An archived
+`Shares(user)`, `Loan(user)` or `Tier(user)` cannot be read until it is restored, so
+loans, tiers and pool shares would "disappear" for inactive users. All three contracts
+now extend TTLs with the same pattern (a `TTL` block at the top of each `lib.rs`).
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `LEDGERS_PER_DAY` | 17,280 | ~5 s per ledger |
+| `TTL_THRESHOLD` | 30 days (518,400 ledgers) | Extend only when less than this remains |
+| `TTL_EXTEND_TO` | 60 days (1,036,800 ledgers) | TTL after an extension |
+
+Rules:
+
+- **Every persistent write** (`Shares`, `TotalDeposited`, `TotalWithdrawn`, `TxCount`,
+  `Loan`, `Tier`) is followed by `extend_ttl`.
+- **Every read** of a user entry (`get_shares`, `get_loan`, `get_tier`, `token_uri`, ...)
+  extends it when it exists. Missing entries are skipped (`extend_ttl` fails on them).
+- **Every entrypoint** extends the instance storage (admin, token, vault, SBT, treasury,
+  accrued interest), because all of them read it.
+
+Cost impact: `extend_ttl` is a no-op while the TTL is above the threshold, so most calls
+pay nothing extra beyond one TTL check. A bump happens at most about once per 30 days per
+entry and is paid by whoever makes that call (rent for ~30 extra days of a small entry).
+The 30-day gap keeps entries alive even if the network's minimum TTL is short and avoids
+a bump on every call; `TTL_EXTEND_TO` stays far below the network's maximum entry TTL.
+Views only extend TTL when executed in a transaction, not in a simulation, so the app
+should still send a real transaction (any deposit/withdraw/loan call) for dormant users.
+Contract code (Wasm) has its own TTL and is not extended by these calls; bump it with
+`stellar contract extend --id $CONTRACT_ID --ledgers-to-extend ... --durability persistent`
+or `stellar contract extend --wasm-hash ...` as part of operations.
+
+### Existing deployments
+
+The change only adds TTL calls, so storage layout is unchanged and it is compatible with
+existing entries. But, as noted at the top, contracts cannot be upgraded in place: the
+new code needs a redeploy (new contract ID, empty storage). On a deployment that keeps
+running the old code:
+
+- Entries that are still live can be extended from outside with
+  `stellar contract extend --id $CONTRACT_ID --key <key> --durability persistent --ledgers-to-extend <n>`
+  (and without `--key` for the instance).
+- Entries already archived are restored with `stellar contract restore --id $CONTRACT_ID --key <key> --durability persistent`
+  (or a `RestoreFootprint` operation), then extended.
+
+### Tests
+
+`cargo test` in each contract advances the ledger sequence and checks that writes set the
+TTL to `TTL_EXTEND_TO`, that reads below the threshold extend it, that reads above it do
+not, and that entries remain readable after six months of periodic access.
+
 ## After Any Deploy or Upgrade
 
 Update `.env.local` with the new contract IDs:

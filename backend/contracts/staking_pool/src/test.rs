@@ -276,3 +276,89 @@ fn test_get_position_zero_for_new_user() {
     assert_eq!(s.staking.get_position(&user), 0);
     assert_eq!(s.staking.get_shares(&user), 0);
 }
+
+// ─── TTL ───────────────────────────────────────────────────────────────────────
+
+use crate::{DataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
+use soroban_sdk::testutils::storage::{Instance as _, Persistent as _};
+use soroban_sdk::testutils::Ledger;
+
+fn advance_ledgers(env: &Env, n: u32) {
+    env.ledger().with_mut(|l| l.sequence_number += n);
+}
+
+fn persistent_ttl(s: &Setup, key: &DataKey) -> u32 {
+    s.env
+        .as_contract(&s.staking.address, || s.env.storage().persistent().get_ttl(key))
+}
+
+fn instance_ttl(s: &Setup) -> u32 {
+    s.env
+        .as_contract(&s.staking.address, || s.env.storage().instance().get_ttl())
+}
+
+#[test]
+fn test_ttl_extended_on_every_user_write() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    for key in [
+        DataKey::Shares(user.clone()),
+        DataKey::TotalDeposited(user.clone()),
+        DataKey::TxCount(user.clone()),
+    ] {
+        assert_eq!(persistent_ttl(&s, &key), TTL_EXTEND_TO);
+    }
+    assert_eq!(instance_ttl(&s), TTL_EXTEND_TO);
+
+    // (No avanzamos más de unos ledgers: el token y el vault de prueba tienen TTL
+    // por defecto corto y se archivarían antes que las entradas del pool.)
+    advance_ledgers(&s.env, 10);
+    s.staking.withdraw(&user, &400);
+    // TotalWithdrawn es una entrada nueva: nace con el TTL completo.
+    assert_eq!(
+        persistent_ttl(&s, &DataKey::TotalWithdrawn(user.clone())),
+        TTL_EXTEND_TO
+    );
+    for key in [DataKey::Shares(user.clone()), DataKey::TxCount(user.clone())] {
+        assert!(persistent_ttl(&s, &key) >= TTL_EXTEND_TO - 10);
+    }
+}
+
+#[test]
+fn test_entries_stay_live_across_ledger_advances() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+
+    // Seis meses en pasos de 40 días con una lectura por paso: sin lecturas,
+    // las entradas habrían expirado tras 60 días.
+    for _ in 0..5 {
+        advance_ledgers(&s.env, 40 * crate::LEDGERS_PER_DAY);
+        assert_eq!(s.staking.get_shares(&user), 1_000);
+        assert_eq!(s.staking.get_tx_count(&user), 1);
+    }
+    assert_eq!(persistent_ttl(&s, &DataKey::Shares(user)), TTL_EXTEND_TO);
+}
+
+#[test]
+fn test_read_does_not_bump_above_threshold() {
+    let s = setup();
+    let user = Address::generate(&s.env);
+    s.token_admin.mint(&user, &1_000);
+    s.staking.deposit(&user, &1_000);
+    advance_ledgers(&s.env, 10);
+    s.staking.get_shares(&user);
+    assert_eq!(persistent_ttl(&s, &DataKey::Shares(user)), TTL_EXTEND_TO - 10);
+}
+
+#[test]
+fn test_instance_ttl_extended_by_vault_read() {
+    let s = setup();
+    advance_ledgers(&s.env, TTL_EXTEND_TO - TTL_THRESHOLD + 10);
+    s.staking.get_vault();
+    assert_eq!(instance_ttl(&s), TTL_EXTEND_TO);
+}

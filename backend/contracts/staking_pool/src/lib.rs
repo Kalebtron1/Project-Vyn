@@ -79,6 +79,31 @@ pub enum DataKey {
     TxCount(Address),
 }
 
+// ─── TTL (vida útil del storage) ───────────────────────────────────────────────
+//
+// Soroban archiva las entradas persistentes y de instancia cuando su TTL llega a 0.
+// Un ledger dura ~5 s. Cada acceso extiende el TTL solo si queda menos de
+// `TTL_THRESHOLD`, y entonces lo sube hasta `TTL_EXTEND_TO`. Ver
+// docs/contracts/migration.md ("Storage TTL").
+pub const LEDGERS_PER_DAY: u32 = 17_280;
+/// Se extiende cuando quedan menos de 30 días.
+pub const TTL_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+/// Se extiende hasta 60 días.
+pub const TTL_EXTEND_TO: u32 = 60 * LEDGERS_PER_DAY;
+
+fn bump_instance(env: &Env) {
+    env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
+/// Extiende el TTL de una entrada persistente si existe (`extend_ttl` falla si no existe).
+fn bump_persistent<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+}
+
 #[contract]
 pub struct StakingContract;
 
@@ -90,6 +115,7 @@ impl StakingContract {
         if env.storage().instance().has(&DataKey::Token) {
             return Err(Error::AlreadyInitialized);
         }
+        bump_instance(&env);
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Vault, &vault);
@@ -170,6 +196,7 @@ impl StakingContract {
         env.storage()
             .persistent()
             .set(&shares_key, &(prev_shares + minted));
+        bump_persistent(&env, &shares_key);
 
         Self::bump_counter(&env, &DataKey::TotalDeposited(user.clone()), amount);
         Self::increment_tx(&env, &user);
@@ -192,6 +219,7 @@ impl StakingContract {
 
         let shares_key = DataKey::Shares(user.clone());
         let user_shares: i128 = env.storage().persistent().get(&shares_key).unwrap_or(0);
+        bump_persistent(&env, &shares_key);
         if user_shares <= 0 {
             return Err(Error::InsufficientPosition);
         }
@@ -228,6 +256,7 @@ impl StakingContract {
         env.storage()
             .persistent()
             .set(&shares_key, &(user_shares - shares_to_burn));
+        bump_persistent(&env, &shares_key);
 
         Self::bump_counter(&env, &DataKey::TotalWithdrawn(user.clone()), received);
         Self::increment_tx(&env, &user);
@@ -238,11 +267,7 @@ impl StakingContract {
     /// Valor redimible en vivo (token subyacente) de la posición del usuario,
     /// incluyendo el rendimiento real acumulado. Reemplaza a `get_balance`.
     pub fn get_position(env: Env, user: Address) -> i128 {
-        let user_shares: i128 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Shares(user))
-            .unwrap_or(0);
+        let user_shares = Self::read_persistent(&env, &DataKey::Shares(user));
         if user_shares <= 0 {
             return 0;
         }
@@ -258,39 +283,39 @@ impl StakingContract {
 
     /// Shares (dfTokens) del usuario custodiadas por el contrato.
     pub fn get_shares(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Shares(user))
-            .unwrap_or(0)
+        Self::read_persistent(&env, &DataKey::Shares(user))
     }
 
     /// Ingreso acumulado del usuario (para scoring).
     pub fn get_total_deposited(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TotalDeposited(user))
-            .unwrap_or(0)
+        Self::read_persistent(&env, &DataKey::TotalDeposited(user))
     }
 
     /// Retiro acumulado del usuario (para scoring).
     pub fn get_total_withdrawn(env: Env, user: Address) -> i128 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TotalWithdrawn(user))
-            .unwrap_or(0)
+        Self::read_persistent(&env, &DataKey::TotalWithdrawn(user))
     }
 
     /// Conteo de operaciones del usuario (para scoring de actividad).
     pub fn get_tx_count(env: Env, user: Address) -> u32 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::TxCount(user))
-            .unwrap_or(0)
+        Self::read_persistent(&env, &DataKey::TxCount(user))
     }
 
     // ─── Helpers internos ──────────────────────────────────────────────────────
 
+    /// Lee una entrada persistente (0 si no existe) y extiende su TTL.
+    fn read_persistent<V: soroban_sdk::TryFromVal<Env, Val> + Default>(
+        env: &Env,
+        key: &DataKey,
+    ) -> V {
+        bump_instance(env);
+        let v = env.storage().persistent().get(key).unwrap_or_default();
+        bump_persistent(env, key);
+        v
+    }
+
     fn read_admin(env: &Env) -> Result<Address, Error> {
+        bump_instance(env);
         env.storage()
             .instance()
             .get(&DataKey::Admin)
@@ -298,6 +323,7 @@ impl StakingContract {
     }
 
     fn read_token(env: &Env) -> Result<Address, Error> {
+        bump_instance(env);
         env.storage()
             .instance()
             .get(&DataKey::Token)
@@ -305,6 +331,7 @@ impl StakingContract {
     }
 
     fn read_vault(env: &Env) -> Result<Address, Error> {
+        bump_instance(env);
         env.storage()
             .instance()
             .get(&DataKey::Vault)
@@ -314,12 +341,14 @@ impl StakingContract {
     fn bump_counter(env: &Env, key: &DataKey, delta: i128) {
         let prev: i128 = env.storage().persistent().get(key).unwrap_or(0);
         env.storage().persistent().set(key, &(prev + delta));
+        bump_persistent(env, key);
     }
 
     fn increment_tx(env: &Env, user: &Address) {
         let key = DataKey::TxCount(user.clone());
         let prev: u32 = env.storage().persistent().get(&key).unwrap_or(0);
         env.storage().persistent().set(&key, &(prev + 1));
+        bump_persistent(env, &key);
     }
 }
 

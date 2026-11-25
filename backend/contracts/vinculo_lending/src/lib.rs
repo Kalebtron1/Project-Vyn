@@ -36,6 +36,31 @@ pub struct Loan {
     pub apy_bps: u64,
 }
 
+// ─── TTL (vida útil del storage) ───────────────────────────────────────────────
+//
+// Soroban archiva las entradas persistentes y de instancia cuando su TTL llega a 0.
+// Un ledger dura ~5 s. Cada acceso extiende el TTL solo si queda menos de
+// `TTL_THRESHOLD`, y entonces lo sube hasta `TTL_EXTEND_TO`. Ver
+// docs/contracts/migration.md ("Storage TTL").
+pub const LEDGERS_PER_DAY: u32 = 17_280;
+/// Se extiende cuando quedan menos de 30 días.
+pub const TTL_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+/// Se extiende hasta 60 días.
+pub const TTL_EXTEND_TO: u32 = 60 * LEDGERS_PER_DAY;
+
+fn bump_instance(env: &Env) {
+    env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
+/// Extiende el TTL de una entrada persistente si existe (`extend_ttl` falla si no existe).
+fn bump_persistent<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+}
+
 #[contract]
 pub struct VinculoLending;
 
@@ -54,6 +79,7 @@ impl VinculoLending {
         if env.storage().instance().has(&DataKey::Token) {
             panic!("El contrato ya fue inicializado");
         }
+        bump_instance(&env);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Sbt, &sbt);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
@@ -63,6 +89,7 @@ impl VinculoLending {
     pub fn fund_pool(env: Env, from: Address, amount: i128) {
         from.require_auth();
         assert!(amount > 0, "amount must be > 0");
+        bump_instance(&env);
 
         let token_addr: Address = env
             .storage()
@@ -84,6 +111,7 @@ impl VinculoLending {
 
         // OPT: read Token and Sbt in a single storage access chain — avoids a second
         // instance-storage round-trip that was previously a separate .get() call
+        bump_instance(&env);
         let storage = env.storage().instance();
         let token_addr: Address = storage.get(&DataKey::Token).expect("init not called");
         let sbt_addr: Address = storage.get(&DataKey::Sbt).expect("init not called");
@@ -99,6 +127,7 @@ impl VinculoLending {
             .persistent()
             .get(&loan_key)
             .unwrap_or_default();
+        bump_persistent(&env, &loan_key);
         assert!(existing.total_owed == 0, "active loan exists");
 
         let max = max_principal_for_tier(tier);
@@ -122,6 +151,7 @@ impl VinculoLending {
             apy_bps: 500,
         };
         env.storage().persistent().set(&loan_key, &loan);
+        bump_persistent(&env, &loan_key);
     }
 
     /// Abona al préstamo (total o parcial). El excedente no se acepta.
@@ -129,6 +159,7 @@ impl VinculoLending {
         user.require_auth();
         assert!(amount > 0, "amount must be > 0");
 
+        bump_instance(&env);
         let token_addr: Address = env
             .storage()
             .instance()
@@ -160,6 +191,7 @@ impl VinculoLending {
             loan = Loan::default();
         }
         env.storage().persistent().set(&loan_key, &loan);
+        bump_persistent(&env, &loan_key);
     }
 
     /// Retira ganancia (interés acumulado) hacia la wallet de tesorería.
@@ -170,6 +202,7 @@ impl VinculoLending {
     pub fn withdraw_interest(env: Env, amount: i128) -> i128 {
         assert!(amount > 0, "amount must be > 0");
 
+        bump_instance(&env);
         let storage = env.storage().instance();
         let treasury: Address = storage.get(&DataKey::Treasury).expect("init not called");
         treasury.require_auth();
@@ -202,6 +235,7 @@ impl VinculoLending {
     pub fn withdraw_pool(env: Env, amount: i128) -> i128 {
         assert!(amount > 0, "amount must be > 0");
 
+        bump_instance(&env);
         let storage = env.storage().instance();
         let treasury: Address = storage.get(&DataKey::Treasury).expect("init not called");
         treasury.require_auth();
@@ -223,6 +257,7 @@ impl VinculoLending {
 
     /// Interés acumulado (ganancia) disponible para que la tesorería retire.
     pub fn get_accrued_interest(env: Env) -> i128 {
+        bump_instance(&env);
         env.storage()
             .instance()
             .get(&DataKey::AccruedInterest)
@@ -231,6 +266,7 @@ impl VinculoLending {
 
     /// Wallet de tesorería configurada en el deploy.
     pub fn get_treasury(env: Env) -> Address {
+        bump_instance(&env);
         env.storage()
             .instance()
             .get(&DataKey::Treasury)
@@ -238,14 +274,16 @@ impl VinculoLending {
     }
 
     pub fn get_loan(env: Env, user: Address) -> Loan {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Loan(user))
-            .unwrap_or_default()
+        bump_instance(&env);
+        let loan_key = DataKey::Loan(user);
+        let loan = env.storage().persistent().get(&loan_key).unwrap_or_default();
+        bump_persistent(&env, &loan_key);
+        loan
     }
 
     /// Saldo del token en custodia del contrato (liquidez disponible para desembolsos).
     pub fn get_pool_balance(env: Env) -> i128 {
+        bump_instance(&env);
         let token_addr: Address = env
             .storage()
             .instance()
@@ -265,3 +303,6 @@ fn max_principal_for_tier(tier: u32) -> i128 {
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod test;
